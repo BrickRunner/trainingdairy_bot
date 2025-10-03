@@ -1,0 +1,175 @@
+"""
+Функции для работы с базой данных (CRUD операции)
+"""
+
+import aiosqlite
+import os
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+from database.models import ALL_TABLES
+
+# Путь к базе данных
+DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+
+async def init_db():
+    """Инициализация базы данных (создание таблиц)"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        for table_sql in ALL_TABLES:
+            await db.execute(table_sql)
+        await db.commit()
+
+
+async def add_user(user_id: int, username: str) -> None:
+    """
+    Добавить пользователя в базу данных
+    
+    Args:
+        user_id: Telegram ID пользователя
+        username: Имя пользователя
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO users (id, username)
+            VALUES (?, ?)
+            """,
+            (user_id, username)
+        )
+        await db.commit()
+
+
+async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Получить данные пользователя
+    
+    Args:
+        user_id: Telegram ID пользователя
+        
+    Returns:
+        Словарь с данными пользователя или None
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+
+async def add_training(data: Dict[str, Any]) -> None:
+    """
+    Добавить тренировку в базу данных
+    
+    Args:
+        data: Словарь с данными тренировки
+              Обязательные поля: user_id, type, date, duration
+              Опциональные: distance, pulse, description, results, comment, fatigue_level
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO trainings 
+            (user_id, type, date, duration, distance, pulse, description, results, comment, fatigue_level)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                data['user_id'],
+                data['training_type'],
+                data['date'],
+                data['duration'],
+                data.get('distance'),
+                data.get('pulse'),
+                data.get('description'),
+                data.get('results'),
+                data.get('comment'),
+                data.get('fatigue_level')
+            )
+        )
+        await db.commit()
+
+
+async def get_user_trainings(user_id: int, limit: int = 10) -> list:
+    """
+    Получить тренировки пользователя
+    
+    Args:
+        user_id: Telegram ID пользователя
+        limit: Максимальное количество тренировок
+        
+    Returns:
+        Список словарей с данными тренировок
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT * FROM trainings 
+            WHERE user_id = ? 
+            ORDER BY date DESC, created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+
+async def get_training_count(user_id: int) -> int:
+    """
+    Получить количество тренировок пользователя
+    
+    Args:
+        user_id: Telegram ID пользователя
+        
+    Returns:
+        Количество тренировок
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT COUNT(*) FROM trainings WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+
+async def update_user_level(user_id: int, level: str) -> None:
+    """
+    Обновить уровень пользователя
+    
+    Args:
+        user_id: Telegram ID пользователя
+        level: Новый уровень
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET level = ? WHERE id = ?",
+            (level, user_id)
+        )
+        await db.commit()
+
+
+async def delete_training(training_id: int, user_id: int) -> bool:
+    """
+    Удалить тренировку
+    
+    Args:
+        training_id: ID тренировки
+        user_id: ID пользователя (для проверки прав)
+        
+    Returns:
+        True если тренировка удалена, False если не найдена или нет прав
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "DELETE FROM trainings WHERE id = ? AND user_id = ?",
+            (training_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
