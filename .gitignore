@@ -1,0 +1,106 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Виртуальное окружение
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Переменные окружения
+.env
+.env.local
+.env.*.local
+
+# База данных
+*.db
+*.sqlite
+*.sqlite3
+database.sqlite
+*.db-shm
+*.db-wal
+
+# Логи
+*.log
+logs/
+*.log.*
+
+# Тестирование
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Генерируемые файлы
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+reports/
+exports/
+temp/
+tmp/
+
+# Операционная система
+Thumbs.db
+.DS_Store
+*.bak
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Секреты и токены
+*.pem
+*.key
+secrets.json
+token.txt
+
+# Резервные копии
+*.backup
+*.old
