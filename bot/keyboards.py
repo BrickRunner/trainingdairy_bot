@@ -11,7 +11,7 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.row(
         KeyboardButton(text="➕ Добавить тренировку"),
-        KeyboardButton(text="📊 Статистика")
+        KeyboardButton(text="📊 Мои тренировки")
     )
     builder.row(
         KeyboardButton(text="📈 Графики"),
@@ -30,13 +30,18 @@ def get_training_types_keyboard() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="🏃 Кросс", callback_data="training_type:кросс")
     )
-    # Позже добавим другие типы:
-    # builder.row(
-    #     InlineKeyboardButton(text="⚡ Интервальная", callback_data="training_type:интервальная")
-    # )
-    # builder.row(
-    #     InlineKeyboardButton(text="💪 Силовая", callback_data="training_type:силовая")
-    # )
+    builder.row(
+        InlineKeyboardButton(text="🏊 Плавание", callback_data="training_type:плавание")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🚴 Велотренировка", callback_data="training_type:велотренировка")
+    )
+    builder.row(
+        InlineKeyboardButton(text="💪 Силовая", callback_data="training_type:силовая")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⚡️ Интервальная", callback_data="training_type:интервальная")
+    )
     builder.row(
         InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
     )
@@ -66,4 +71,24 @@ def get_fatigue_keyboard() -> InlineKeyboardMarkup:
     for i in range(1, 11):
         builder.button(text=str(i), callback_data=f"fatigue:{i}")
     builder.adjust(5)  # 5 кнопок в ряду
+    # Добавляем кнопку отмены в отдельном ряду
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel"))
+    return builder.as_markup()
+
+
+def get_period_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора периода для просмотра тренировок"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="📅 Неделя", callback_data="period:week")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 2 недели", callback_data="period:2weeks")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Месяц", callback_data="period:month")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
+    )
     return builder.as_markup()
