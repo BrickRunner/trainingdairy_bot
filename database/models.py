@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS trainings (
     max_pulse INTEGER,
     exercises TEXT,
     intervals TEXT,
+    calculated_volume REAL,
     description TEXT,
     results TEXT,
     comment TEXT,

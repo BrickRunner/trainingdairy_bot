@@ -69,14 +69,14 @@ async def add_training(data: Dict[str, Any]) -> None:
     Args:
         data: Словарь с данными тренировки
               Обязательные поля: user_id, type, date, time, duration
-              Опциональные: distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, description, results, comment, fatigue_level
+              Опциональные: distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, calculated_volume, description, results, comment, fatigue_level
     """
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """
             INSERT INTO trainings 
-            (user_id, type, date, time, duration, distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, description, results, comment, fatigue_level)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, type, date, time, duration, distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, calculated_volume, description, results, comment, fatigue_level)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data['user_id'],
@@ -91,6 +91,7 @@ async def add_training(data: Dict[str, Any]) -> None:
                 data.get('max_pulse'),
                 data.get('exercises'),
                 data.get('intervals'),
+                data.get('calculated_volume'),
                 data.get('description'),
                 data.get('results'),
                 data.get('comment'),
@@ -124,6 +125,7 @@ async def get_user_trainings(user_id: int, limit: int = 10) -> list:
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
 
 async def get_training_count(user_id: int) -> int:
     """
@@ -189,7 +191,7 @@ async def get_trainings_by_period(user_id: int, days: int) -> list:
         days: Количество дней (7 - неделя, 14 - 2 недели, 30 - месяц)
         
     Returns:
-        Список тренировок за период
+        Список тренировок за период (отсортированных по дате тренировки, от новых к старым)
     """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -198,9 +200,10 @@ async def get_trainings_by_period(user_id: int, days: int) -> list:
             SELECT * FROM trainings 
             WHERE user_id = ? 
             AND date >= date('now', ? || ' days')
-            ORDER BY date DESC, created_at DESC
+            ORDER BY date DESC
             """,
             (user_id, f'-{days}')
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+

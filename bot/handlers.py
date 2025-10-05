@@ -235,15 +235,24 @@ async def process_time(message: Message, state: FSMContext):
             f"✅ Время: {formatted_time}\n\n"
             "⚡ Опишите тренировку\n\n"
             "Например:\n"
-            "Разминка - 3000м\n"
-            "ОРУ + СБУ + 2 ускорения по ~80м\n"
-            "Работа:\n"
-            "2 серии:\n"
-            "6 х 200м / 200м - (34.0-34.7-34.5-34.5-34.5-34.5)-\n"
-            "(34.5-33.8-33.7-33.5–29.2-29.0)\n"
-            "Трусца - 400м\n"
-            "7 х 60м - многоскоки\n"
-            "Заминка - 1000м"
+            "1. Разминка - 3000м\n"
+            "2. ОРУ + СБУ + 2 ускорения по ~80м\n"
+            "    Работа:\n"
+            "3. 6 х 1000м / 200м - ()\n"
+            "4. Трусца - 600м\n"
+            "5. 3 х 60м / 60м - ()\n"
+            "6. Трусца - 600м\n"
+            "7. СБУ по 40м:\n"
+            "Высокие подскоки\n"
+            "Буратино\n"
+            "2 х Буратино + высокое бедро\n"
+            "Прыжки\n"
+            "Прыжки + прыжки вбок\n"
+            "2 х прыжки + кандибобер\n"
+            "Кандибобер\n"
+            "2 х многоскоки на одну ногу\n"
+            "Многоскоки\n"
+            "8. Заминка - 1000м"
         )
         await state.set_state(AddTrainingStates.waiting_for_intervals)
     else:
@@ -353,12 +362,30 @@ async def process_intervals(message: Message, state: FSMContext):
     
     # Описание обязательно - не разрешаем пропустить
     intervals = message.text
-    await state.update_data(intervals=intervals)
     
-    await message.answer(
-        "❤️ Введите средний пульс (уд/мин)\n\n"
-        "Например: 165"
-    )
+    # Рассчитываем объём тренировки
+    from utils.interval_calculator import calculate_interval_volume, format_volume_message
+    volume = calculate_interval_volume(intervals)
+    
+    # Сохраняем описание и объём
+    await state.update_data(intervals=intervals, calculated_volume=volume)
+    
+    # Показываем рассчитанный объём
+    if volume:
+        volume_msg = f"\n\n{format_volume_message(volume)}"
+        await message.answer(
+            f"✅ Описание сохранено{volume_msg}\n\n"
+            "❤️ Введите средний пульс (уд/мин)\n\n"
+            "Например: 165"
+        )
+    else:
+        await message.answer(
+            "✅ Описание сохранено\n\n"
+            "⚠️ Не удалось рассчитать объём автоматически\n"
+            "(Возможно, не все пункты пронумерованы)\n\n"
+            "❤️ Введите средний пульс (уд/мин)\n\n"
+            "Например: 165"
+        )
     
     await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
 
@@ -480,6 +507,9 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
         data['avg_pace'] = avg_pace
         data['pace_unit'] = pace_unit
     
+    # Для интервальной тренировки - calculated_volume уже должен быть в data
+    # (добавляется при обработке описания интервалов)
+    
     # Сохраняем тренировку в БД
     await add_training(data)
     
@@ -515,6 +545,19 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
         # Для интервальной - описание тренировки
         if data.get('intervals'):
             summary += f"⚡ Описание:\n{data['intervals']}\n"
+            
+            # Показываем рассчитанный объём если есть
+            if data.get('calculated_volume'):
+                from utils.interval_calculator import format_volume_message
+                volume_text = format_volume_message(data['calculated_volume'])
+                if volume_text:
+                    summary += f"{volume_text}\n"
+            
+            # Показываем средний темп интервалов если есть результаты
+            from utils.interval_calculator import calculate_average_interval_pace
+            avg_pace_intervals = calculate_average_interval_pace(data['intervals'])
+            if avg_pace_intervals:
+                summary += f"⚡ Средний темп интервалов: {avg_pace_intervals}\n"
     else:
         # Для остальных типов - дистанция и темп
         distance_km = data['distance']
@@ -626,7 +669,8 @@ async def show_trainings_period(callback: CallbackQuery):
     if not trainings:
         await callback.message.edit_text(
             f"📊 *Тренировки за {period_name}*\n\n"
-            f"У вас пока нет тренировок за этот период.",
+            f"У вас пока нет тренировок за этот период.\n\n"
+            f"_Обновлено: {datetime.now().strftime('%H:%M:%S')}_",
             parse_mode="Markdown",
             reply_markup=get_period_keyboard()
         )
@@ -667,11 +711,24 @@ async def show_trainings_period(callback: CallbackQuery):
         message_text += f"{emoji} *{t_type.capitalize()}* - {date}\n"
         message_text += f"⏰ {training['time']}\n"
         
-        if training.get('distance'):
-            message_text += f"📏 {training['distance']} км\n"
-        
-        if training.get('avg_pace'):
-            message_text += f"⚡ {training['avg_pace']} {training.get('pace_unit', '')}\n"
+        # Для интервальной показываем рассчитанный объём и средний темп
+        if t_type == 'интервальная':
+            if training.get('calculated_volume'):
+                message_text += f"📏 {training['calculated_volume']} км\n"
+            
+            # Показываем средний темп интервалов (по отрезкам с результатами)
+            if training.get('intervals'):
+                from utils.interval_calculator import calculate_average_interval_pace
+                avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
+                if avg_pace_intervals:
+                    message_text += f"⚡ Средний темп интервалов: {avg_pace_intervals}\n"
+        else:
+            # Для остальных типов - обычная дистанция
+            if training.get('distance'):
+                message_text += f"📏 {training['distance']} км\n"
+            
+            if training.get('avg_pace'):
+                message_text += f"⚡ {training['avg_pace']} {training.get('pace_unit', '')}\n"
         
         if training.get('avg_pulse'):
             message_text += f"❤️ {training['avg_pulse']} уд/мин\n"
@@ -681,11 +738,19 @@ async def show_trainings_period(callback: CallbackQuery):
     if len(trainings) > 10:
         message_text += f"\n_... и ещё {len(trainings) - 10} тренировок_"
     
-    await callback.message.edit_text(
-        message_text,
-        parse_mode="Markdown",
-        reply_markup=get_period_keyboard()
-    )
+    try:
+        await callback.message.edit_text(
+            message_text,
+            parse_mode="Markdown",
+            reply_markup=get_period_keyboard()
+        )
+    except Exception as e:
+        # Если сообщение не изменилось - просто отвечаем на callback
+        if "message is not modified" in str(e):
+            await callback.answer("Данные актуальны", show_alert=False)
+        else:
+            raise
+    
     await callback.answer()
 
 
