@@ -191,7 +191,7 @@ async def get_trainings_by_period(user_id: int, days: int) -> list:
         days: Количество дней (7 - неделя, 14 - 2 недели, 30 - месяц)
         
     Returns:
-        Список тренировок за период (отсортированных по дате тренировки, от новых к старым)
+        Список тренировок за период (отсортированных по дате тренировки, от старых к новым)
     """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -200,7 +200,7 @@ async def get_trainings_by_period(user_id: int, days: int) -> list:
             SELECT * FROM trainings 
             WHERE user_id = ? 
             AND date >= date('now', ? || ' days')
-            ORDER BY date DESC
+            ORDER BY date ASC
             """,
             (user_id, f'-{days}')
         ) as cursor:

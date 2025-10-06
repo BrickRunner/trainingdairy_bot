@@ -40,7 +40,7 @@ def get_training_types_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="💪 Силовая", callback_data="training_type:силовая")
     )
     builder.row(
-        InlineKeyboardButton(text="⚡️ Интервальная", callback_data="training_type:интервальная")
+        InlineKeyboardButton(text="⚡ Интервальная", callback_data="training_type:интервальная")
     )
     builder.row(
         InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
@@ -92,3 +92,19 @@ def get_period_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
     )
     return builder.as_markup()
+
+
+def get_date_keyboard() -> ReplyKeyboardMarkup:
+    """Клавиатура выбора даты тренировки"""
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="📅 Сегодня"),
+        KeyboardButton(text="📅 Вчера")
+    )
+    builder.row(
+        KeyboardButton(text="📝 Ввести дату"),
+        KeyboardButton(text="❌ Отменить")
+    )
+    return builder.as_markup(resize_keyboard=True)
+
+

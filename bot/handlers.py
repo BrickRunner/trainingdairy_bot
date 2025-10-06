@@ -16,7 +16,8 @@ from bot.keyboards import (
     get_cancel_keyboard,
     get_skip_keyboard,
     get_fatigue_keyboard,
-    get_period_keyboard
+    get_period_keyboard,
+    get_date_keyboard
 )
 from database.queries import add_user, add_training, get_user
 
@@ -98,10 +99,9 @@ async def process_training_type(callback: CallbackQuery, state: FSMContext):
     )
     
     await callback.message.answer(
-        "📅 Введите дату тренировки\n\n"
-        "Формат: ДД.ММ.ГГГГ (например, 15.01.2024)\n"
-        "Или напишите 'сегодня' для текущей даты",
-        reply_markup=get_cancel_keyboard()
+        "📅 Когда была тренировка?\n\n"
+        "Выберите или введите дату:",
+        reply_markup=get_date_keyboard()
     )
     
     await state.set_state(AddTrainingStates.waiting_for_date)
@@ -120,10 +120,22 @@ async def process_date(message: Message, state: FSMContext):
     utc_now = datetime.utcnow()
     moscow_now = utc_now + timedelta(hours=3)
     today = moscow_now.date()
+    yesterday = today - timedelta(days=1)
     
     # Парсинг даты
-    if message.text.lower() == "сегодня":
+    if message.text in ["сегодня", "📅 Сегодня"]:
         date = today
+    elif message.text in ["вчера", "📅 Вчера"]:
+        date = yesterday
+    elif message.text == "📝 Ввести дату":
+        # Запрашиваем ввод даты вручную
+        await message.answer(
+            "📅 Введите дату тренировки\n\n"
+            "Формат: ДД.ММ.ГГГГ\n"
+            "Например: 15.01.2024",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
     else:
         # Проверка формата ДД.ММ.ГГГГ
         date_pattern = r'^\d{2}\.\d{2}\.\d{4}$'
@@ -131,7 +143,7 @@ async def process_date(message: Message, state: FSMContext):
             await message.answer(
                 "❌ Неверный формат даты!\n\n"
                 "Используйте формат: ДД.ММ.ГГГГ (например, 15.01.2024)\n"
-                "Или напишите 'сегодня'"
+                "Или выберите кнопку на клавиатуре"
             )
             return
         
@@ -160,7 +172,8 @@ async def process_date(message: Message, state: FSMContext):
         f"✅ Дата: {date.strftime('%d.%m.%Y')}\n\n"
         "⏰ Введите время тренировки\n\n"
         "Формат: ЧЧ:ММ:СС\n"
-        "Примеры: 01:25:30 или 1:25:30 или 0:45:30"
+        "Примеры: 01:25:30 или 25:15:45 (для ультрамарафонов)",
+        reply_markup=get_cancel_keyboard()
     )
     
     await state.set_state(AddTrainingStates.waiting_for_time)
@@ -173,26 +186,33 @@ async def process_time(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     
-    # Гибкая проверка формата Ч:ММ:СС или ЧЧ:ММ:СС или Ч:М:С
-    time_pattern = r'^\d{1,2}:\d{1,2}:\d{1,2}$'
+    # Гибкая проверка формата Ч:ММ:СС или ЧЧ:ММ:СС или ЧЧЧ:ММ:СС (для ультрамарафонов)
+    time_pattern = r'^\d{1,3}:\d{1,2}:\d{1,2}$'
     if not re.match(time_pattern, message.text):
         await message.answer(
             "❌ Неверный формат времени!\n\n"
             "Используйте формат: ЧЧ:ММ:СС\n"
-            "Примеры: 01:25:30 или 1:25:30 или 0:45:30"
+            "Примеры: 01:25:30 или 1:25:30 или 25:15:45"
         )
         return
     
     try:
         # Парсим время
         hours, minutes, seconds = map(int, message.text.split(':'))
-        if hours > 23 or minutes > 59 or seconds > 59:
-            raise ValueError
+        
+        # Проверяем корректность минут и секунд
+        if minutes > 59 or seconds > 59:
+            await message.answer(
+                "❌ Некорректное время!\n\n"
+                "Убедитесь, что минуты ≤ 59, секунды ≤ 59"
+            )
+            return
         
         # Проверка на нулевое время
         if hours == 0 and minutes == 0 and seconds == 0:
             await message.answer(
                 "❌ Время тренировки не может быть 00:00:00!\n\n"
+                "Минимальное время: 00:00:01\n"
                 "Введите корректное время тренировки."
             )
             return
@@ -206,7 +226,7 @@ async def process_time(message: Message, state: FSMContext):
     except ValueError:
         await message.answer(
             "❌ Некорректное время!\n\n"
-            "Убедитесь, что часы ≤ 23, минуты ≤ 59, секунды ≤ 59"
+            "Проверьте правильность введенного времени"
         )
         return
     
