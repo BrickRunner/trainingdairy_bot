@@ -573,11 +573,11 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
                 if volume_text:
                     summary += f"{volume_text}\n"
             
-            # Показываем средний темп интервалов если есть результаты
+            # Показываем средний темп отрезков если есть результаты
             from utils.interval_calculator import calculate_average_interval_pace
             avg_pace_intervals = calculate_average_interval_pace(data['intervals'])
             if avg_pace_intervals:
-                summary += f"⚡ Средний темп интервалов: {avg_pace_intervals}\n"
+                summary += f"⚡ Средний темп отрезков: {avg_pace_intervals}\n"
     else:
         # Для остальных типов - дистанция и темп
         distance_km = data['distance']
@@ -663,7 +663,7 @@ async def show_my_trainings(message: Message):
 
 @router.callback_query(F.data.startswith("period:"))
 async def show_trainings_period(callback: CallbackQuery):
-    """Показать тренировки за выбранный период"""
+    """Показать тренировки за выбранный период с детальной статистикой"""
     period = callback.data.split(":")[1]
     
     # Определяем количество дней
@@ -682,8 +682,10 @@ async def show_trainings_period(callback: CallbackQuery):
     days = period_days.get(period, 7)
     period_name = period_names.get(period, "неделю")
     
-    # Получаем тренировки
-    from database.queries import get_trainings_by_period
+    # Получаем статистику и тренировки
+    from database.queries import get_trainings_by_period, get_training_statistics
+    
+    stats = await get_training_statistics(callback.from_user.id, days)
     trainings = await get_trainings_by_period(callback.from_user.id, days)
     
     if not trainings:
@@ -697,15 +699,46 @@ async def show_trainings_period(callback: CallbackQuery):
         await callback.answer()
         return
     
-    # Формируем сообщение со списком тренировок
+    # Формируем заголовок с общей статистикой
     message_text = f"📊 *Тренировки за {period_name}*\n\n"
-    message_text += f"Всего тренировок: {len(trainings)}\n\n"
+    message_text += "━━━━━━━━━━━━━━━━━━\n"
+    message_text += "📈 *ОБЩАЯ СТАТИСТИКА*\n"
+    message_text += "━━━━━━━━━━━━━━━━━━\n\n"
     
-    # Группируем по типам
-    types_count = {}
-    for training in trainings:
-        t_type = training['type']
-        types_count[t_type] = types_count.get(t_type, 0) + 1
+    # 1. Общее количество тренировок
+    message_text += f"🏃 Всего тренировок: *{stats['total_count']}*\n"
+    
+    # 2. Общий километраж
+    if stats['total_distance'] > 0:
+        message_text += f"📏 Общий километраж: *{stats['total_distance']:.2f} км*\n"
+    
+    # 3. Типы тренировок с процентами
+    if stats['types_count']:
+        message_text += f"\n📋 *Типы тренировок:*\n"
+        
+        type_emoji = {
+            'кросс': '🏃',
+            'плавание': '🏊',
+            'велотренировка': '🚴',
+            'силовая': '💪',
+            'интервальная': '⚡'
+        }
+        
+        # Сортируем по количеству (от большего к меньшему)
+        sorted_types = sorted(stats['types_count'].items(), key=lambda x: x[1], reverse=True)
+        
+        for t_type, count in sorted_types:
+            emoji = type_emoji.get(t_type, '📝')
+            percentage = (count / stats['total_count']) * 100
+            message_text += f"  {emoji} {t_type.capitalize()}: {count} ({percentage:.1f}%)\n"
+    
+    # 4. Средний уровень усталости
+    if stats['avg_fatigue'] > 0:
+        message_text += f"\n😴 Средняя усталость: *{stats['avg_fatigue']}/10*\n"
+    
+    message_text += "\n━━━━━━━━━━━━━━━━━━\n"
+    message_text += "📝 *СПИСОК ТРЕНИРОВОК*\n"
+    message_text += "━━━━━━━━━━━━━━━━━━\n\n"
     
     # Эмодзи для типов
     type_emoji = {
@@ -716,47 +749,61 @@ async def show_trainings_period(callback: CallbackQuery):
         'интервальная': '⚡'
     }
     
-    for t_type, count in types_count.items():
-        emoji = type_emoji.get(t_type, '📝')
-        message_text += f"{emoji} {t_type.capitalize()}: {count}\n"
-    
-    message_text += "\n━━━━━━━━━━━━━━━━━━\n\n"
-    
     # Добавляем детали каждой тренировки
-    for training in trainings[:10]:  # Показываем максимум 10 последних
+    for idx, training in enumerate(trainings[:15], 1):  # Показываем максимум 15
+        # Парсим дату
         date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m.%Y')
         t_type = training['type']
         emoji = type_emoji.get(t_type, '📝')
         
-        message_text += f"{emoji} *{t_type.capitalize()}* - {date}\n"
-        message_text += f"⏰ {training['time']}\n"
+        # 1. Дата и тип
+        message_text += f"*{idx}.* {emoji} *{t_type.capitalize()}* • {date}\n"
         
-        # Для интервальной показываем рассчитанный объём и средний темп
+        # 2. Продолжительность в формате ЧЧ:ММ:СС
+        if training.get('time'):
+            message_text += f"   ⏰ Время: {training['time']}\n"
+        
+        # 3. Общий километраж
         if t_type == 'интервальная':
             if training.get('calculated_volume'):
-                message_text += f"📏 {training['calculated_volume']} км\n"
-            
-            # Показываем средний темп интервалов (по отрезкам с результатами)
+                message_text += f"   📏 Дистанция: {training['calculated_volume']} км\n"
+        else:
+            if training.get('distance'):
+                if t_type == 'плавание':
+                    meters = int(training['distance'] * 1000)
+                    message_text += f"   📏 Дистанция: {training['distance']} км ({meters} м)\n"
+                else:
+                    message_text += f"   📏 Дистанция: {training['distance']} км\n"
+        
+        # 4. Средний темп/скорость/интервалов
+        if t_type == 'интервальная':
+            # Показываем средний темп отрезков
             if training.get('intervals'):
                 from utils.interval_calculator import calculate_average_interval_pace
                 avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
                 if avg_pace_intervals:
-                    message_text += f"⚡ Средний темп интервалов: {avg_pace_intervals}\n"
-        else:
-            # Для остальных типов - обычная дистанция
-            if training.get('distance'):
-                message_text += f"📏 {training['distance']} км\n"
-            
+                    message_text += f"   ⚡ Средний темп отрезков: {avg_pace_intervals}\n"
+        elif t_type == 'велотренировка':
+            # Для велосипеда - скорость
             if training.get('avg_pace'):
-                message_text += f"⚡ {training['avg_pace']} {training.get('pace_unit', '')}\n"
+                message_text += f"   🚴 Средняя скорость: {training['avg_pace']} {training.get('pace_unit', '')}\n"
+        elif t_type != 'силовая':
+            # Для остальных (кросс, плавание) - темп
+            if training.get('avg_pace'):
+                message_text += f"   ⚡ Средний темп: {training['avg_pace']} {training.get('pace_unit', '')}\n"
         
+        # Дополнительно: пульс
         if training.get('avg_pulse'):
-            message_text += f"❤️ {training['avg_pulse']} уд/мин\n"
+            message_text += f"   ❤️ Пульс: {training['avg_pulse']} уд/мин\n"
+        
+        # Усталость
+        if training.get('fatigue_level'):
+            message_text += f"   😴 Усталость: {training['fatigue_level']}/10\n"
         
         message_text += "\n"
     
-    if len(trainings) > 10:
-        message_text += f"\n_... и ещё {len(trainings) - 10} тренировок_"
+    if len(trainings) > 15:
+        message_text += f"_... и ещё {len(trainings) - 15} тренировок_\n"
     
     try:
         await callback.message.edit_text(

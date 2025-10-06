@@ -207,3 +207,77 @@ async def get_trainings_by_period(user_id: int, days: int) -> list:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
+
+async def get_training_statistics(user_id: int, days: int) -> Dict[str, Any]:
+    """
+    Получить статистику тренировок за период
+    
+    Args:
+        user_id: ID пользователя
+        days: Количество дней для анализа
+        
+    Returns:
+        Словарь со статистикой:
+        - total_count: общее количество тренировок
+        - total_distance: общий километраж
+        - types_count: словарь с количеством тренировок по типам
+        - avg_fatigue: средний уровень усталости
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        # Получаем все тренировки за период
+        async with db.execute(
+            """
+            SELECT type, distance, calculated_volume, fatigue_level
+            FROM trainings 
+            WHERE user_id = ? 
+            AND date >= date('now', ? || ' days')
+            """,
+            (user_id, f'-{days}')
+        ) as cursor:
+            trainings = await cursor.fetchall()
+        
+        if not trainings:
+            return {
+                'total_count': 0,
+                'total_distance': 0.0,
+                'types_count': {},
+                'avg_fatigue': 0
+            }
+        
+        # Подсчёт статистики
+        total_count = len(trainings)
+        total_distance = 0.0
+        types_count = {}
+        fatigue_sum = 0
+        fatigue_count = 0
+        
+        for training in trainings:
+            # Подсчёт по типам
+            t_type = training['type']
+            types_count[t_type] = types_count.get(t_type, 0) + 1
+            
+            # Подсчёт дистанции
+            distance = training['distance']
+            calculated_volume = training['calculated_volume']
+            
+            if calculated_volume:  # Для интервальных тренировок
+                total_distance += calculated_volume
+            elif distance:  # Для остальных
+                total_distance += distance
+            
+            # Подсчёт усталости
+            if training['fatigue_level']:
+                fatigue_sum += training['fatigue_level']
+                fatigue_count += 1
+        
+        avg_fatigue = round(fatigue_sum / fatigue_count, 1) if fatigue_count > 0 else 0
+        
+        return {
+            'total_count': total_count,
+            'total_distance': round(total_distance, 2),
+            'types_count': types_count,
+            'avg_fatigue': avg_fatigue
+        }
+
