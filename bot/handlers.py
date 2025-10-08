@@ -4,7 +4,7 @@
 
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, InputFile
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
 import re
@@ -21,7 +21,7 @@ from bot.keyboards import (
     get_date_keyboard
 )
 from database.queries import add_user, add_training, get_user, get_trainings_by_period, get_training_statistics
-from bot.graphs import generate_weekly_graphs
+from bot.graphs import generate_graphs
 
 router = Router()
 
@@ -656,7 +656,7 @@ async def show_trainings_period(callback: CallbackQuery):
     """Показать тренировки за выбранный период с детальной статистикой"""
     period = callback.data.split(":")[1]
     
-    # Определяем количество дней
+    # Определяем количество дней для графиков
     period_days = {
         "week": 7,
         "2weeks": 14,
@@ -672,9 +672,9 @@ async def show_trainings_period(callback: CallbackQuery):
     days = period_days.get(period, 7)
     period_name = period_names.get(period, "неделю")
     
-    # Получаем статистику и тренировки
-    stats = await get_training_statistics(callback.from_user.id, days)
-    trainings = await get_trainings_by_period(callback.from_user.id, days)
+    # Получаем статистику и тренировки по календарному периоду
+    stats = await get_training_statistics(callback.from_user.id, period)
+    trainings = await get_trainings_by_period(callback.from_user.id, period)
     
     if not trainings:
         await callback.message.edit_text(
@@ -687,8 +687,24 @@ async def show_trainings_period(callback: CallbackQuery):
         await callback.answer()
         return
     
+    # Определяем начальную дату периода для отображения
+    from datetime import timedelta
+    today = datetime.now().date()
+    
+    if period == 'week':
+        start_date = today - timedelta(days=today.weekday())
+        period_display = f"неделю (с {start_date.strftime('%d.%m')} по сегодня)"
+    elif period == '2weeks':
+        start_date = today - timedelta(days=today.weekday() + 7)
+        period_display = f"2 недели (с {start_date.strftime('%d.%m')} по сегодня)"
+    elif period == 'month':
+        start_date = today.replace(day=1)
+        period_display = f"месяц (с {start_date.strftime('%d.%m')} по сегодня)"
+    else:
+        period_display = period_name
+    
     # Формируем заголовок с общей статистикой
-    message_text = f"📊 *Тренировки за {period_name}*\n\n"
+    message_text = f"📊 *Тренировки за {period_display}*\n\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n"
     message_text += "📈 *ОБЩАЯ СТАТИСТИКА*\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n\n"
@@ -807,43 +823,50 @@ async def show_trainings_period(callback: CallbackQuery):
             logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
             raise
     
-    # Добавляем графики только для периода "Неделя"
-    if period == "week":
+    # Генерируем и отправляем графики для всех периодов (только если тренировок >= 2)
+    if len(trainings) >= 2:
         try:
-            fatigue_img, mileage_img, pie_img = generate_weekly_graphs(trainings)
-            logger.info("Отправка графиков...")
+            period_captions = {
+                'week': 'за неделю',
+                '2weeks': 'за 2 недели',
+                'month': 'за месяц'
+            }
+            caption_suffix = period_captions.get(period, '')
+            
+            fatigue_img, mileage_img, pie_img = generate_graphs(trainings, period, days)
+            logger.info(f"Отправка графиков для периода {period}...")
+            
             if fatigue_img:
                 await callback.message.answer_photo(
-                    photo=InputFile(fatigue_img, filename="fatigue.png"),
-                    caption="Усталость за неделю"
+                    photo=BufferedInputFile(fatigue_img.read(), filename="fatigue.png"),
+                    caption=f"📉 Усталость {caption_suffix}"
                 )
                 logger.info("График усталости отправлен")
-            else:
-                logger.warning("График усталости не создан")
-                await callback.message.answer("⚠️ Нет данных для графика усталости")
             
             if mileage_img:
                 await callback.message.answer_photo(
-                    photo=InputFile(mileage_img, filename="mileage.png"),
-                    caption="Километраж за неделю"
+                    photo=BufferedInputFile(mileage_img.read(), filename="mileage.png"),
+                    caption=f"📊 Километраж {caption_suffix}"
                 )
                 logger.info("График километража отправлен")
-            else:
-                logger.warning("График километража не создан")
-                await callback.message.answer("⚠️ Нет данных для графика километража")
             
             if pie_img:
                 await callback.message.answer_photo(
-                    photo=InputFile(pie_img, filename="types.png"),
-                    caption="Типы тренировок"
+                    photo=BufferedInputFile(pie_img.read(), filename="types.png"),
+                    caption=f"📈 Типы тренировок {caption_suffix}"
                 )
                 logger.info("Круговая диаграмма отправлена")
-            else:
-                logger.warning("Круговая диаграмма не создана")
-                await callback.message.answer("⚠️ Нет данных для круговой диаграммы")
+                
+            # Если нет ни одного графика
+            if not any([fatigue_img, mileage_img, pie_img]):
+                logger.warning("Не удалось создать графики")
+                await callback.message.answer("⚠️ Недостаточно данных для создания графиков")
+                
         except Exception as e:
-            logger.error(f"Ошибка при отправке графиков: {str(e)}")
-            await callback.message.answer(f"❌ Ошибка при отправке графиков: {str(e)}")
+            logger.error(f"Ошибка при отправке графиков: {str(e)}", exc_info=True)
+            await callback.message.answer(f"❌ Ошибка при создании графиков: {str(e)}")
+    else:
+        logger.info(f"Недостаточно тренировок для графиков: {len(trainings)} (минимум 2)")
     
     await callback.answer()
 

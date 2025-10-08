@@ -106,5 +106,3 @@ def get_date_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="❌ Отменить")
     )
     return builder.as_markup(resize_keyboard=True)
-
-

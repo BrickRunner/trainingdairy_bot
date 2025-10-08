@@ -14,111 +14,189 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def generate_weekly_graphs(workouts: list) -> tuple:
+# Словарь для перевода месяцев на русский
+MONTH_NAMES_RU = {
+    '01': 'Январь', '02': 'Февраль', '03': 'Март', '04': 'Апрель',
+    '05': 'Май', '06': 'Июнь', '07': 'Июль', '08': 'Август',
+    '09': 'Сентябрь', '10': 'Октябрь', '11': 'Ноябрь', '12': 'Декабрь'
+}
+
+def generate_graphs(workouts: list, period: str, days: int) -> tuple:
     """
-    Генерирует три графика для тренировок за неделю:
-    1. Линейный график усталости по дням с линией среднего значения.
-    2. Столбчатая диаграмма километража по дням с линией среднего значения.
+    Генерирует три графика для тренировок за выбранный период:
+    1. Линейный график усталости с линией среднего значения.
+    2. Столбчатая диаграмма километража с линией среднего значения.
     3. Круговая диаграмма с распределением типов тренировок.
     
     Args:
-        workouts: Список словарей с тренировками, где каждый словарь содержит
-                  поля 'date' (YYYY-MM-DD), 'fatigue_level' (int/float), 'distance' (float), 
-                  'calculated_volume' (float), 'type' (str).
+        workouts: Список словарей с тренировками (уже отфильтрованный по периоду)
+        period: Название периода ('week', '2weeks', 'month')
+        days: Количество дней в периоде (7, 14, 30)
     
     Returns:
         Кортеж из трех объектов io.BytesIO (или None, если данных нет):
         (fatigue_img, mileage_img, pie_img) — изображения графиков.
     """
     try:
-        logger.info(f"Получено тренировок: {len(workouts)}")
-        # Фильтруем тренировки за текущую неделю
-        today = datetime.now().date()
-        week_start = today - timedelta(days=today.weekday())  # Начало недели (понедельник)
-        weekly_workouts = [
-            w for w in workouts
-            if datetime.strptime(w['date'], '%Y-%m-%d').date() >= week_start
-        ]
-        logger.info(f"Тренировки за неделю: {len(weekly_workouts)}")
+        logger.info(f"Получено тренировок: {len(workouts)} за период: {period} ({days} дней)")
 
-        if not weekly_workouts:
-            logger.warning("Нет тренировок за текущую неделю")
+        if not workouts:
+            logger.warning(f"Нет тренировок за период {period}")
             return None, None, None
 
-        # Группируем данные по дням
-        daily_data = defaultdict(lambda: {'fatigue': [], 'distance': 0.0, 'types': defaultdict(int)})
-        for w in weekly_workouts:
-            day = w['date']
+        # Определяем начальную и конечную даты периода
+        today = datetime.now().date()
+        
+        if period == 'week':
+            start_date = today - timedelta(days=today.weekday())
+        elif period == '2weeks':
+            start_date = today - timedelta(days=today.weekday() + 7)
+        elif period == 'month':
+            start_date = today.replace(day=1)
+        else:
+            # По умолчанию - неделя
+            start_date = today - timedelta(days=today.weekday())
+        
+        end_date = today
+
+        # Определяем формат группировки данных и заголовки в зависимости от периода
+        if days <= 7:  # Неделя - группируем по дням
+            group_format = '%Y-%m-%d'
+            x_label = 'День'
+            title_suffix = 'за неделю'
+            date_formatter = lambda d: datetime.strptime(d, '%Y-%m-%d').strftime('%d.%m')
+        elif days <= 14:  # 2 недели - группируем по дням
+            group_format = '%Y-%m-%d'
+            x_label = 'День'
+            title_suffix = 'за 2 недели'
+            date_formatter = lambda d: datetime.strptime(d, '%Y-%m-%d').strftime('%d.%m')
+        elif days <= 31:  # Месяц - группируем по дням
+            group_format = '%Y-%m-%d'
+            x_label = 'День'
+            title_suffix = 'за месяц'
+            date_formatter = lambda d: datetime.strptime(d, '%Y-%m-%d').strftime('%d.%m')
+        else:  # Более длительный период - группируем по месяцам
+            group_format = '%Y-%m'
+            x_label = 'Месяц'
+            title_suffix = 'за период'
+            # Используем русские названия месяцев
+            date_formatter = lambda d: f"{MONTH_NAMES_RU[d.split('-')[1]]} {d.split('-')[0]}"
+
+        # Создаём полный список дат/периодов для отображения
+        all_periods = []
+        if group_format == '%Y-%m-%d':
+            # Для дней - создаём список всех дат от start_date до end_date
+            current_date = start_date
+            while current_date <= end_date:
+                all_periods.append(current_date.strftime('%Y-%m-%d'))
+                current_date += timedelta(days=1)
+        else:
+            # Для месяцев - создаём список всех месяцев в периоде
+            current_date = start_date
+            while current_date <= end_date:
+                all_periods.append(current_date.strftime('%Y-%m'))
+                # Переход к следующему месяцу
+                if current_date.month == 12:
+                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                else:
+                    current_date = current_date.replace(month=current_date.month + 1)
+        
+        logger.info(f"Полный диапазон периодов: {all_periods}")
+
+        # Группируем данные из тренировок
+        grouped_data = defaultdict(lambda: {'fatigue': [], 'distance': 0.0, 'types': defaultdict(int)})
+        
+        for w in workouts:
+            # Определяем ключ группировки
+            if group_format == '%Y-%m':
+                # Для года берем год-месяц
+                group_key = w['date'][:7]  # YYYY-MM
+            else:
+                # Для недели и месяца берем полную дату
+                group_key = w['date']
+            
             if w.get('fatigue_level') is not None:
-                daily_data[day]['fatigue'].append(float(w['fatigue_level']))
+                grouped_data[group_key]['fatigue'].append(float(w['fatigue_level']))
+            
             distance = float(w.get('distance', 0.0) or w.get('calculated_volume', 0.0))
-            daily_data[day]['distance'] += distance
-            daily_data[day]['types'][w['type']] += 1
-            logger.debug(f"Обработка тренировки: {w['type']}, дата: {day}, дистанция: {distance}, усталость: {w.get('fatigue_level')}")
+            grouped_data[group_key]['distance'] += distance
+            grouped_data[group_key]['types'][w['type']] += 1
+            
+            logger.debug(f"Обработка тренировки: {w['type']}, период: {group_key}, дистанция: {distance}")
 
-        days = sorted(daily_data.keys())
-        logger.info(f"Дни с тренировками: {days}")
+        # Используем все периоды (включая пустые)
+        periods = all_periods
+        logger.info(f"Периоды для отображения: {periods}")
 
-        # График 1: Усталость по дням (линейный график) + среднее значение
-        daily_fatigues = [
-            sum(daily_data[day]['fatigue']) / len(daily_data[day]['fatigue'])
-            if daily_data[day]['fatigue'] else 0
-            for day in days
+        # Форматируем подписи для оси X
+        period_labels = [date_formatter(p) for p in periods]
+
+        # График 1: Усталость (линейный график) + среднее значение
+        # Заполняем все периоды, включая пустые (0)
+        period_fatigues = [
+            sum(grouped_data[period]['fatigue']) / len(grouped_data[period]['fatigue'])
+            if grouped_data[period]['fatigue'] else 0
+            for period in periods
         ]
-        if any(daily_fatigues):  # Проверяем, есть ли ненулевые значения
-            fig1, ax1 = plt.subplots(figsize=(8, 5))
-            avg_fatigue = sum(daily_fatigues) / len([f for f in daily_fatigues if f > 0]) if any(f > 0 for f in daily_fatigues) else 0
-            ax1.plot(days, daily_fatigues, marker='o', color='b', label='Средняя усталость')
-            ax1.axhline(y=avg_fatigue, color='r', linestyle='--', label=f'Среднее: {avg_fatigue:.1f}')
-            ax1.set_xlabel('День')
-            ax1.set_ylabel('Усталость')
-            ax1.set_title('Усталость за неделю')
-            ax1.legend()
-            ax1.tick_params(axis='x', rotation=45)
-            plt.tight_layout()
-            fatigue_img = io.BytesIO()
-            fig1.savefig(fatigue_img, format='png', dpi=150, bbox_inches='tight')
-            fatigue_img.seek(0)
-            plt.close(fig1)
-            logger.info("График усталости создан")
-        else:
-            fatigue_img = None
-            logger.warning("Нет данных для графика усталости")
+        
+        # Создаём график усталости всегда (даже если все значения 0)
+        fig1, ax1 = plt.subplots(figsize=(10, 5))
+        avg_fatigue = sum(period_fatigues) / len([f for f in period_fatigues if f > 0]) if any(f > 0 for f in period_fatigues) else 0
+        ax1.plot(period_labels, period_fatigues, marker='o', color='b', linewidth=2, markersize=6, label='Средняя усталость')
+        if avg_fatigue > 0:
+            ax1.axhline(y=avg_fatigue, color='r', linestyle='--', linewidth=1.5, label=f'Среднее: {avg_fatigue:.1f}')
+        ax1.set_xlabel(x_label, fontsize=11)
+        ax1.set_ylabel('Усталость', fontsize=11)
+        ax1.set_title(f'Усталость {title_suffix}', fontsize=13, fontweight='bold')
+        ax1.set_ylim(0, 10.5)  # Устанавливаем диапазон от 0 до 10
+        ax1.legend(fontsize=10)
+        ax1.grid(True, alpha=0.3)
+        ax1.tick_params(axis='x', rotation=45)
+        plt.tight_layout()
+        fatigue_img = io.BytesIO()
+        fig1.savefig(fatigue_img, format='png', dpi=150, bbox_inches='tight')
+        fatigue_img.seek(0)
+        plt.close(fig1)
+        logger.info("График усталости создан")
 
-        # График 2: Километраж по дням (столбчатая диаграмма) + среднее значение
-        daily_distances = [daily_data[day]['distance'] for day in days]
-        if any(daily_distances):  # Проверяем, есть ли ненулевые значения
-            fig2, ax2 = plt.subplots(figsize=(8, 5))
-            avg_distance = sum(daily_distances) / len([d for d in daily_distances if d > 0]) if any(d > 0 for d in daily_distances) else 0
-            ax2.bar(days, daily_distances, color='g', label='Километраж')
-            ax2.axhline(y=avg_distance, color='r', linestyle='--', label=f'Среднее: {avg_distance:.1f} км')
-            ax2.set_xlabel('День')
-            ax2.set_ylabel('Километраж (км)')
-            ax2.set_title('Километраж за неделю')
-            ax2.legend()
-            ax2.tick_params(axis='x', rotation=45)
-            plt.tight_layout()
-            mileage_img = io.BytesIO()
-            fig2.savefig(mileage_img, format='png', dpi=150, bbox_inches='tight')
-            mileage_img.seek(0)
-            plt.close(fig2)
-            logger.info("График километража создан")
-        else:
-            mileage_img = None
-            logger.warning("Нет данных для графика километража")
+        # График 2: Километраж (столбчатая диаграмма) + среднее значение
+        period_distances = [grouped_data[period]['distance'] for period in periods]
+        
+        # Создаём график километража всегда (даже если все значения 0)
+        fig2, ax2 = plt.subplots(figsize=(10, 5))
+        avg_distance = sum(period_distances) / len([d for d in period_distances if d > 0]) if any(d > 0 for d in period_distances) else 0
+        ax2.bar(period_labels, period_distances, color='#2ecc71', alpha=0.8, label='Километраж')
+        if avg_distance > 0:
+            ax2.axhline(y=avg_distance, color='r', linestyle='--', linewidth=1.5, label=f'Среднее: {avg_distance:.1f} км')
+        ax2.set_xlabel(x_label, fontsize=11)
+        ax2.set_ylabel('Километраж (км)', fontsize=11)
+        ax2.set_title(f'Километраж {title_suffix}', fontsize=13, fontweight='bold')
+        ax2.legend(fontsize=10)
+        ax2.grid(True, alpha=0.3, axis='y')
+        ax2.tick_params(axis='x', rotation=45)
+        plt.tight_layout()
+        mileage_img = io.BytesIO()
+        fig2.savefig(mileage_img, format='png', dpi=150, bbox_inches='tight')
+        mileage_img.seek(0)
+        plt.close(fig2)
+        logger.info("График километража создан")
 
         # График 3: Круговая диаграмма типов тренировок
         type_counts = defaultdict(int)
-        for day in daily_data.values():
-            for t, count in day['types'].items():
+        for period_data in grouped_data.values():
+            for t, count in period_data['types'].items():
                 type_counts[t] += count
 
         if type_counts:
-            fig3, ax3 = plt.subplots(figsize=(7, 7))
-            labels = list(type_counts.keys())
+            fig3, ax3 = plt.subplots(figsize=(8, 8))
+            labels = [t.capitalize() for t in type_counts.keys()]
             sizes = list(type_counts.values())
-            ax3.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
-            ax3.set_title('Распределение типов тренировок')
+            colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6']
+            
+            ax3.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, 
+                   colors=colors[:len(labels)], textprops={'fontsize': 11})
+            ax3.set_title(f'Распределение типов тренировок {title_suffix}', 
+                         fontsize=13, fontweight='bold')
             plt.tight_layout()
             pie_img = io.BytesIO()
             fig3.savefig(pie_img, format='png', dpi=150, bbox_inches='tight')
@@ -132,5 +210,5 @@ def generate_weekly_graphs(workouts: list) -> tuple:
         return fatigue_img, mileage_img, pie_img
 
     except Exception as e:
-        logger.error(f"Ошибка при создании графиков: {str(e)}")
+        logger.error(f"Ошибка при создании графиков: {str(e)}", exc_info=True)
         return None, None, None
