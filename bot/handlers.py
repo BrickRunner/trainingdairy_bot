@@ -4,10 +4,11 @@
 
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, InputFile
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
 import re
+import logging
 
 from bot.fsm import AddTrainingStates
 from bot.keyboards import (
@@ -19,10 +20,14 @@ from bot.keyboards import (
     get_period_keyboard,
     get_date_keyboard
 )
-from database.queries import add_user, add_training, get_user
+from database.queries import add_user, add_training, get_user, get_trainings_by_period, get_training_statistics
+from bot.graphs import generate_weekly_graphs
 
 router = Router()
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
@@ -50,7 +55,6 @@ async def cmd_start(message: Message):
         parse_mode="Markdown"
     )
 
-
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     """Обработчик команды /help"""
@@ -72,7 +76,6 @@ async def cmd_help(message: Message):
     
     await message.answer(help_text, parse_mode="Markdown")
 
-
 @router.message(F.text == "➕ Добавить тренировку")
 @router.message(Command("add_training"))
 async def start_add_training(message: Message, state: FSMContext):
@@ -84,7 +87,6 @@ async def start_add_training(message: Message, state: FSMContext):
         parse_mode="Markdown"
     )
     await state.set_state(AddTrainingStates.waiting_for_type)
-
 
 @router.callback_query(F.data.startswith("training_type:"))
 async def process_training_type(callback: CallbackQuery, state: FSMContext):
@@ -106,7 +108,6 @@ async def process_training_type(callback: CallbackQuery, state: FSMContext):
     
     await state.set_state(AddTrainingStates.waiting_for_date)
     await callback.answer()
-
 
 @router.message(AddTrainingStates.waiting_for_date)
 async def process_date(message: Message, state: FSMContext):
@@ -177,7 +178,6 @@ async def process_date(message: Message, state: FSMContext):
     )
     
     await state.set_state(AddTrainingStates.waiting_for_time)
-
 
 @router.message(AddTrainingStates.waiting_for_time)
 async def process_time(message: Message, state: FSMContext):
@@ -284,7 +284,6 @@ async def process_time(message: Message, state: FSMContext):
         )
         await state.set_state(AddTrainingStates.waiting_for_distance)
 
-
 @router.message(AddTrainingStates.waiting_for_distance)
 async def process_distance(message: Message, state: FSMContext):
     """Обработка дистанции"""
@@ -324,7 +323,6 @@ async def process_distance(message: Message, state: FSMContext):
     
     await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
 
-
 @router.message(AddTrainingStates.waiting_for_avg_pulse)
 async def process_avg_pulse(message: Message, state: FSMContext):
     """Обработка среднего пульса"""
@@ -354,7 +352,6 @@ async def process_avg_pulse(message: Message, state: FSMContext):
     
     await state.set_state(AddTrainingStates.waiting_for_max_pulse)
 
-
 @router.message(AddTrainingStates.waiting_for_exercises)
 async def process_exercises(message: Message, state: FSMContext):
     """Обработка описания упражнений для силовой тренировки"""
@@ -371,7 +368,6 @@ async def process_exercises(message: Message, state: FSMContext):
     )
     
     await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
-
 
 @router.message(AddTrainingStates.waiting_for_intervals)
 async def process_intervals(message: Message, state: FSMContext):
@@ -408,7 +404,6 @@ async def process_intervals(message: Message, state: FSMContext):
         )
     
     await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
-
 
 @router.message(AddTrainingStates.waiting_for_max_pulse)
 async def process_max_pulse(message: Message, state: FSMContext):
@@ -453,7 +448,6 @@ async def process_max_pulse(message: Message, state: FSMContext):
     
     await state.set_state(AddTrainingStates.waiting_for_comment)
 
-
 @router.message(AddTrainingStates.waiting_for_comment)
 async def process_comment(message: Message, state: FSMContext):
     """Обработка комментария"""
@@ -477,7 +471,6 @@ async def process_comment(message: Message, state: FSMContext):
     )
     
     await state.set_state(AddTrainingStates.waiting_for_fatigue)
-
 
 @router.callback_query(F.data.startswith("fatigue:"))
 async def process_fatigue(callback: CallbackQuery, state: FSMContext):
@@ -619,7 +612,6 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer("Тренировка сохранена! ✅")
 
-
 @router.message(F.text == "❌ Отменить")
 @router.callback_query(F.data == "cancel")
 async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
@@ -649,7 +641,6 @@ async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
             reply_markup=get_main_menu_keyboard()
         )
 
-
 @router.message(F.text == "📊 Мои тренировки")
 async def show_my_trainings(message: Message):
     """Показать меню выбора периода для просмотра тренировок"""
@@ -659,7 +650,6 @@ async def show_my_trainings(message: Message):
         parse_mode="Markdown",
         reply_markup=get_period_keyboard()
     )
-
 
 @router.callback_query(F.data.startswith("period:"))
 async def show_trainings_period(callback: CallbackQuery):
@@ -683,8 +673,6 @@ async def show_trainings_period(callback: CallbackQuery):
     period_name = period_names.get(period, "неделю")
     
     # Получаем статистику и тренировки
-    from database.queries import get_trainings_by_period, get_training_statistics
-    
     stats = await get_training_statistics(callback.from_user.id, days)
     trainings = await get_trainings_by_period(callback.from_user.id, days)
     
@@ -816,10 +804,48 @@ async def show_trainings_period(callback: CallbackQuery):
         if "message is not modified" in str(e):
             await callback.answer("Данные актуальны", show_alert=False)
         else:
+            logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
             raise
     
+    # Добавляем графики только для периода "Неделя"
+    if period == "week":
+        try:
+            fatigue_img, mileage_img, pie_img = generate_weekly_graphs(trainings)
+            logger.info("Отправка графиков...")
+            if fatigue_img:
+                await callback.message.answer_photo(
+                    photo=InputFile(fatigue_img, filename="fatigue.png"),
+                    caption="Усталость за неделю"
+                )
+                logger.info("График усталости отправлен")
+            else:
+                logger.warning("График усталости не создан")
+                await callback.message.answer("⚠️ Нет данных для графика усталости")
+            
+            if mileage_img:
+                await callback.message.answer_photo(
+                    photo=InputFile(mileage_img, filename="mileage.png"),
+                    caption="Километраж за неделю"
+                )
+                logger.info("График километража отправлен")
+            else:
+                logger.warning("График километража не создан")
+                await callback.message.answer("⚠️ Нет данных для графика километража")
+            
+            if pie_img:
+                await callback.message.answer_photo(
+                    photo=InputFile(pie_img, filename="types.png"),
+                    caption="Типы тренировок"
+                )
+                logger.info("Круговая диаграмма отправлена")
+            else:
+                logger.warning("Круговая диаграмма не создана")
+                await callback.message.answer("⚠️ Нет данных для круговой диаграммы")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке графиков: {str(e)}")
+            await callback.message.answer(f"❌ Ошибка при отправке графиков: {str(e)}")
+    
     await callback.answer()
-
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: CallbackQuery):
@@ -830,7 +856,6 @@ async def back_to_menu(callback: CallbackQuery):
         reply_markup=get_main_menu_keyboard()
     )
     await callback.answer()
-
 
 @router.message(F.text == "📊 Статистика")
 async def show_stats(message: Message):
@@ -844,24 +869,20 @@ async def show_stats(message: Message):
         "• И многое другое!"
     )
 
-
 @router.message(F.text == "📈 Графики")
 async def show_graphs(message: Message):
     """Показать графики (заглушка)"""
-    await message.answer("📈 Графики будут доступны позже!")
-
+    await message.answer("📈 Графики будут доступна позже!")
 
 @router.message(F.text == "🏆 Достижения")
 async def show_achievements(message: Message):
     """Показать достижения (заглушка)"""
     await message.answer("🏆 Достижения будут доступны позже!")
 
-
 @router.message(F.text == "⚙️ Настройки")
 async def show_settings(message: Message):
     """Показать настройки (заглушка)"""
     await message.answer("⚙️ Настройки будут доступны позже!")
-
 
 @router.message(F.text == "ℹ️ Помощь")
 async def show_help(message: Message):
