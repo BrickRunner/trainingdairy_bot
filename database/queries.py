@@ -146,6 +146,29 @@ async def get_training_count(user_id: int) -> int:
             return row[0] if row else 0
 
 
+async def get_training_by_id(training_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Получить тренировку по ID
+    
+    Args:
+        training_id: ID тренировки
+        user_id: ID пользователя (для проверки прав)
+        
+    Returns:
+        Словарь с данными тренировки или None
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM trainings WHERE id = ? AND user_id = ?",
+            (training_id, user_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+
 async def update_user_level(user_id: int, level: str) -> None:
     """
     Обновить уровень пользователя
@@ -218,9 +241,10 @@ async def get_trainings_by_period(user_id: int, period: str) -> list:
             SELECT * FROM trainings 
             WHERE user_id = ? 
             AND date >= ?
+            AND date <= ?
             ORDER BY date ASC
             """,
-            (user_id, start_date.strftime('%Y-%m-%d'))
+            (user_id, start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -262,15 +286,16 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         
-        # Получаем все тренировки за период
+        # Получаем все тренировки за период (до сегодняшнего дня включительно)
         async with db.execute(
             """
             SELECT type, distance, calculated_volume, fatigue_level
             FROM trainings 
             WHERE user_id = ? 
             AND date >= ?
+            AND date <= ?
             """,
-            (user_id, start_date.strftime('%Y-%m-%d'))
+            (user_id, start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
         ) as cursor:
             trainings = await cursor.fetchall()
         

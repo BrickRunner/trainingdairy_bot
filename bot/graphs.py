@@ -21,9 +21,9 @@ MONTH_NAMES_RU = {
     '09': 'Сентябрь', '10': 'Октябрь', '11': 'Ноябрь', '12': 'Декабрь'
 }
 
-def generate_graphs(workouts: list, period: str, days: int) -> tuple:
+def generate_graphs(workouts: list, period: str, days: int) -> io.BytesIO:
     """
-    Генерирует три графика для тренировок за выбранный период:
+    Генерирует объединенный график с тремя подграфиками для тренировок за выбранный период:
     1. Линейный график усталости с линией среднего значения.
     2. Столбчатая диаграмма километража с линией среднего значения.
     3. Круговая диаграмма с распределением типов тренировок.
@@ -34,15 +34,14 @@ def generate_graphs(workouts: list, period: str, days: int) -> tuple:
         days: Количество дней в периоде (7, 14, 30)
     
     Returns:
-        Кортеж из трех объектов io.BytesIO (или None, если данных нет):
-        (fatigue_img, mileage_img, pie_img) — изображения графиков.
+        Объект io.BytesIO с объединенным изображением всех графиков или None
     """
     try:
         logger.info(f"Получено тренировок: {len(workouts)} за период: {period} ({days} дней)")
 
         if not workouts:
             logger.warning(f"Нет тренировок за период {period}")
-            return None, None, None
+            return None
 
         # Определяем начальную и конечную даты периода
         today = datetime.now().date()
@@ -131,7 +130,13 @@ def generate_graphs(workouts: list, period: str, days: int) -> tuple:
         # Форматируем подписи для оси X
         period_labels = [date_formatter(p) for p in periods]
 
+        # Создаём единую фигуру с тремя подграфиками
+        # Размещаем графики вертикально (3 строки, 1 столбец)
+        fig = plt.figure(figsize=(12, 16))
+        
         # График 1: Усталость (линейный график) + среднее значение
+        ax1 = plt.subplot(3, 1, 1)
+        
         # Заполняем все периоды, включая пустые (0)
         period_fatigues = [
             sum(grouped_data[period]['fatigue']) / len(grouped_data[period]['fatigue'])
@@ -139,8 +144,6 @@ def generate_graphs(workouts: list, period: str, days: int) -> tuple:
             for period in periods
         ]
         
-        # Создаём график усталости всегда (даже если все значения 0)
-        fig1, ax1 = plt.subplots(figsize=(10, 5))
         avg_fatigue = sum(period_fatigues) / len([f for f in period_fatigues if f > 0]) if any(f > 0 for f in period_fatigues) else 0
         ax1.plot(period_labels, period_fatigues, marker='o', color='b', linewidth=2, markersize=6, label='Средняя усталость')
         if avg_fatigue > 0:
@@ -148,22 +151,17 @@ def generate_graphs(workouts: list, period: str, days: int) -> tuple:
         ax1.set_xlabel(x_label, fontsize=11)
         ax1.set_ylabel('Усталость', fontsize=11)
         ax1.set_title(f'Усталость {title_suffix}', fontsize=13, fontweight='bold')
-        ax1.set_ylim(0, 10.5)  # Устанавливаем диапазон от 0 до 10
+        ax1.set_ylim(0, 10.5)
         ax1.legend(fontsize=10)
         ax1.grid(True, alpha=0.3)
         ax1.tick_params(axis='x', rotation=45)
-        plt.tight_layout()
-        fatigue_img = io.BytesIO()
-        fig1.savefig(fatigue_img, format='png', dpi=150, bbox_inches='tight')
-        fatigue_img.seek(0)
-        plt.close(fig1)
         logger.info("График усталости создан")
 
         # График 2: Километраж (столбчатая диаграмма) + среднее значение
+        ax2 = plt.subplot(3, 1, 2)
+        
         period_distances = [grouped_data[period]['distance'] for period in periods]
         
-        # Создаём график километража всегда (даже если все значения 0)
-        fig2, ax2 = plt.subplots(figsize=(10, 5))
         avg_distance = sum(period_distances) / len([d for d in period_distances if d > 0]) if any(d > 0 for d in period_distances) else 0
         ax2.bar(period_labels, period_distances, color='#2ecc71', alpha=0.8, label='Километраж')
         if avg_distance > 0:
@@ -174,21 +172,17 @@ def generate_graphs(workouts: list, period: str, days: int) -> tuple:
         ax2.legend(fontsize=10)
         ax2.grid(True, alpha=0.3, axis='y')
         ax2.tick_params(axis='x', rotation=45)
-        plt.tight_layout()
-        mileage_img = io.BytesIO()
-        fig2.savefig(mileage_img, format='png', dpi=150, bbox_inches='tight')
-        mileage_img.seek(0)
-        plt.close(fig2)
         logger.info("График километража создан")
 
         # График 3: Круговая диаграмма типов тренировок
+        ax3 = plt.subplot(3, 1, 3)
+        
         type_counts = defaultdict(int)
         for period_data in grouped_data.values():
             for t, count in period_data['types'].items():
                 type_counts[t] += count
 
         if type_counts:
-            fig3, ax3 = plt.subplots(figsize=(8, 8))
             labels = [t.capitalize() for t in type_counts.keys()]
             sizes = list(type_counts.values())
             colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6']
@@ -197,18 +191,26 @@ def generate_graphs(workouts: list, period: str, days: int) -> tuple:
                    colors=colors[:len(labels)], textprops={'fontsize': 11})
             ax3.set_title(f'Распределение типов тренировок {title_suffix}', 
                          fontsize=13, fontweight='bold')
-            plt.tight_layout()
-            pie_img = io.BytesIO()
-            fig3.savefig(pie_img, format='png', dpi=150, bbox_inches='tight')
-            pie_img.seek(0)
-            plt.close(fig3)
             logger.info("Круговая диаграмма типов тренировок создана")
         else:
-            pie_img = None
+            ax3.text(0.5, 0.5, 'Нет данных для отображения', 
+                    ha='center', va='center', fontsize=12)
+            ax3.set_title(f'Распределение типов тренировок {title_suffix}', 
+                         fontsize=13, fontweight='bold')
             logger.warning("Нет данных для круговой диаграммы")
 
-        return fatigue_img, mileage_img, pie_img
+        # Настраиваем отступы между графиками
+        plt.tight_layout(pad=3.0)
+        
+        # Сохраняем в BytesIO
+        combined_img = io.BytesIO()
+        fig.savefig(combined_img, format='png', dpi=150, bbox_inches='tight')
+        combined_img.seek(0)
+        plt.close(fig)
+        
+        logger.info("Объединенный график успешно создан")
+        return combined_img
 
     except Exception as e:
         logger.error(f"Ошибка при создании графиков: {str(e)}", exc_info=True)
-        return None, None, None
+        return None

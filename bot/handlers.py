@@ -6,6 +6,8 @@ from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, BufferedInputFile
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardButton
 from datetime import datetime
 import re
 import logging
@@ -18,9 +20,10 @@ from bot.keyboards import (
     get_skip_keyboard,
     get_fatigue_keyboard,
     get_period_keyboard,
-    get_date_keyboard
+    get_date_keyboard,
+    get_trainings_list_keyboard
 )
-from database.queries import add_user, add_training, get_user, get_trainings_by_period, get_training_statistics
+from database.queries import add_user, add_training, get_user, get_trainings_by_period, get_training_statistics, get_training_by_id
 from bot.graphs import generate_graphs
 
 router = Router()
@@ -712,9 +715,19 @@ async def show_trainings_period(callback: CallbackQuery):
     # 1. Общее количество тренировок
     message_text += f"🏃 Всего тренировок: *{stats['total_count']}*\n"
     
-    # 2. Общий километраж
+    # 2. Общий километраж (и средний за неделю для периодов > 1 недели)
     if stats['total_distance'] > 0:
         message_text += f"📏 Общий километраж: *{stats['total_distance']:.2f} км*\n"
+        
+        # Для периодов больше недели показываем средний км за неделю
+        if period in ['2weeks', 'month']:
+            # Вычисляем количество полных недель в периоде
+            days_in_period = (today - start_date).days + 1  # +1 чтобы включить сегодня
+            weeks_count = days_in_period / 7
+            
+            if weeks_count > 0:
+                avg_per_week = stats['total_distance'] / weeks_count
+                message_text += f"   _(Средний за неделю: {avg_per_week:.2f} км)_\n"
     
     # 3. Типы тренировок с процентами
     if stats['types_count']:
@@ -812,8 +825,7 @@ async def show_trainings_period(callback: CallbackQuery):
     try:
         await callback.message.edit_text(
             message_text,
-            parse_mode="Markdown",
-            reply_markup=get_period_keyboard()
+            parse_mode="Markdown"
         )
     except Exception as e:
         # Если сообщение не изменилось - просто отвечаем на callback
@@ -822,6 +834,12 @@ async def show_trainings_period(callback: CallbackQuery):
         else:
             logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
             raise
+    
+    # НОВОЕ: Отправляем отдельное сообщение с кнопками для выбора тренировки
+    await callback.message.answer(
+        "👆 Нажмите на номер тренировки, чтобы увидеть детальную информацию:",
+        reply_markup=get_trainings_list_keyboard(trainings, period)
+    )
     
     # Генерируем и отправляем графики для всех периодов (только если тренировок >= 2)
     if len(trainings) >= 2:
@@ -833,42 +851,167 @@ async def show_trainings_period(callback: CallbackQuery):
             }
             caption_suffix = period_captions.get(period, '')
             
-            fatigue_img, mileage_img, pie_img = generate_graphs(trainings, period, days)
-            logger.info(f"Отправка графиков для периода {period}...")
+            combined_graph = generate_graphs(trainings, period, days)
+            logger.info(f"Отправка объединённого графика для периода {period}...")
             
-            if fatigue_img:
+            if combined_graph:
                 await callback.message.answer_photo(
-                    photo=BufferedInputFile(fatigue_img.read(), filename="fatigue.png"),
-                    caption=f"📉 Усталость {caption_suffix}"
+                    photo=BufferedInputFile(combined_graph.read(), filename="statistics.png"),
+                    caption=f"📊 Статистика тренировок {caption_suffix}"
                 )
-                logger.info("График усталости отправлен")
-            
-            if mileage_img:
-                await callback.message.answer_photo(
-                    photo=BufferedInputFile(mileage_img.read(), filename="mileage.png"),
-                    caption=f"📊 Километраж {caption_suffix}"
-                )
-                logger.info("График километража отправлен")
-            
-            if pie_img:
-                await callback.message.answer_photo(
-                    photo=BufferedInputFile(pie_img.read(), filename="types.png"),
-                    caption=f"📈 Типы тренировок {caption_suffix}"
-                )
-                logger.info("Круговая диаграмма отправлена")
-                
-            # Если нет ни одного графика
-            if not any([fatigue_img, mileage_img, pie_img]):
+                logger.info("Объединённый график отправлен")
+            else:
                 logger.warning("Не удалось создать графики")
                 await callback.message.answer("⚠️ Недостаточно данных для создания графиков")
                 
         except Exception as e:
-            logger.error(f"Ошибка при отправке графиков: {str(e)}", exc_info=True)
+            logger.error(f"Ошибка при отправке графика: {str(e)}", exc_info=True)
             await callback.message.answer(f"❌ Ошибка при создании графиков: {str(e)}")
     else:
         logger.info(f"Недостаточно тренировок для графиков: {len(trainings)} (минимум 2)")
     
+    # НОВОЕ: После отправки всех графиков повторно показываем меню выбора периода
+    await callback.message.answer(
+        "📊 *Выберите другой период или вернитесь в главное меню*",
+        parse_mode="Markdown",
+        reply_markup=get_period_keyboard()
+    )
+    
     await callback.answer()
+
+@router.callback_query(F.data.startswith("training_detail:"))
+async def show_training_detail(callback: CallbackQuery):
+    """Показать детальную информацию о конкретной тренировке"""
+    # Парсим callback_data: "training_detail:ID:period"
+    parts = callback.data.split(":")
+    training_id = int(parts[1])
+    period = parts[2]
+    
+    # Получаем данные тренировки
+    training = await get_training_by_id(training_id, callback.from_user.id)
+    
+    if not training:
+        await callback.answer("❌ Тренировка не найдена", show_alert=True)
+        return
+    
+    # Формируем детальное сообщение
+    from datetime import datetime
+    
+    # Эмодзи для типов
+    type_emoji = {
+        'кросс': '🏃',
+        'плавание': '🏊',
+        'велотренировка': '🚴',
+        'силовая': '💪',
+        'интервальная': '⚡'
+    }
+    
+    t_type = training['type']
+    emoji = type_emoji.get(t_type, '📝')
+    date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m.%Y')
+    
+    # Базовая информация
+    detail_text = (
+        f"{emoji} *Детальная информация о тренировке*\n\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"📅 *Дата:* {date}\n"
+        f"🏋️ *Тип:* {t_type.capitalize()}\n"
+    )
+    
+    # Время тренировки
+    if training.get('time'):
+        detail_text += f"⏱ *Время:* {training['time']}\n"
+    
+    # Специфичная информация в зависимости от типа
+    if t_type == 'интервальная':
+        # Для интервальной - описание и объем
+        if training.get('calculated_volume'):
+            detail_text += f"📏 *Объем:* {training['calculated_volume']} км\n"
+        
+        if training.get('intervals'):
+            # Показываем средний темп отрезков если есть результаты
+            from utils.interval_calculator import calculate_average_interval_pace
+            avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
+            if avg_pace_intervals:
+                detail_text += f"⚡ *Средний темп отрезков:* {avg_pace_intervals}\n"
+            
+            detail_text += f"\n📋 *Описание тренировки:*\n```\n{training['intervals']}\n```\n"
+    
+    elif t_type == 'силовая':
+        # Для силовой - упражнения
+        if training.get('exercises'):
+            detail_text += f"\n💪 *Упражнения:*\n```\n{training['exercises']}\n```\n"
+    
+    else:
+        # Для кросса, плавания, велотренировки - дистанция и темп
+        if training.get('distance'):
+            if t_type == 'плавание':
+                meters = int(training['distance'] * 1000)
+                detail_text += f"📏 *Дистанция:* {training['distance']} км ({meters} м)\n"
+            else:
+                detail_text += f"📏 *Дистанция:* {training['distance']} км\n"
+        
+        if training.get('avg_pace'):
+            pace_unit = training.get('pace_unit', '')
+            if t_type == 'велотренировка':
+                detail_text += f"🚴 *Средняя скорость:* {training['avg_pace']} {pace_unit}\n"
+            else:
+                detail_text += f"⚡ *Средний темп:* {training['avg_pace']} {pace_unit}\n"
+    
+    # Пульс (для всех типов)
+    if training.get('avg_pulse'):
+        detail_text += f"❤️ *Средний пульс:* {training['avg_pulse']} уд/мин\n"
+    
+    if training.get('max_pulse'):
+        detail_text += f"💗 *Максимальный пульс:* {training['max_pulse']} уд/мин\n"
+    
+    # Комментарий
+    if training.get('comment'):
+        detail_text += f"\n💬 *Комментарий:*\n_{training['comment']}_\n"
+    
+    # Усталость
+    if training.get('fatigue_level'):
+        detail_text += f"\n😴 *Уровень усталости:* {training['fatigue_level']}/10\n"
+    
+    detail_text += "\n━━━━━━━━━━━━━━━━━"
+    
+    # Создаем клавиатуру для возврата
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔙 Назад к списку", callback_data=f"period:{period}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
+    )
+    
+    try:
+        await callback.message.edit_text(
+            detail_text,
+            parse_mode="Markdown",
+            reply_markup=builder.as_markup()
+        )
+    except Exception as e:
+        # Если не удалось отредактировать, отправляем новое сообщение
+        await callback.message.answer(
+            detail_text,
+            parse_mode="Markdown",
+            reply_markup=builder.as_markup()
+        )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_periods")
+async def back_to_periods(callback: CallbackQuery):
+    """Вернуться к выбору периодов"""
+    await callback.message.edit_text(
+        "📊 *Мои тренировки*\n\n"
+        "Выберите период для просмотра:",
+        parse_mode="Markdown",
+        reply_markup=get_period_keyboard()
+    )
+    await callback.answer()
+
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: CallbackQuery):

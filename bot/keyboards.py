@@ -106,3 +106,54 @@ def get_date_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="❌ Отменить")
     )
     return builder.as_markup(resize_keyboard=True)
+
+
+def get_trainings_list_keyboard(trainings: list, period: str) -> InlineKeyboardMarkup:
+    """
+    Клавиатура со списком тренировок (кнопки для каждой)
+    
+    Args:
+        trainings: Список тренировок из БД
+        period: Текущий период просмотра
+        
+    Returns:
+        InlineKeyboardMarkup с кнопками для каждой тренировки
+    """
+    builder = InlineKeyboardBuilder()
+    
+    # Добавляем кнопку для каждой тренировки (максимум 15)
+    for idx, training in enumerate(trainings[:15], 1):
+        # Эмодзи для типов
+        type_emoji = {
+            'кросс': '🏃',
+            'плавание': '🏊',
+            'велотренировка': '🚴',
+            'силовая': '💪',
+            'интервальная': '⚡'
+        }
+        
+        t_type = training['type']
+        emoji = type_emoji.get(t_type, '📝')
+        
+        # Парсим дату для короткого отображения
+        from datetime import datetime
+        date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m')
+        
+        # Текст кнопки: "№1 🏃 15.01"
+        button_text = f"№{idx} {emoji} {date}"
+        
+        # В callback_data передаем ID тренировки и период
+        builder.button(
+            text=button_text,
+            callback_data=f"training_detail:{training['id']}:{period}"
+        )
+    
+    # Размещаем по 3 кнопки в ряду
+    builder.adjust(3)
+    
+    # Добавляем кнопку "Назад" в отдельном ряду
+    builder.row(
+        InlineKeyboardButton(text="🔙 Вернуться к периодам", callback_data="back_to_periods")
+    )
+    
+    return builder.as_markup()
