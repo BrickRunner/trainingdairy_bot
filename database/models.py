@@ -101,6 +101,60 @@ CREATE TABLE IF NOT EXISTS coach_links (
 )
 """
 
+CREATE_USER_SETTINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id INTEGER PRIMARY KEY,
+    
+    -- Персональные данные
+    name TEXT,
+    birth_date DATE,
+    gender TEXT,
+    weight REAL,
+    height REAL,
+    
+    -- Основные типы тренировок (JSON массив)
+    main_training_types TEXT DEFAULT '["кросс"]',
+    
+    -- Пульсовые зоны (автоматически или вручную)
+    max_pulse INTEGER,
+    zone1_min INTEGER,
+    zone1_max INTEGER,
+    zone2_min INTEGER,
+    zone2_max INTEGER,
+    zone3_min INTEGER,
+    zone3_max INTEGER,
+    zone4_min INTEGER,
+    zone4_max INTEGER,
+    zone5_min INTEGER,
+    zone5_max INTEGER,
+    
+    -- Целевые показатели
+    weekly_volume_goal REAL,
+    weekly_trainings_goal INTEGER,
+    weight_goal REAL,
+    
+    -- Цели по типам тренировок (JSON объект)
+    -- {"кросс": 30, "плавание": 5, "силовая": 2}
+    training_type_goals TEXT DEFAULT '{}',
+    
+    -- Единицы измерения
+    distance_unit TEXT DEFAULT 'км',
+    weight_unit TEXT DEFAULT 'кг',
+    date_format TEXT DEFAULT 'DD.MM.YYYY',
+    
+    -- Уведомления
+    daily_pulse_weight_time TEXT,
+    weekly_report_day TEXT DEFAULT 'Понедельник',
+    weekly_report_time TEXT DEFAULT '09:00',
+    
+    -- Дата создания и обновления
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)
+"""
+
 # Список всех таблиц для инициализации
 ALL_TABLES = [
     CREATE_USERS_TABLE,
@@ -109,5 +163,6 @@ ALL_TABLES = [
     CREATE_COMPETITION_PARTICIPANTS_TABLE,
     CREATE_ACHIEVEMENTS_TABLE,
     CREATE_RATINGS_TABLE,
-    CREATE_COACH_LINKS_TABLE
+    CREATE_COACH_LINKS_TABLE,
+    CREATE_USER_SETTINGS_TABLE
 ]

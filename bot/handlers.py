@@ -12,7 +12,7 @@ from datetime import datetime
 import re
 import logging
 
-from bot.fsm import AddTrainingStates
+from bot.fsm import AddTrainingStates, ExportPDFStates
 from bot.keyboards import (
     get_main_menu_keyboard,
     get_training_types_keyboard,
@@ -21,10 +21,17 @@ from bot.keyboards import (
     get_fatigue_keyboard,
     get_period_keyboard,
     get_date_keyboard,
-    get_trainings_list_keyboard
+    get_trainings_list_keyboard,
+    get_training_detail_keyboard,
+    get_export_period_keyboard
 )
-from database.queries import add_user, add_training, get_user, get_trainings_by_period, get_training_statistics, get_training_by_id
+from database.queries import (
+    add_user, add_training, get_user, 
+    get_trainings_by_period, get_training_statistics, get_training_by_id,
+    get_trainings_by_custom_period, get_statistics_by_custom_period
+)
 from bot.graphs import generate_graphs
+from bot.pdf_export import create_training_pdf
 
 router = Router()
 
@@ -835,12 +842,6 @@ async def show_trainings_period(callback: CallbackQuery):
             logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
             raise
     
-    # НОВОЕ: Отправляем отдельное сообщение с кнопками для выбора тренировки
-    await callback.message.answer(
-        "👆 Нажмите на номер тренировки, чтобы увидеть детальную информацию:",
-        reply_markup=get_trainings_list_keyboard(trainings, period)
-    )
-    
     # Генерируем и отправляем графики для всех периодов (только если тренировок >= 2)
     if len(trainings) >= 2:
         try:
@@ -870,11 +871,12 @@ async def show_trainings_period(callback: CallbackQuery):
     else:
         logger.info(f"Недостаточно тренировок для графиков: {len(trainings)} (минимум 2)")
     
-    # НОВОЕ: После отправки всех графиков повторно показываем меню выбора периода
+    # НОВОЕ: После списка и графиков отправляем сообщение с кнопками для выбора тренировки
     await callback.message.answer(
-        "📊 *Выберите другой период или вернитесь в главное меню*",
+        "📋 *Выберите тренировку для просмотра деталей:*\n\n"
+        "Нажмите на номер тренировки или выберите другой период",
         parse_mode="Markdown",
-        reply_markup=get_period_keyboard()
+        reply_markup=get_trainings_list_keyboard(trainings, period)
     )
     
     await callback.answer()
@@ -975,27 +977,19 @@ async def show_training_detail(callback: CallbackQuery):
     
     detail_text += "\n━━━━━━━━━━━━━━━━━"
     
-    # Создаем клавиатуру для возврата
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="🔙 Назад к списку", callback_data=f"period:{period}")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
-    )
-    
+    # Используем новую клавиатуру для деталей тренировки
     try:
         await callback.message.edit_text(
             detail_text,
             parse_mode="Markdown",
-            reply_markup=builder.as_markup()
+            reply_markup=get_training_detail_keyboard(period)
         )
     except Exception as e:
         # Если не удалось отредактировать, отправляем новое сообщение
         await callback.message.answer(
             detail_text,
             parse_mode="Markdown",
-            reply_markup=builder.as_markup()
+            reply_markup=get_training_detail_keyboard(period)
         )
     
     await callback.answer()
@@ -1010,6 +1004,35 @@ async def back_to_periods(callback: CallbackQuery):
         parse_mode="Markdown",
         reply_markup=get_period_keyboard()
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("back_to_list:"))
+async def back_to_list(callback: CallbackQuery):
+    """Вернуться к списку тренировок"""
+    # Получаем период из callback_data
+    period = callback.data.split(":")[1]
+    
+    # Получаем список тренировок для этого периода
+    trainings = await get_trainings_by_period(callback.from_user.id, period)
+    
+    if not trainings:
+        await callback.answer("❌ Тренировки не найдены", show_alert=True)
+        return
+    
+    # Редактируем сообщение - возвращаем список с кнопками
+    try:
+        await callback.message.edit_text(
+            "📋 *Выберите тренировку для просмотра деталей:*\n\n"
+            "Нажмите на номер тренировки или выберите другой период",
+            parse_mode="Markdown",
+            reply_markup=get_trainings_list_keyboard(trainings, period)
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при возврате к списку: {str(e)}")
+        await callback.answer("❌ Ошибка при возврате к списку", show_alert=True)
+        return
+    
     await callback.answer()
 
 
@@ -1054,3 +1077,248 @@ async def show_settings(message: Message):
 async def show_help(message: Message):
     """Показать помощь"""
     await cmd_help(message)
+# ==================== ЭКСПОРТ В PDF ====================
+
+@router.message(F.text == "📥 Экспорт в PDF")
+async def export_pdf_menu(message: Message):
+    """Показать меню экспорта в PDF"""
+    await message.answer(
+        "📥 *Экспорт тренировок в PDF*\n\n"
+        "Выберите период для экспорта:",
+        parse_mode="Markdown",
+        reply_markup=get_export_period_keyboard()
+    )
+
+
+@router.callback_query(F.data.startswith("export_period:"))
+async def process_export_period(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора периода экспорта"""
+    period = callback.data.split(":")[1]
+    
+    from datetime import datetime, timedelta
+    
+    today = datetime.now().date()
+    
+    if period == "6months":
+        # Полгода назад
+        start_date = today - timedelta(days=180)
+        end_date = today
+        period_text = f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+        
+        await callback.message.edit_text(
+            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите...",
+            parse_mode="Markdown"
+        )
+        
+        # Генерируем PDF
+        await generate_and_send_pdf(
+            callback.message,
+            callback.from_user.id,
+            start_date.strftime('%Y-%m-%d'),
+            end_date.strftime('%Y-%m-%d'),
+            period_text
+        )
+        
+    elif period == "year":
+        # Год назад
+        start_date = today - timedelta(days=365)
+        end_date = today
+        period_text = f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+        
+        await callback.message.edit_text(
+            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите...",
+            parse_mode="Markdown"
+        )
+        
+        # Генерируем PDF
+        await generate_and_send_pdf(
+            callback.message,
+            callback.from_user.id,
+            start_date.strftime('%Y-%m-%d'),
+            end_date.strftime('%Y-%m-%d'),
+            period_text
+        )
+        
+    elif period == "custom":
+        # Произвольный период - запрашиваем даты
+        await callback.message.edit_text(
+            "📅 *Произвольный период*\n\n"
+            "Введите начальную дату в формате ДД.ММ.ГГГГ\n"
+            "Например: 01.01.2025\n\n"
+            "Или нажмите /cancel для отмены",
+            parse_mode="Markdown"
+        )
+        await state.set_state(ExportPDFStates.waiting_for_start_date)
+    
+    await callback.answer()
+
+
+@router.message(ExportPDFStates.waiting_for_start_date)
+async def process_export_start_date(message: Message, state: FSMContext):
+    """Обработка начальной даты для произвольного периода"""
+    # Проверяем формат даты
+    date_pattern = r'^(\d{2})\.(\d{2})\.(\d{4})$'
+    match = re.match(date_pattern, message.text.strip())
+    
+    if not match:
+        await message.answer(
+            "❌ Неверный формат даты!\n\n"
+            "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ\n"
+            "Например: 01.01.2025"
+        )
+        return
+    
+    try:
+        day, month, year = match.groups()
+        start_date = datetime(int(year), int(month), int(day)).date()
+        
+        # Проверяем, что дата не из будущего
+        if start_date > datetime.now().date():
+            await message.answer(
+                "❌ Дата не может быть из будущего!\n\n"
+                "Пожалуйста, введите корректную дату:"
+            )
+            return
+        
+        # Сохраняем начальную дату
+        await state.update_data(start_date=start_date.strftime('%Y-%m-%d'))
+        
+        await message.answer(
+            f"✅ Начальная дата: {start_date.strftime('%d.%m.%Y')}\n\n"
+            "Теперь введите конечную дату в формате ДД.ММ.ГГГГ\n"
+            "Например: 31.12.2025"
+        )
+        await state.set_state(ExportPDFStates.waiting_for_end_date)
+        
+    except ValueError:
+        await message.answer(
+            "❌ Некорректная дата!\n\n"
+            "Пожалуйста, введите существующую дату в формате ДД.ММ.ГГГГ"
+        )
+
+
+@router.message(ExportPDFStates.waiting_for_end_date)
+async def process_export_end_date(message: Message, state: FSMContext):
+    """Обработка конечной даты для произвольного периода"""
+    # Проверяем формат даты
+    date_pattern = r'^(\d{2})\.(\d{2})\.(\d{4})$'
+    match = re.match(date_pattern, message.text.strip())
+    
+    if not match:
+        await message.answer(
+            "❌ Неверный формат даты!\n\n"
+            "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ\n"
+            "Например: 31.12.2025"
+        )
+        return
+    
+    try:
+        day, month, year = match.groups()
+        end_date = datetime(int(year), int(month), int(day)).date()
+        
+        # Проверяем, что дата не из будущего
+        if end_date > datetime.now().date():
+            await message.answer(
+                "❌ Дата не может быть из будущего!\n\n"
+                "Пожалуйста, введите корректную дату:"
+            )
+            return
+        
+        # Получаем начальную дату из state
+        data = await state.get_data()
+        start_date_str = data['start_date']
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        
+        # Проверяем, что конечная дата >= начальной
+        if end_date < start_date:
+            await message.answer(
+                f"❌ Конечная дата не может быть раньше начальной!\n\n"
+                f"Начальная дата: {start_date.strftime('%d.%m.%Y')}\n"
+                f"Пожалуйста, введите конечную дату не раньше этой:"
+            )
+            return
+        
+        # Формируем текстовое описание периода
+        period_text = f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+        
+        await message.answer(
+            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
+        )
+        
+        # Генерируем PDF
+        await generate_and_send_pdf(
+            message,
+            message.from_user.id,
+            start_date_str,
+            end_date.strftime('%Y-%m-%d'),
+            period_text
+        )
+        
+        # Очищаем состояние
+        await state.clear()
+        
+    except ValueError:
+        await message.answer(
+            "❌ Некорректная дата!\n\n"
+            "Пожалуйста, введите существующую дату в формате ДД.ММ.ГГГГ"
+        )
+
+
+async def generate_and_send_pdf(message: Message, user_id: int, start_date: str, end_date: str, period_text: str):
+    """
+    Генерирует и отправляет PDF с тренировками
+    
+    Args:
+        message: Сообщение для ответа
+        user_id: ID пользователя
+        start_date: Начальная дата в формате 'YYYY-MM-DD'
+        end_date: Конечная дата в формате 'YYYY-MM-DD'
+        period_text: Текстовое описание периода для отображения
+    """
+    try:
+        # Получаем тренировки
+        trainings = await get_trainings_by_custom_period(user_id, start_date, end_date)
+        
+        if not trainings:
+            await message.answer(
+                f"📭 За период {period_text} нет тренировок.\n\n"
+                "Выберите другой период.",
+                reply_markup=get_export_period_keyboard()
+            )
+            return
+        
+        # Получаем статистику
+        stats = await get_statistics_by_custom_period(user_id, start_date, end_date)
+        
+        # Генерируем PDF
+        logger.info(f"Генерация PDF для пользователя {user_id}: {len(trainings)} тренировок")
+        pdf_buffer = create_training_pdf(trainings, period_text, stats)
+        
+        # Формируем имя файла
+        filename = f"trainings_{start_date}_{end_date}.pdf"
+        
+        # Отправляем PDF
+        await message.answer_document(
+            BufferedInputFile(pdf_buffer.read(), filename=filename),
+            caption=f"📥 *Экспорт тренировок*\n\n"
+                    f"Период: {period_text}\n"
+                    f"Тренировок: {len(trainings)}\n"
+                    f"Километраж: {stats['total_distance']:.2f} км",
+            parse_mode="Markdown"
+        )
+        
+        logger.info(f"PDF успешно отправлен пользователю {user_id}")
+        
+        # Возвращаем в главное меню
+        await message.answer(
+            "✅ PDF успешно создан!",
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при генерации PDF: {str(e)}", exc_info=True)
+        await message.answer(
+            f"❌ Ошибка при создании PDF:\n{str(e)}\n\n"
+            "Попробуйте позже или выберите другой период.",
+            reply_markup=get_main_menu_keyboard()
+        )

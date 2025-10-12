@@ -30,3 +30,35 @@ class AddTrainingStates(StatesGroup):
     # Общие завершающие поля
     waiting_for_comment = State()       # Комментарий
     waiting_for_fatigue = State()       # Уровень усталости (1-10)
+
+
+class ExportPDFStates(StatesGroup):
+    """Состояния для экспорта тренировок в PDF"""
+    
+    waiting_for_start_date = State()    # Начальная дата периода
+    waiting_for_end_date = State()      # Конечная дата периода
+
+
+class SettingsStates(StatesGroup):
+    """Состояния для изменения настроек"""
+    
+    # Профиль
+    waiting_for_name = State()
+    waiting_for_birth_date = State()
+    waiting_for_weight = State()
+    waiting_for_height = State()
+    
+    # Пульсовые зоны
+    waiting_for_max_pulse = State()
+    waiting_for_zone_manual = State()
+    
+    # Цели
+    waiting_for_weekly_volume = State()
+    waiting_for_weekly_count = State()
+    waiting_for_weight_goal = State()
+    waiting_for_type_goal = State()
+    current_type_goal = State()  # Для хранения текущего типа при вводе цели
+    
+    # Уведомления
+    waiting_for_daily_time = State()
+    waiting_for_report_time = State()

@@ -18,7 +18,10 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="🏆 Достижения")
     )
     builder.row(
-        KeyboardButton(text="⚙️ Настройки"),
+        KeyboardButton(text="📥 Экспорт в PDF"),
+        KeyboardButton(text="⚙️ Настройки")
+    )
+    builder.row(
         KeyboardButton(text="ℹ️ Помощь")
     )
     return builder.as_markup(resize_keyboard=True)
@@ -151,9 +154,69 @@ def get_trainings_list_keyboard(trainings: list, period: str) -> InlineKeyboardM
     # Размещаем по 3 кнопки в ряду
     builder.adjust(3)
     
-    # Добавляем кнопку "Назад" в отдельном ряду
+    # Добавляем кнопки навигации в отдельных рядах
     builder.row(
-        InlineKeyboardButton(text="🔙 Вернуться к периодам", callback_data="back_to_periods")
+        InlineKeyboardButton(text="🔄 Выбрать другой период", callback_data="back_to_periods")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
     
+    return builder.as_markup()
+
+
+def get_training_detail_keyboard(period: str) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для деталей тренировки
+    
+    Args:
+        period: Текущий период просмотра (для возврата к списку)
+        
+    Returns:
+        InlineKeyboardMarkup с кнопками навигации
+    """
+    builder = InlineKeyboardBuilder()
+    
+    # Кнопка "Назад к списку" - возврат к списку тренировок того же периода
+    builder.row(
+        InlineKeyboardButton(
+            text="◀️ Назад к списку", 
+            callback_data=f"back_to_list:{period}"
+        )
+    )
+    
+    # Кнопка "Выбрать другой период"
+    builder.row(
+        InlineKeyboardButton(
+            text="🔄 Выбрать другой период", 
+            callback_data="back_to_periods"
+        )
+    )
+    
+    # Кнопка "Главное меню"
+    builder.row(
+        InlineKeyboardButton(
+            text="🔙 Главное меню", 
+            callback_data="back_to_menu"
+        )
+    )
+    
+    return builder.as_markup()
+
+
+def get_export_period_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора периода для экспорта в PDF"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="📅 Полгода", callback_data="export_period:6months")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Год", callback_data="export_period:year")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Произвольный период", callback_data="export_period:custom")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
+    )
     return builder.as_markup()
