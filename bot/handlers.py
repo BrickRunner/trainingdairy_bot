@@ -28,7 +28,8 @@ from bot.keyboards import (
 from database.queries import (
     add_user, add_training, get_user, 
     get_trainings_by_period, get_training_statistics, get_training_by_id,
-    get_trainings_by_custom_period, get_statistics_by_custom_period
+    get_trainings_by_custom_period, get_statistics_by_custom_period,
+    delete_training  # НОВЫЙ КОД: Импортируем delete_training
 )
 from bot.graphs import generate_graphs
 from bot.pdf_export import create_training_pdf
@@ -77,10 +78,12 @@ async def cmd_help(message: Message):
         "/help - Показать эту справку\n\n"
         "**Кнопки меню:**\n"
         "➕ Добавить тренировку - Записать новую тренировку\n"
-        "📊 Статистика - Посмотреть свою статистику\n"
+        "📊 Мои тренировки - Посмотреть список тренировок\n"
         "📈 Графики - Визуализация прогресса\n"
-        "🏆 Достижения - Ваши достижения и награды\n\n"
+        "🏆 Достижения - Ваши достижения и награды\n"
+        "📥 Экспорт в PDF - Сохранить тренировки в PDF\n\n"
         "Для добавления тренировки следуйте инструкциям бота. "
+        "Для удаления тренировки откройте её детали в '📊 Мои тренировки' и нажмите '🗑 Удалить тренировку'.\n"
         "Вы всегда можете отменить действие, нажав кнопку ❌ Отменить"
     )
     
@@ -680,7 +683,7 @@ async def show_trainings_period(callback: CallbackQuery):
     }
     
     days = period_days.get(period, 7)
-    period_name = period_names.get(period, "неделю")
+    period_name = period_names.get(period, "период")
     
     # Получаем статистику и тренировки по календарному периоду
     stats = await get_training_statistics(callback.from_user.id, period)
@@ -773,6 +776,9 @@ async def show_trainings_period(callback: CallbackQuery):
         'интервальная': '⚡'
     }
     
+    # НОВЫЙ КОД: Убираем кнопки удаления из списка, оставляем только "Назад"
+    builder = InlineKeyboardBuilder()
+    
     # Добавляем детали каждой тренировки
     for idx, training in enumerate(trainings[:15], 1):  # Показываем максимум 15
         # Парсим дату
@@ -829,10 +835,15 @@ async def show_trainings_period(callback: CallbackQuery):
     if len(trainings) > 15:
         message_text += f"_... и ещё {len(trainings) - 15} тренировок_\n"
     
+    # НОВЫЙ КОД: Добавляем только кнопку "Назад"
+    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_periods"))
+    reply_markup = builder.as_markup()
+    
     try:
         await callback.message.edit_text(
             message_text,
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=reply_markup
         )
     except Exception as e:
         # Если сообщение не изменилось - просто отвечаем на callback
@@ -867,11 +878,11 @@ async def show_trainings_period(callback: CallbackQuery):
                 
         except Exception as e:
             logger.error(f"Ошибка при отправке графика: {str(e)}", exc_info=True)
-            await callback.message.answer(f"❌ Ошибка при создании графиков: {str(e)}")
+            await callback.message.answer(f"❌ Ошибка при создания графиков: {str(e)}")
     else:
         logger.info(f"Недостаточно тренировок для графиков: {len(trainings)} (минимум 2)")
     
-    # НОВОЕ: После списка и графиков отправляем сообщение с кнопками для выбора тренировки
+    # Отправляем сообщение с кнопками для выбора тренировки
     await callback.message.answer(
         "📋 *Выберите тренировку для просмотра деталей:*\n\n"
         "Нажмите на номер тренировки или выберите другой период",
@@ -879,6 +890,198 @@ async def show_trainings_period(callback: CallbackQuery):
         reply_markup=get_trainings_list_keyboard(trainings, period)
     )
     
+    await callback.answer()
+
+# НОВЫЙ КОД: Обработчик кнопки удаления
+@router.callback_query(F.data.startswith("delete_training:"))
+async def request_delete_confirmation(callback: CallbackQuery):
+    """Запрос подтверждения удаления тренировки"""
+    parts = callback.data.split(":")
+    training_id = int(parts[1])
+    period = parts[2]
+    
+    # Создаём клавиатуру подтверждения
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete:{training_id}:{period}"),
+        InlineKeyboardButton(text="❌ Нет", callback_data="cancel_delete")
+    )
+    
+    await callback.message.answer(
+        f"🗑 Вы уверены, что хотите удалить эту тренировку?",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+# НОВЫЙ КОД: Обработчик подтверждения удаления
+@router.callback_query(F.data.startswith("confirm_delete:"))
+async def confirm_delete(callback: CallbackQuery):
+    """Подтверждение и выполнение удаления тренировки"""
+    parts = callback.data.split(":")
+    training_id = int(parts[1])
+    period = parts[2]
+    user_id = callback.from_user.id
+    
+    # Удаляем тренировку
+    deleted = await delete_training(training_id, user_id)
+    
+    if deleted:
+        # Уведомляем об успешном удалении
+        await callback.message.answer(f"✅ Тренировка удалена!")
+        
+        # Перестраиваем список тренировок для текущего периода
+        stats = await get_training_statistics(user_id, period)
+        trainings = await get_trainings_by_period(user_id, period)
+        
+        if not trainings:
+            # ИСПРАВЛЕНО: Используем period_names для корректного отображения
+            period_names = {"week": "неделю", "2weeks": "2 недели", "month": "месяц"}
+            period_name = period_names.get(period, "период")
+            await callback.message.answer(
+                f"📊 *Тренировки за {period_name}*\n\n"
+                f"У вас больше нет тренировок за этот период.",
+                parse_mode="Markdown",
+                reply_markup=get_period_keyboard()
+            )
+            await callback.message.delete()  # Удаляем сообщение с подтверждением
+            await callback.answer()
+            return
+        
+        # Формируем обновлённый список тренировок
+        period_days = {"week": 7, "2weeks": 14, "month": 30}
+        period_names = {"week": "неделю", "2weeks": "2 недели", "month": "месяц"}
+        days = period_days.get(period, 7)
+        period_name = period_names.get(period, "период")
+        
+        from datetime import timedelta
+        today = datetime.now().date()
+        if period == 'week':
+            start_date = today - timedelta(days=today.weekday())
+            period_display = f"неделю (с {start_date.strftime('%d.%m')} по сегодня)"
+        elif period == '2weeks':
+            start_date = today - timedelta(days=today.weekday() + 7)
+            period_display = f"2 недели (с {start_date.strftime('%d.%m')} по сегодня)"
+        elif period == 'month':
+            start_date = today.replace(day=1)
+            period_display = f"месяц (с {start_date.strftime('%d.%m')} по сегодня)"
+        else:
+            period_display = period_name
+        
+        message_text = f"📊 *Тренировки за {period_display}*\n\n"
+        message_text += "━━━━━━━━━━━━━━━━━━\n"
+        message_text += "📈 *ОБЩАЯ СТАТИСТИКА*\n"
+        message_text += "━━━━━━━━━━━━━━━━━━\n\n"
+        message_text += f"🏃 Всего тренировок: *{stats['total_count']}*\n"
+        if stats['total_distance'] > 0:
+            message_text += f"📏 Общий километраж: *{stats['total_distance']:.2f} км*\n"
+            if period in ['2weeks', 'month']:
+                days_in_period = (today - start_date).days + 1
+                weeks_count = days_in_period / 7
+                if weeks_count > 0:
+                    avg_per_week = stats['total_distance'] / weeks_count
+                    message_text += f"   _(Средний за неделю: {avg_per_week:.2f} км)_\n"
+        if stats['types_count']:
+            message_text += f"\n📋 *Типы тренировок:*\n"
+            type_emoji = {
+                'кросс': '🏃', 'плавание': '🏊', 'велотренировка': '🚴', 'силовая': '💪', 'интервальная': '⚡'
+            }
+            sorted_types = sorted(stats['types_count'].items(), key=lambda x: x[1], reverse=True)
+            for t_type, count in sorted_types:
+                emoji = type_emoji.get(t_type, '📝')
+                percentage = (count / stats['total_count']) * 100
+                message_text += f"  {emoji} {t_type.capitalize()}: {count} ({percentage:.1f}%)\n"
+        if stats['avg_fatigue'] > 0:
+            message_text += f"\n😴 Средняя усталость: *{stats['avg_fatigue']}/10*\n"
+        message_text += "\n━━━━━━━━━━━━━━━━━━\n"
+        message_text += "📝 *СПИСОК ТРЕНИРОВОК*\n"
+        message_text += "━━━━━━━━━━━━━━━━━━\n\n"
+        
+        builder = InlineKeyboardBuilder()
+        for idx, training in enumerate(trainings[:15], 1):
+            date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m.%Y')
+            t_type = training['type']
+            emoji = type_emoji.get(t_type, '📝')
+            message_text += f"*{idx}.* {emoji} *{t_type.capitalize()}* • {date}\n"
+            if training.get('time'):
+                message_text += f"   ⏰ Время: {training['time']}\n"
+            if t_type == 'интервальная':
+                if training.get('calculated_volume'):
+                    message_text += f"   📏 Дистанция: {training['calculated_volume']} км\n"
+            else:
+                if training.get('distance'):
+                    if t_type == 'плавание':
+                        meters = int(training['distance'] * 1000)
+                        message_text += f"   📏 Дистанция: {training['distance']} км ({meters} м)\n"
+                    else:
+                        message_text += f"   📏 Дистанция: {training['distance']} км\n"
+            if t_type == 'интервальная' and training.get('intervals'):
+                from utils.interval_calculator import calculate_average_interval_pace
+                avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
+                if avg_pace_intervals:
+                    message_text += f"   ⚡ Средний темп отрезков: {avg_pace_intervals}\n"
+            elif t_type == 'велотренировка' and training.get('avg_pace'):
+                message_text += f"   🚴 Средняя скорость: {training['avg_pace']} {training.get('pace_unit', '')}\n"
+            elif t_type != 'силовая' and training.get('avg_pace'):
+                message_text += f"   ⚡ Средний темп: {training['avg_pace']} {training.get('pace_unit', '')}\n"
+            if training.get('avg_pulse'):
+                message_text += f"   ❤️ Пульс: {training['avg_pulse']} уд/мин\n"
+            if training.get('fatigue_level'):
+                message_text += f"   😴 Усталость: {training['fatigue_level']}/10*\n"
+            message_text += "\n"
+        if len(trainings) > 15:
+            message_text += f"_... и ещё {len(trainings) - 15} тренировок_\n"
+        builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_periods"))
+        reply_markup = builder.as_markup()
+        
+        try:
+            await callback.message.edit_text(
+                message_text,
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            if "message is not modified" in str(e):
+                await callback.answer("Данные актуальны", show_alert=False)
+            else:
+                logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
+                raise
+        
+        # Обновляем графики, если тренировок >= 2
+        if len(trainings) >= 2:
+            try:
+                period_captions = {'week': 'за неделю', '2weeks': 'за 2 недели', 'month': 'за месяц'}
+                caption_suffix = period_captions.get(period, '')
+                combined_graph = generate_graphs(trainings, period, days)
+                if combined_graph:
+                    await callback.message.answer_photo(
+                        photo=BufferedInputFile(combined_graph.read(), filename="statistics.png"),
+                        caption=f"📊 Статистика тренировок {caption_suffix}"
+                    )
+                    logger.info("Объединённый график отправлен")
+                else:
+                    logger.warning("Не удалось создать графики")
+                    await callback.message.answer("⚠️ Недостаточно данных для создания графиков")
+            except Exception as e:
+                logger.error(f"Ошибка при отправке графика: {str(e)}", exc_info=True)
+                await callback.message.answer(f"❌ Ошибка при создании графиков: {str(e)}")
+        
+        await callback.message.answer(
+            "📋 *Выберите тренировку для просмотра деталей:*\n\n"
+            "Нажмите на номер тренировки или выберите другой период",
+            parse_mode="Markdown",
+            reply_markup=get_trainings_list_keyboard(trainings, period)
+        )
+    else:
+        await callback.message.answer(f"❌ Тренировка не найдена или не ваша.")
+    await callback.message.delete()  # Удаляем сообщение с подтверждением
+    await callback.answer()
+
+# НОВЫЙ КОД: Обработчик отмены удаления
+@router.callback_query(F.data == "cancel_delete")
+async def cancel_delete(callback: CallbackQuery):
+    """Отмена удаления тренировки"""
+    await callback.message.answer("❌ Удаление отменено.")
+    await callback.message.delete()
     await callback.answer()
 
 @router.callback_query(F.data.startswith("training_detail:"))
@@ -977,23 +1180,22 @@ async def show_training_detail(callback: CallbackQuery):
     
     detail_text += "\n━━━━━━━━━━━━━━━━━"
     
-    # Используем новую клавиатуру для деталей тренировки
+    # НОВЫЙ КОД: Передаем training_id в клавиатуру
     try:
         await callback.message.edit_text(
             detail_text,
             parse_mode="Markdown",
-            reply_markup=get_training_detail_keyboard(period)
+            reply_markup=get_training_detail_keyboard(period, training_id=training_id)  # НОВЫЙ КОД: Добавляем training_id
         )
     except Exception as e:
         # Если не удалось отредактировать, отправляем новое сообщение
         await callback.message.answer(
             detail_text,
             parse_mode="Markdown",
-            reply_markup=get_training_detail_keyboard(period)
+            reply_markup=get_training_detail_keyboard(period, training_id=training_id)  # НОВЫЙ КОД: Добавляем training_id
         )
     
     await callback.answer()
-
 
 @router.callback_query(F.data == "back_to_periods")
 async def back_to_periods(callback: CallbackQuery):
@@ -1005,7 +1207,6 @@ async def back_to_periods(callback: CallbackQuery):
         reply_markup=get_period_keyboard()
     )
     await callback.answer()
-
 
 @router.callback_query(F.data.startswith("back_to_list:"))
 async def back_to_list(callback: CallbackQuery):
@@ -1034,7 +1235,6 @@ async def back_to_list(callback: CallbackQuery):
         return
     
     await callback.answer()
-
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: CallbackQuery):
@@ -1077,6 +1277,7 @@ async def show_settings(message: Message):
 async def show_help(message: Message):
     """Показать помощь"""
     await cmd_help(message)
+
 # ==================== ЭКСПОРТ В PDF ====================
 
 @router.message(F.text == "📥 Экспорт в PDF")
@@ -1088,7 +1289,6 @@ async def export_pdf_menu(message: Message):
         parse_mode="Markdown",
         reply_markup=get_export_period_keyboard()
     )
-
 
 @router.callback_query(F.data.startswith("export_period:"))
 async def process_export_period(callback: CallbackQuery, state: FSMContext):
@@ -1152,7 +1352,6 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
     
     await callback.answer()
 
-
 @router.message(ExportPDFStates.waiting_for_start_date)
 async def process_export_start_date(message: Message, state: FSMContext):
     """Обработка начальной даты для произвольного периода"""
@@ -1195,7 +1394,6 @@ async def process_export_start_date(message: Message, state: FSMContext):
             "❌ Некорректная дата!\n\n"
             "Пожалуйста, введите существующую дату в формате ДД.ММ.ГГГГ"
         )
-
 
 @router.message(ExportPDFStates.waiting_for_end_date)
 async def process_export_end_date(message: Message, state: FSMContext):
@@ -1262,7 +1460,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
             "❌ Некорректная дата!\n\n"
             "Пожалуйста, введите существующую дату в формате ДД.ММ.ГГГГ"
         )
-
 
 async def generate_and_send_pdf(message: Message, user_id: int, start_date: str, end_date: str, period_text: str):
     """

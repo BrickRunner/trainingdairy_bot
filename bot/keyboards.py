@@ -165,42 +165,23 @@ def get_trainings_list_keyboard(trainings: list, period: str) -> InlineKeyboardM
     return builder.as_markup()
 
 
-def get_training_detail_keyboard(period: str) -> InlineKeyboardMarkup:
+def get_training_detail_keyboard(period: str, training_id: int = None):
     """
-    Клавиатура для деталей тренировки
+    Создаёт клавиатуру для детальной информации о тренировке.
     
     Args:
-        period: Текущий период просмотра (для возврата к списку)
-        
+        period (str): Период тренировок (week, 2weeks, month).
+        training_id (int, optional): ID тренировки для кнопки удаления.
+    
     Returns:
-        InlineKeyboardMarkup с кнопками навигации
+        InlineKeyboardMarkup: Клавиатура с кнопками.
     """
     builder = InlineKeyboardBuilder()
-    
-    # Кнопка "Назад к списку" - возврат к списку тренировок того же периода
     builder.row(
-        InlineKeyboardButton(
-            text="◀️ Назад к списку", 
-            callback_data=f"back_to_list:{period}"
-        )
+        InlineKeyboardButton(text="🔙 К списку", callback_data=f"back_to_list:{period}"),
+        InlineKeyboardButton(text="🗑 Удалить тренировку", callback_data=f"delete_training:{training_id}:{period}")
     )
-    
-    # Кнопка "Выбрать другой период"
-    builder.row(
-        InlineKeyboardButton(
-            text="🔄 Выбрать другой период", 
-            callback_data="back_to_periods"
-        )
-    )
-    
-    # Кнопка "Главное меню"
-    builder.row(
-        InlineKeyboardButton(
-            text="🔙 Главное меню", 
-            callback_data="back_to_menu"
-        )
-    )
-    
+    builder.row(InlineKeyboardButton(text="🏠 В меню", callback_data="back_to_menu"))
     return builder.as_markup()
 
 
@@ -220,3 +201,5 @@ def get_export_period_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
     )
     return builder.as_markup()
+
+
