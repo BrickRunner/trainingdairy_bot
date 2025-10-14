@@ -17,6 +17,8 @@ import os
 import sys
 
 from .pdf_graphs import create_pdf_graphs, generate_weekly_stats
+from database.queries import get_user_settings
+from utils.unit_converter import format_distance, format_pace, format_swimming_distance
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +104,7 @@ else:
     FONT_NAME_BOLD = 'Helvetica-Bold'
 
 
-def create_training_pdf(trainings: list, period_text: str, stats: dict) -> BytesIO:
+async def create_training_pdf(trainings: list, period_text: str, stats: dict, user_id: int) -> BytesIO:
     """
     Создает PDF документ с детальной информацией о тренировках
     
@@ -110,10 +112,15 @@ def create_training_pdf(trainings: list, period_text: str, stats: dict) -> Bytes
         trainings: Список тренировок из БД
         period_text: Текстовое описание периода (например, "01.04.2025 - 01.10.2025")
         stats: Словарь со статистикой
+        user_id: ID пользователя для получения настроек единиц измерения
         
     Returns:
         BytesIO объект с PDF документом
     """
+    # Получаем настройки пользователя для единиц измерения
+    user_settings = await get_user_settings(user_id)
+    distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    
     buffer = BytesIO()
     
     # Создаем документ
@@ -177,7 +184,7 @@ def create_training_pdf(trainings: list, period_text: str, stats: dict) -> Bytes
     # Общая статистика на титульной
     stats_data = [
         ["Всего тренировок:", f"{stats['total_count']}"],
-        ["Общий километраж:", f"{stats['total_distance']:.2f} км"],
+        ["Общий километраж:", format_distance(stats['total_distance'], distance_unit)],
         ["Средняя усталость:", f"{stats['avg_fatigue']}/10" if stats['avg_fatigue'] > 0 else "Не указана"]
     ]
     
@@ -250,7 +257,7 @@ def create_training_pdf(trainings: list, period_text: str, stats: dict) -> Bytes
                 weekly_data.append([
                     week['week_label'],
                     str(week['count']),
-                    f"{week['distance']:.2f} км"
+                    format_distance(week['distance'], distance_unit)
                 ])
             
             weekly_table = Table(weekly_data, colWidths=[9*cm, 4*cm, 4*cm])
@@ -303,7 +310,7 @@ def create_training_pdf(trainings: list, period_text: str, stats: dict) -> Bytes
         # Специфичные параметры в зависимости от типа
         if t_type == 'интервальная':
             if training.get('calculated_volume'):
-                details.append(["Объем:", f"{training['calculated_volume']} км"])
+                details.append(["Объем:", format_distance(training['calculated_volume'], distance_unit)])
             if training.get('intervals'):
                 # Для интервальной показываем средний темп отрезков
                 from utils.interval_calculator import calculate_average_interval_pace
@@ -319,10 +326,9 @@ def create_training_pdf(trainings: list, period_text: str, stats: dict) -> Bytes
             # Для кросса, плавания, велотренировки
             if training.get('distance'):
                 if t_type == 'плавание':
-                    meters = int(training['distance'] * 1000)
-                    details.append(["Дистанция:", f"{training['distance']} км ({meters} м)"])
+                    details.append(["Дистанция:", format_swimming_distance(training['distance'], distance_unit)])
                 else:
-                    details.append(["Дистанция:", f"{training['distance']} км"])
+                    details.append(["Дистанция:", format_distance(training['distance'], distance_unit)])
             
             if training.get('avg_pace'):
                 pace_unit = training.get('pace_unit', '')

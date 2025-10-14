@@ -1265,11 +1265,6 @@ async def show_achievements(message: Message):
     """Показать достижения (заглушка)"""
     await message.answer("🏆 Достижения будут доступны позже!")
 
-@router.message(F.text == "⚙️ Настройки")
-async def show_settings(message: Message):
-    """Показать настройки (заглушка)"""
-    await message.answer("⚙️ Настройки будут доступны позже!")
-
 @router.message(F.text == "ℹ️ Помощь")
 async def show_help(message: Message):
     """Показать помощь"""
@@ -1486,7 +1481,11 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
         
         # Генерируем PDF
         logger.info(f"Генерация PDF для пользователя {user_id}: {len(trainings)} тренировок")
-        pdf_buffer = create_training_pdf(trainings, period_text, stats)
+        pdf_buffer = await create_training_pdf(trainings, period_text, stats, user_id)
+        
+        # Получаем настройки для правильного отображения в caption
+        user_settings = await get_user_settings(user_id)
+        distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
         
         # Формируем имя файла
         filename = f"trainings_{start_date}_{end_date}.pdf"
@@ -1497,7 +1496,7 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
             caption=f"📥 *Экспорт тренировок*\n\n"
                     f"Период: {period_text}\n"
                     f"Тренировок: {len(trainings)}\n"
-                    f"Километраж: {stats['total_distance']:.2f} км",
+                    f"Километраж: {format_distance(stats['total_distance'], distance_unit)}",
             parse_mode="Markdown"
         )
         
