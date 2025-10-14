@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 import os
 
 from bot.handlers import router
+from settings.settings_handlers_full import router as settings_router
 from database.queries import init_db
+from notifications.notification_scheduler import start_notification_scheduler
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -40,10 +42,15 @@ async def main():
     
     # Подключение роутеров
     dp.include_router(router)
+    dp.include_router(settings_router)
     
     # Инициализация базы данных
     await init_db()
     logger.info("База данных инициализирована")
+    
+    # Запуск планировщика уведомлений
+    start_notification_scheduler(bot)
+    logger.info("Планировщик уведомлений запущен")
     
     # Запуск бота
     logger.info("Бот запущен!")

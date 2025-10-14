@@ -29,10 +29,12 @@ from database.queries import (
     add_user, add_training, get_user, 
     get_trainings_by_period, get_training_statistics, get_training_by_id,
     get_trainings_by_custom_period, get_statistics_by_custom_period,
-    delete_training  # НОВЫЙ КОД: Импортируем delete_training
+    delete_training,  # НОВЫЙ КОД: Импортируем delete_training
+    get_user_settings  # Импортируем get_user_settings для единиц измерения
 )
 from bot.graphs import generate_graphs
 from bot.pdf_export import create_training_pdf
+from utils.unit_converter import format_distance, format_pace, format_swimming_distance
 
 router = Router()
 
@@ -495,6 +497,10 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     data['fatigue_level'] = fatigue_level
     data['user_id'] = callback.from_user.id
     
+    # Получаем настройки пользователя для единиц измерения
+    user_settings = await get_user_settings(callback.from_user.id)
+    distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    
     # Рассчитываем средний темп
     time_str = data['time']
     hours, minutes, seconds = map(int, time_str.split(':'))
@@ -506,28 +512,13 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     if training_type not in ['силовая', 'интервальная']:
         distance = data['distance']
         
-        # Расчет темпа в зависимости от типа тренировки
-        if training_type == 'плавание':
-            # Для плавания: мин:сек на 100 метров
-            distance_in_meters = distance * 1000
-            seconds_per_100m = (total_seconds / distance_in_meters) * 100
-            pace_minutes = int(seconds_per_100m // 60)
-            pace_seconds = int(seconds_per_100m % 60)
-            avg_pace = f"{pace_minutes}:{pace_seconds:02d}"
-            pace_unit = "мин/100м"
-        elif training_type == 'велотренировка':
-            # Для велотренировки: средняя скорость в км/ч
-            hours_total = total_seconds / 3600
-            avg_speed = distance / hours_total
-            avg_pace = f"{avg_speed:.1f}"
-            pace_unit = "км/ч"
-        else:
-            # Для кросса: мин:сек на километр
-            avg_pace_minutes = total_minutes / distance
-            pace_minutes = int(avg_pace_minutes)
-            pace_seconds = int((avg_pace_minutes - pace_minutes) * 60)
-            avg_pace = f"{pace_minutes}:{pace_seconds:02d}"
-            pace_unit = "мин/км"
+        # Используем утилиту для форматирования темпа
+        avg_pace, pace_unit = format_pace(
+            distance, 
+            total_seconds, 
+            distance_unit, 
+            training_type
+        )
         
         # Сохраняем темп в данные
         data['avg_pace'] = avg_pace
@@ -585,13 +576,13 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
             if avg_pace_intervals:
                 summary += f"⚡ Средний темп отрезков: {avg_pace_intervals}\n"
     else:
-        # Для остальных типов - дистанция и темп
+        # Для остальных типов - дистанция и темп с учетом единиц измерения
         distance_km = data['distance']
         
         if training_type == 'плавание':
-            distance_text = f"📏 Дистанция: {distance_km} км ({int(distance_km * 1000)} м)"
+            distance_text = f"📏 Дистанция: {format_swimming_distance(distance_km, distance_unit)}"
         else:
-            distance_text = f"📏 Дистанция: {distance_km} км"
+            distance_text = f"📏 Дистанция: {format_distance(distance_km, distance_unit)}"
         
         pace_emoji = "⚡"
         if training_type == 'велотренировка':
@@ -669,6 +660,10 @@ async def show_trainings_period(callback: CallbackQuery):
     """Показать тренировки за выбранный период с детальной статистикой"""
     period = callback.data.split(":")[1]
     
+    # Получаем настройки пользователя для единиц измерения
+    user_settings = await get_user_settings(callback.from_user.id)
+    distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    
     # Определяем количество дней для графиков
     period_days = {
         "week": 7,
@@ -727,7 +722,7 @@ async def show_trainings_period(callback: CallbackQuery):
     
     # 2. Общий километраж (и средний за неделю для периодов > 1 недели)
     if stats['total_distance'] > 0:
-        message_text += f"📏 Общий километраж: *{stats['total_distance']:.2f} км*\n"
+        message_text += f"📏 Общий километраж: *{format_distance(stats['total_distance'], distance_unit)}*\n"
         
         # Для периодов больше недели показываем средний км за неделю
         if period in ['2weeks', 'month']:
@@ -737,7 +732,7 @@ async def show_trainings_period(callback: CallbackQuery):
             
             if weeks_count > 0:
                 avg_per_week = stats['total_distance'] / weeks_count
-                message_text += f"   _(Средний за неделю: {avg_per_week:.2f} км)_\n"
+                message_text += f"   _(Средний за неделю: {format_distance(avg_per_week, distance_unit)})_\n"
     
     # 3. Типы тренировок с процентами
     if stats['types_count']:
@@ -793,17 +788,16 @@ async def show_trainings_period(callback: CallbackQuery):
         if training.get('time'):
             message_text += f"   ⏰ Время: {training['time']}\n"
         
-        # 3. Общий километраж
+        # 3. Общий километраж с учетом единиц измерения
         if t_type == 'интервальная':
             if training.get('calculated_volume'):
-                message_text += f"   📏 Дистанция: {training['calculated_volume']} км\n"
+                message_text += f"   📏 Дистанция: {format_distance(training['calculated_volume'], distance_unit)}\n"
         else:
             if training.get('distance'):
                 if t_type == 'плавание':
-                    meters = int(training['distance'] * 1000)
-                    message_text += f"   📏 Дистанция: {training['distance']} км ({meters} м)\n"
+                    message_text += f"   📏 Дистанция: {format_swimming_distance(training['distance'], distance_unit)}\n"
                 else:
-                    message_text += f"   📏 Дистанция: {training['distance']} км\n"
+                    message_text += f"   📏 Дистанция: {format_distance(training['distance'], distance_unit)}\n"
         
         # 4. Средний темп/скорость/интервалов
         if t_type == 'интервальная':
@@ -1099,6 +1093,10 @@ async def show_training_detail(callback: CallbackQuery):
         await callback.answer("❌ Тренировка не найдена", show_alert=True)
         return
     
+    # Получаем настройки пользователя для единиц измерения
+    user_settings = await get_user_settings(callback.from_user.id)
+    distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    
     # Формируем детальное сообщение
     from datetime import datetime
     
@@ -1131,7 +1129,7 @@ async def show_training_detail(callback: CallbackQuery):
     if t_type == 'интервальная':
         # Для интервальной - описание и объем
         if training.get('calculated_volume'):
-            detail_text += f"📏 *Объем:* {training['calculated_volume']} км\n"
+            detail_text += f"📏 *Объем:* {format_distance(training['calculated_volume'], distance_unit)}\n"
         
         if training.get('intervals'):
             # Показываем средний темп отрезков если есть результаты
@@ -1151,10 +1149,9 @@ async def show_training_detail(callback: CallbackQuery):
         # Для кросса, плавания, велотренировки - дистанция и темп
         if training.get('distance'):
             if t_type == 'плавание':
-                meters = int(training['distance'] * 1000)
-                detail_text += f"📏 *Дистанция:* {training['distance']} км ({meters} м)\n"
+                detail_text += f"📏 *Дистанция:* {format_swimming_distance(training['distance'], distance_unit)}\n"
             else:
-                detail_text += f"📏 *Дистанция:* {training['distance']} км\n"
+                detail_text += f"📏 *Дистанция:* {format_distance(training['distance'], distance_unit)}\n"
         
         if training.get('avg_pace'):
             pace_unit = training.get('pace_unit', '')

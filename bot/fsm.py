@@ -42,23 +42,24 @@ class ExportPDFStates(StatesGroup):
 class SettingsStates(StatesGroup):
     """Состояния для изменения настроек"""
     
-    # Профиль
-    waiting_for_name = State()
-    waiting_for_birth_date = State()
-    waiting_for_weight = State()
-    waiting_for_height = State()
+    # Профиль (1-6)
+    waiting_for_name = State()                  # 1. Имя
+    waiting_for_birth_date = State()            # 2. Дата рождения
+    waiting_for_gender = State()                # 3. Пол
+    waiting_for_weight = State()                # 4. Вес
+    waiting_for_height = State()                # 5. Рост
+    selecting_main_types = State()              # 6. Основные типы тренировок
     
-    # Пульсовые зоны
-    waiting_for_max_pulse = State()
-    waiting_for_zone_manual = State()
+    # Пульсовые зоны (7)
+    waiting_for_max_pulse = State()             # 7. Максимальный пульс для зон
+    waiting_for_zone_manual = State()           # Ручная настройка зон
     
-    # Цели
-    waiting_for_weekly_volume = State()
-    waiting_for_weekly_count = State()
-    waiting_for_weight_goal = State()
-    waiting_for_type_goal = State()
-    current_type_goal = State()  # Для хранения текущего типа при вводе цели
+    # Цели (8-11)
+    waiting_for_weekly_volume = State()         # 8. Целевой объем
+    waiting_for_weekly_count = State()          # 9. Количество тренировок в неделю
+    waiting_for_type_goal = State()             # 10. Цели по типам тренировок
+    waiting_for_weight_goal = State()           # 11. Целевой вес
     
-    # Уведомления
-    waiting_for_daily_time = State()
-    waiting_for_report_time = State()
+    # Уведомления (13-14)
+    waiting_for_daily_time = State()            # 13. Время ежедневного сообщения
+    waiting_for_report_time = State()           # 14. Время недельного отчета
