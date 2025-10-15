@@ -746,7 +746,7 @@ def format_date_by_setting(date_str: str, format_setting: str) -> str:
             return date_obj.strftime('%d.%m.%Y')
         elif format_setting == 'MM/DD/YYYY':
             return date_obj.strftime('%m/%d/%Y')
-        else:  # 'YYYY-MM-DD'
+        else:  
             return date_obj.strftime('%Y-%m-%d')
     except:
         return date_str

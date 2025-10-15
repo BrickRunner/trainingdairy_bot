@@ -4,6 +4,7 @@
 
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from database.queries import format_date_by_setting  # Добавил импорт
 
 
 def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
@@ -111,13 +112,14 @@ def get_date_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
-def get_trainings_list_keyboard(trainings: list, period: str) -> InlineKeyboardMarkup:
+def get_trainings_list_keyboard(trainings: list, period: str, date_format: str) -> InlineKeyboardMarkup:  # Добавил date_format параметр
     """
     Клавиатура со списком тренировок (кнопки для каждой)
     
     Args:
         trainings: Список тренировок из БД
         period: Текущий период просмотра
+        date_format: Формат даты из настроек пользователя
         
     Returns:
         InlineKeyboardMarkup с кнопками для каждой тренировки
@@ -138,12 +140,18 @@ def get_trainings_list_keyboard(trainings: list, period: str) -> InlineKeyboardM
         t_type = training['type']
         emoji = type_emoji.get(t_type, '📝')
         
-        # Парсим дату для короткого отображения
-        from datetime import datetime
-        date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m')
+        # Форматируем дату согласно настройкам (короткий формат: без года)
+        formatted_date = format_date_by_setting(training['date'], date_format)
+        # Для короткого отображения берем только день.месяц или эквивалент
+        if date_format == 'DD.MM.YYYY':
+            short_date = formatted_date[:5]  # ДД.ММ
+        elif date_format == 'MM/DD/YYYY':
+            short_date = formatted_date[:5]  # ММ/ДД
+        else:
+            short_date = formatted_date[-5:]  # ММ-ДД (от末尾)
         
         # Текст кнопки: "№1 🏃 15.01"
-        button_text = f"№{idx} {emoji} {date}"
+        button_text = f"№{idx} {emoji} {short_date}"
         
         # В callback_data передаем ID тренировки и период
         builder.button(
@@ -201,5 +209,3 @@ def get_export_period_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
     )
     return builder.as_markup()
-
-
