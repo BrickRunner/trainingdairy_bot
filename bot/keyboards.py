@@ -32,6 +32,12 @@ def get_training_types_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора типа тренировки"""
     builder = InlineKeyboardBuilder()
     builder.row(
+        InlineKeyboardButton(text="⚡ Интервальная", callback_data="training_type:интервальная")
+    )
+    builder.row(
+        InlineKeyboardButton(text="💪 Силовая", callback_data="training_type:силовая")
+    )
+    builder.row(
         InlineKeyboardButton(text="🏃 Кросс", callback_data="training_type:кросс")
     )
     builder.row(
@@ -39,12 +45,6 @@ def get_training_types_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(text="🚴 Велотренировка", callback_data="training_type:велотренировка")
-    )
-    builder.row(
-        InlineKeyboardButton(text="💪 Силовая", callback_data="training_type:силовая")
-    )
-    builder.row(
-        InlineKeyboardButton(text="⚡ Интервальная", callback_data="training_type:интервальная")
     )
     builder.row(
         InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
