@@ -35,6 +35,7 @@ from database.queries import (
 from bot.graphs import generate_graphs
 from bot.pdf_export import create_training_pdf
 from utils.unit_converter import format_distance, format_pace, format_swimming_distance
+from utils.date_formatter import DateFormatter, get_user_date_format
 
 router = Router()
 
@@ -131,6 +132,10 @@ async def process_date(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     
+    # Получаем формат даты пользователя
+    user_id = message.from_user.id
+    date_format = await get_user_date_format(user_id)
+    
     # Текущая дата в UTC+3 (Москва)
     from datetime import timedelta
     utc_now = datetime.utcnow()
@@ -144,28 +149,29 @@ async def process_date(message: Message, state: FSMContext):
     elif message.text in ["вчера", "📅 Вчера"]:
         date = yesterday
     elif message.text == "📝 Ввести дату":
-        # Запрашиваем ввод даты вручную
+        # Запрашиваем ввод даты вручную с учетом формата пользователя
+        format_desc = DateFormatter.get_format_description(date_format)
         await message.answer(
-            "📅 Введите дату тренировки\n\n"
-            "Формат: ДД.ММ.ГГГГ\n"
-            "Например: 15.01.2024",
+            f"📅 Введите дату тренировки\n\n"
+            f"Формат: {format_desc}",
             reply_markup=get_cancel_keyboard()
         )
         return
     else:
-        # Проверка формата ДД.ММ.ГГГГ
-        date_pattern = r'^\d{2}\.\d{2}\.\d{4}$'
+        # Проверка формата согласно настройкам пользователя
+        date_pattern = DateFormatter.get_validation_pattern(date_format)
         if not re.match(date_pattern, message.text):
+            format_desc = DateFormatter.get_format_description(date_format)
             await message.answer(
-                "❌ Неверный формат даты!\n\n"
-                "Используйте формат: ДД.ММ.ГГГГ (например, 15.01.2024)\n"
+                f"❌ Неверный формат даты!\n\n"
+                f"Используйте формат: {format_desc}\n"
                 "Или выберите кнопку на клавиатуре"
             )
             return
         
-        try:
-            date = datetime.strptime(message.text, "%d.%m.%Y").date()
-        except ValueError:
+        # Парсим дату согласно формату пользователя
+        date = DateFormatter.parse_date(message.text, date_format)
+        if date is None:
             await message.answer(
                 "❌ Некорректная дата!\n\n"
                 "Проверьте правильность введенной даты"
@@ -174,18 +180,21 @@ async def process_date(message: Message, state: FSMContext):
     
     # Проверка, что дата не в будущем
     if date > today:
+        today_str = DateFormatter.format_date(today, date_format)
+        date_str = DateFormatter.format_date(date, date_format)
         await message.answer(
             f"❌ Нельзя добавить тренировку в будущем!\n\n"
-            f"Сегодня: {today.strftime('%d.%m.%Y')}\n"
-            f"Вы ввели: {date.strftime('%d.%m.%Y')}\n\n"
+            f"Сегодня: {today_str}\n"
+            f"Вы ввели: {date_str}\n\n"
             "Введите дату не позже сегодняшней."
         )
         return
     
     await state.update_data(date=date)
     
+    date_str = DateFormatter.format_date(date, date_format)
     await message.answer(
-        f"✅ Дата: {date.strftime('%d.%m.%Y')}\n\n"
+        f"✅ Дата: {date_str}\n\n"
         "⏰ Введите время тренировки\n\n"
         "Формат: ЧЧ:ММ:СС\n"
         "Примеры: 01:25:30 или 25:15:45 (для ультрамарафонов)",
@@ -486,9 +495,10 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     data['fatigue_level'] = fatigue_level
     data['user_id'] = callback.from_user.id
     
-    # Получаем настройки пользователя для единиц измерения
+    # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
     # Рассчитываем средний темп
     time_str = data['time']
@@ -534,10 +544,13 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     else:  # кросс
         training_emoji = "🏃"
     
+    # Форматируем дату согласно настройкам пользователя
+    date_str = DateFormatter.format_date(data['date'], date_format)
+    
     # Базовая информация для всех типов
     summary = (
         "✅ **Тренировка успешно добавлена!**\n\n"
-        f"📅 Дата: {data['date'].strftime('%d.%m.%Y')}\n"
+        f"📅 Дата: {date_str}\n"
         f"{training_emoji} Тип: {training_type.capitalize()}\n"
         f"⏰ Время: {data['time']}\n"
     )
@@ -649,9 +662,10 @@ async def show_trainings_period(callback: CallbackQuery):
     """Показать тренировки за выбранный период с детальной статистикой"""
     period = callback.data.split(":")[1]
     
-    # Получаем настройки пользователя для единиц измерения
+    # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
     # Определяем количество дней для графиков
     period_days = {
@@ -690,13 +704,30 @@ async def show_trainings_period(callback: CallbackQuery):
     
     if period == 'week':
         start_date = today - timedelta(days=today.weekday())
-        period_display = f"неделю (с {start_date.strftime('%d.%m')} по сегодня)"
+        start_date_str = DateFormatter.format_date(start_date, date_format).split('.')[-1] if date_format == 'DD.MM.YYYY' else DateFormatter.format_date(start_date, date_format).rsplit('.', 1)[0] if '.' in DateFormatter.format_date(start_date, date_format) else DateFormatter.format_date(start_date, date_format).rsplit('/', 1)[0] if '/' in DateFormatter.format_date(start_date, date_format) else DateFormatter.format_date(start_date, date_format).rsplit('-', 1)[0]
+        # Короткий формат для отображения периода (без года)
+        if date_format == 'DD.MM.YYYY':
+            period_display = f"неделю (с {start_date.strftime('%d.%m')} по сегодня)"
+        elif date_format == 'MM/DD/YYYY':
+            period_display = f"неделю (с {start_date.strftime('%m/%d')} по сегодня)"
+        else:
+            period_display = f"неделю (с {start_date.strftime('%m-%d')} по сегодня)"
     elif period == '2weeks':
         start_date = today - timedelta(days=today.weekday() + 7)
-        period_display = f"2 недели (с {start_date.strftime('%d.%m')} по сегодня)"
+        if date_format == 'DD.MM.YYYY':
+            period_display = f"2 недели (с {start_date.strftime('%d.%m')} по сегодня)"
+        elif date_format == 'MM/DD/YYYY':
+            period_display = f"2 недели (с {start_date.strftime('%m/%d')} по сегодня)"
+        else:
+            period_display = f"2 недели (с {start_date.strftime('%m-%d')} по сегодня)"
     elif period == 'month':
         start_date = today.replace(day=1)
-        period_display = f"месяц (с {start_date.strftime('%d.%m')} по сегодня)"
+        if date_format == 'DD.MM.YYYY':
+            period_display = f"месяц (с {start_date.strftime('%d.%m')} по сегодня)"
+        elif date_format == 'MM/DD/YYYY':
+            period_display = f"месяц (с {start_date.strftime('%m/%d')} по сегодня)"
+        else:
+            period_display = f"месяц (с {start_date.strftime('%m-%d')} по сегодня)"
     else:
         period_display = period_name
     
@@ -765,8 +796,8 @@ async def show_trainings_period(callback: CallbackQuery):
     
     # Добавляем детали каждой тренировки
     for idx, training in enumerate(trainings[:15], 1):  # Показываем максимум 15
-        # Парсим дату
-        date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m.%Y')
+        # Парсим и форматируем дату согласно настройкам пользователя
+        date = DateFormatter.format_date(training['date'], date_format)
         t_type = training['type']
         emoji = type_emoji.get(t_type, '📝')
         
@@ -905,6 +936,10 @@ async def confirm_delete(callback: CallbackQuery):
     period = parts[2]
     user_id = callback.from_user.id
     
+    # Получаем формат даты пользователя
+    user_settings = await get_user_settings(user_id)
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
+    
     # Удаляем тренировку
     deleted = await delete_training(training_id, user_id)
     
@@ -981,7 +1016,7 @@ async def confirm_delete(callback: CallbackQuery):
         
         builder = InlineKeyboardBuilder()
         for idx, training in enumerate(trainings[:15], 1):
-            date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m.%Y')
+            date = DateFormatter.format_date(training['date'], date_format)
             t_type = training['type']
             emoji = type_emoji.get(t_type, '📝')
             message_text += f"*{idx}.* {emoji} *{t_type.capitalize()}* • {date}\n"
@@ -1082,9 +1117,10 @@ async def show_training_detail(callback: CallbackQuery):
         await callback.answer("❌ Тренировка не найдена", show_alert=True)
         return
     
-    # Получаем настройки пользователя для единиц измерения
+    # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
     # Формируем детальное сообщение
     from datetime import datetime
@@ -1100,7 +1136,7 @@ async def show_training_detail(callback: CallbackQuery):
     
     t_type = training['type']
     emoji = type_emoji.get(t_type, '📝')
-    date = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m.%Y')
+    date = DateFormatter.format_date(training['date'], date_format)
     
     # Базовая информация
     detail_text = (
@@ -1278,13 +1314,17 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
     
     from datetime import datetime, timedelta
     
+    # Получаем формат даты пользователя
+    user_settings = await get_user_settings(callback.from_user.id)
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
+    
     today = datetime.now().date()
     
     if period == "6months":
         # Полгода назад
         start_date = today - timedelta(days=180)
         end_date = today
-        period_text = f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+        period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
         
         await callback.message.edit_text(
             f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите...",
@@ -1304,7 +1344,7 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         # Год назад
         start_date = today - timedelta(days=365)
         end_date = today
-        period_text = f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+        period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
         
         await callback.message.edit_text(
             f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите...",
@@ -1322,10 +1362,10 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         
     elif period == "custom":
         # Произвольный период - запрашиваем даты
+        format_desc = DateFormatter.get_format_description(date_format)
         await callback.message.edit_text(
-            "📅 *Произвольный период*\n\n"
-            "Введите начальную дату в формате ДД.ММ.ГГГГ\n"
-            "Например: 01.01.2025\n\n"
+            f"📅 *Произвольный период*\n\n"
+            f"Введите начальную дату в формате {format_desc}\n\n"
             "Или нажмите /cancel для отмены",
             parse_mode="Markdown"
         )
@@ -1336,111 +1376,123 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
 @router.message(ExportPDFStates.waiting_for_start_date)
 async def process_export_start_date(message: Message, state: FSMContext):
     """Обработка начальной даты для произвольного периода"""
-    # Проверяем формат даты
-    date_pattern = r'^(\d{2})\.(\d{2})\.(\d{4})$'
+    # Получаем формат даты пользователя
+    user_settings = await get_user_settings(message.from_user.id)
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
+    
+    # Проверяем формат даты согласно настройкам пользователя
+    date_pattern = DateFormatter.get_validation_pattern(date_format)
     match = re.match(date_pattern, message.text.strip())
     
     if not match:
+        format_desc = DateFormatter.get_format_description(date_format)
         await message.answer(
-            "❌ Неверный формат даты!\n\n"
-            "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ\n"
-            "Например: 01.01.2025"
+            f"❌ Неверный формат даты!\n\n"
+            f"Пожалуйста, введите дату в формате {format_desc}"
         )
         return
     
-    try:
-        day, month, year = match.groups()
-        start_date = datetime(int(year), int(month), int(day)).date()
-        
-        # Проверяем, что дата не из будущего
-        if start_date > datetime.now().date():
-            await message.answer(
-                "❌ Дата не может быть из будущего!\n\n"
-                "Пожалуйста, введите корректную дату:"
-            )
-            return
-        
-        # Сохраняем начальную дату
-        await state.update_data(start_date=start_date.strftime('%Y-%m-%d'))
-        
-        await message.answer(
-            f"✅ Начальная дата: {start_date.strftime('%d.%m.%Y')}\n\n"
-            "Теперь введите конечную дату в формате ДД.ММ.ГГГГ\n"
-            "Например: 31.12.2025"
-        )
-        await state.set_state(ExportPDFStates.waiting_for_end_date)
-        
-    except ValueError:
+    # Парсим дату согласно формату пользователя
+    start_date = DateFormatter.parse_date(message.text.strip(), date_format)
+    
+    if start_date is None:
         await message.answer(
             "❌ Некорректная дата!\n\n"
-            "Пожалуйста, введите существующую дату в формате ДД.ММ.ГГГГ"
+            f"Пожалуйста, введите существующую дату"
         )
+        return
+    
+    # Проверяем, что дата не из будущего
+    if start_date > datetime.now().date():
+        await message.answer(
+            "❌ Дата не может быть из будущего!\n\n"
+            "Пожалуйста, введите корректную дату:"
+        )
+        return
+    
+    # Сохраняем начальную дату
+    await state.update_data(start_date=start_date.strftime('%Y-%m-%d'))
+    
+    format_desc = DateFormatter.get_format_description(date_format)
+    start_date_str = DateFormatter.format_date(start_date, date_format)
+    await message.answer(
+        f"✅ Начальная дата: {start_date_str}\n\n"
+        f"Теперь введите конечную дату в формате {format_desc}"
+    )
+    await state.set_state(ExportPDFStates.waiting_for_end_date)
 
 @router.message(ExportPDFStates.waiting_for_end_date)
 async def process_export_end_date(message: Message, state: FSMContext):
     """Обработка конечной даты для произвольного периода"""
-    # Проверяем формат даты
-    date_pattern = r'^(\d{2})\.(\d{2})\.(\d{4})$'
+    # Получаем формат даты пользователя
+    user_settings = await get_user_settings(message.from_user.id)
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
+    
+    # Проверяем формат даты согласно настройкам пользователя
+    date_pattern = DateFormatter.get_validation_pattern(date_format)
     match = re.match(date_pattern, message.text.strip())
     
     if not match:
+        format_desc = DateFormatter.get_format_description(date_format)
         await message.answer(
-            "❌ Неверный формат даты!\n\n"
-            "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ\n"
-            "Например: 31.12.2025"
+            f"❌ Неверный формат даты!\n\n"
+            f"Пожалуйста, введите дату в формате {format_desc}"
         )
         return
     
-    try:
-        day, month, year = match.groups()
-        end_date = datetime(int(year), int(month), int(day)).date()
-        
-        # Проверяем, что дата не из будущего
-        if end_date > datetime.now().date():
-            await message.answer(
-                "❌ Дата не может быть из будущего!\n\n"
-                "Пожалуйста, введите корректную дату:"
-            )
-            return
-        
-        # Получаем начальную дату из state
-        data = await state.get_data()
-        start_date_str = data['start_date']
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        
-        # Проверяем, что конечная дата >= начальной
-        if end_date < start_date:
-            await message.answer(
-                f"❌ Конечная дата не может быть раньше начальной!\n\n"
-                f"Начальная дата: {start_date.strftime('%d.%m.%Y')}\n"
-                f"Пожалуйста, введите конечную дату не раньше этой:"
-            )
-            return
-        
-        # Формируем текстовое описание периода
-        period_text = f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
-        
-        await message.answer(
-            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
-        )
-        
-        # Генерируем PDF
-        await generate_and_send_pdf(
-            message,
-            message.from_user.id,
-            start_date_str,
-            end_date.strftime('%Y-%m-%d'),
-            period_text
-        )
-        
-        # Очищаем состояние
-        await state.clear()
-        
-    except ValueError:
+    # Парсим дату согласно формату пользователя
+    end_date = DateFormatter.parse_date(message.text.strip(), date_format)
+    
+    if end_date is None:
         await message.answer(
             "❌ Некорректная дата!\n\n"
-            "Пожалуйста, введите существующую дату в формате ДД.ММ.ГГГГ"
+            "Пожалуйста, введите существующую дату"
         )
+        return
+    
+    # Проверяем, что дата не из будущего
+    if end_date > datetime.now().date():
+        await message.answer(
+            "❌ Дата не может быть из будущего!\n\n"
+            "Пожалуйста, введите корректную дату:"
+        )
+        return
+    
+    # Получаем начальную дату из state
+    data = await state.get_data()
+    start_date_str = data['start_date']
+    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    
+    # Проверяем, что конечная дата >= начальной
+    if end_date < start_date:
+        start_date_formatted = DateFormatter.format_date(start_date, date_format)
+        await message.answer(
+            f"❌ Конечная дата не может быть раньше начальной!\n\n"
+            f"Начальная дата: {start_date_formatted}\n"
+            f"Пожалуйста, введите конечную дату не раньше этой:"
+        )
+        return
+    
+    # Формируем текстовое описание периода
+    period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
+    
+    await message.answer(
+        f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
+    )
+    
+    # Генерируем PDF
+    await generate_and_send_pdf(
+        message,
+        message.from_user.id,
+        start_date_str,
+        end_date.strftime('%Y-%m-%d'),
+        period_text
+    )
+        
+    # Очищаем состояние
+    await state.clear()
+        
+    
 
 async def generate_and_send_pdf(message: Message, user_id: int, start_date: str, end_date: str, period_text: str):
     """

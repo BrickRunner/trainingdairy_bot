@@ -46,22 +46,25 @@ router = Router()
 
 # ============== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ФОРМАТИРОВАНИЯ ==============
 
-def format_birth_date(birth_date_str: str) -> str:
+async def format_birth_date(birth_date_str: str, user_id: int) -> str:
     """
-    Форматирует дату рождения из формата БД (ГГГГ-ММ-ДД) в формат отображения (ДД.ММ.ГГГГ)
+    Форматирует дату рождения из формата БД (ГГГГ-ММ-ДД) в формат согласно настройкам пользователя
     
     Args:
         birth_date_str: Дата в формате ГГГГ-ММ-ДД
+        user_id: ID пользователя для получения формата даты
         
     Returns:
-        Дата в формате ДД.ММ.ГГГГ или исходная строка если формат неверный
+        Отформатированная дата или 'не указана'
     """
     if not birth_date_str:
         return 'не указана'
     
+    from utils.date_formatter import DateFormatter, get_user_date_format
+    
     try:
-        date_obj = datetime.strptime(birth_date_str, '%Y-%m-%d')
-        return date_obj.strftime('%d.%m.%Y')
+        date_format = await get_user_date_format(user_id)
+        return DateFormatter.format_date(birth_date_str, date_format)
     except:
         return birth_date_str
 
@@ -76,7 +79,8 @@ async def send_profile_menu(message: Message, user_id: int):
     
     if settings:
         info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
-        info_text += f"🎂 Дата рождения: {format_birth_date(settings.get('birth_date'))}\n"
+        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
         weight_unit = settings.get('weight_unit', 'кг')
         info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {weight_unit}\n"
@@ -186,7 +190,8 @@ async def settings_menu(message: Message, state: FSMContext):
     
     if settings:
         info_text += f"👤 Имя: {settings.get('name') or 'не указано'}\n"
-        info_text += f"🎂 Дата рождения: {format_birth_date(settings.get('birth_date'))}\n"
+        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
         info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
@@ -211,7 +216,8 @@ async def callback_settings_menu(callback: CallbackQuery, state: FSMContext):
     
     if settings:
         info_text += f"👤 Имя: {settings.get('name') or 'не указано'}\n"
-        info_text += f"🎂 Дата рождения: {format_birth_date(settings.get('birth_date'))}\n"
+        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
         info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
@@ -238,7 +244,8 @@ async def callback_profile_settings(callback: CallbackQuery):
     
     if settings:
         info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
-        info_text += f"🎂 Дата рождения: {format_birth_date(settings.get('birth_date'))}\n"
+        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
         info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
@@ -304,7 +311,8 @@ async def process_name(message: Message, state: FSMContext):
     
     if settings:
         info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
-        info_text += f"🎂 Дата рождения: {format_birth_date(settings.get('birth_date'))}\n"
+        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
         info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"

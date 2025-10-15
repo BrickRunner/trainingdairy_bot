@@ -19,6 +19,7 @@ import sys
 from .pdf_graphs import create_pdf_graphs, generate_weekly_stats
 from database.queries import get_user_settings
 from utils.unit_converter import format_distance, format_pace, format_swimming_distance
+from utils.date_formatter import DateFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -117,9 +118,10 @@ async def create_training_pdf(trainings: list, period_text: str, stats: dict, us
     Returns:
         BytesIO объект с PDF документом
     """
-    # Получаем настройки пользователя для единиц измерения
+    # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(user_id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
     buffer = BytesIO()
     
@@ -219,7 +221,9 @@ async def create_training_pdf(trainings: list, period_text: str, stats: dict, us
         story.append(types_table)
     
     story.append(Spacer(1, 2*cm))
-    story.append(Paragraph(f"Сгенерировано: {datetime.now().strftime('%d.%m.%Y %H:%M')}", small_style))
+    # Форматируем дату генерации согласно настройкам пользователя
+    generated_date = DateFormatter.format_datetime(datetime.now(), date_format, include_time=True)
+    story.append(Paragraph(f"Сгенерировано: {generated_date}", small_style))
     
     story.append(PageBreak())
     
@@ -230,7 +234,7 @@ async def create_training_pdf(trainings: list, period_text: str, stats: dict, us
         end_date = trainings[-1]['date'] if trainings else None
         
         if start_date and end_date:
-            graphs_buffer = create_pdf_graphs(trainings, start_date, end_date)
+            graphs_buffer = create_pdf_graphs(trainings, start_date, end_date, date_format)
             
             # Добавляем графики как изображение (3 графика в ряд)
             img = Image(graphs_buffer, width=17*cm, height=5.7*cm)
@@ -244,7 +248,7 @@ async def create_training_pdf(trainings: list, period_text: str, stats: dict, us
     
     # === СТАТИСТИКА ПО НЕДЕЛЯМ ===
     if len(trainings) > 0:
-        weekly_stats = generate_weekly_stats(trainings)
+        weekly_stats = generate_weekly_stats(trainings, date_format)
         
         if len(weekly_stats) > 0:
             story.append(Paragraph("Статистика по неделям", heading_style))
@@ -292,8 +296,8 @@ async def create_training_pdf(trainings: list, period_text: str, stats: dict, us
     }
     
     for idx, training in enumerate(trainings, 1):
-        # Заголовок тренировки
-        date_str = datetime.strptime(training['date'], '%Y-%m-%d').strftime('%d.%m.%Y')
+        # Заголовок тренировки с форматированием даты согласно настройкам
+        date_str = DateFormatter.format_date(training['date'], date_format)
         t_type = training['type']
         marker = type_markers.get(t_type, '[ТРН]')
         
