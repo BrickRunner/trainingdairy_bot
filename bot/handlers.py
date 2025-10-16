@@ -26,11 +26,13 @@ from bot.keyboards import (
     get_export_period_keyboard
 )
 from database.queries import (
-    add_user, add_training, get_user, 
+    add_user, add_training, get_user,
     get_trainings_by_period, get_training_statistics, get_training_by_id,
     get_trainings_by_custom_period, get_statistics_by_custom_period,
     delete_training,  # НОВЫЙ КОД: Импортируем delete_training
-    get_user_settings  # Импортируем get_user_settings для единиц измерения
+    get_user_settings,  # Импортируем get_user_settings для единиц измерения
+    get_main_training_types,  # Импортируем для получения основных типов тренировок
+    get_pulse_zone_for_value  # Импортируем для определения пульсовой зоны
 )
 from bot.graphs import generate_graphs
 from bot.pdf_export import create_training_pdf
@@ -96,10 +98,26 @@ async def cmd_help(message: Message):
 @router.message(Command("add_training"))
 async def start_add_training(message: Message, state: FSMContext):
     """Начало процесса добавления тренировки"""
+    user_id = message.from_user.id
+
+    # Получаем основные типы тренировок из настроек пользователя
+    main_types = await get_main_training_types(user_id)
+
+    # Проверяем, что есть хотя бы один тип
+    if not main_types:
+        await message.answer(
+            "⚠️ **Настройка основных типов тренировок**\n\n"
+            "Вы еще не выбрали основные типы тренировок.\n"
+            "Пожалуйста, перейдите в меню ⚙️ Настройки → 👤 Профиль → "
+            "Установить основные типы тренировок",
+            parse_mode="Markdown"
+        )
+        return
+
     await message.answer(
         "🏋️ **Добавление тренировки**\n\n"
         "Выберите тип тренировки:",
-        reply_markup=get_training_types_keyboard(),
+        reply_markup=get_training_types_keyboard(main_types),
         parse_mode="Markdown"
     )
     await state.set_state(AddTrainingStates.waiting_for_type)
@@ -108,20 +126,32 @@ async def start_add_training(message: Message, state: FSMContext):
 async def process_training_type(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора типа тренировки"""
     training_type = callback.data.split(":")[1]
-    
+    user_id = callback.from_user.id
+
+    # Проверяем, что выбранный тип входит в основные типы пользователя
+    main_types = await get_main_training_types(user_id)
+
+    if training_type not in main_types:
+        await callback.answer(
+            "❌ Этот тип тренировки недоступен!\n"
+            "Настройте основные типы в разделе Настройки → Профиль",
+            show_alert=True
+        )
+        return
+
     await state.update_data(training_type=training_type)
-    
+
     await callback.message.edit_text(
         f"✅ Выбран тип: **{training_type.capitalize()}**",
         parse_mode="Markdown"
     )
-    
+
     await callback.message.answer(
         "📅 Когда была тренировка?\n\n"
         "Выберите или введите дату:",
         reply_markup=get_date_keyboard()
     )
-    
+
     await state.set_state(AddTrainingStates.waiting_for_date)
     await callback.answer()
 
@@ -342,27 +372,44 @@ async def process_avg_pulse(message: Message, state: FSMContext):
     if message.text == "❌ Отменить":
         await cancel_handler(message, state)
         return
-    
+
     try:
         avg_pulse = int(message.text)
-        if avg_pulse <= 0 or avg_pulse > 250:
+        if avg_pulse < 40 or avg_pulse > 250:
             raise ValueError
     except ValueError:
         await message.answer(
             "❌ Неверный формат!\n\n"
-            "Введите корректное значение пульса (30-250 уд/мин)\n"
+            "Введите корректное значение пульса (40-250 уд/мин)\n"
             "Например: 145"
         )
         return
-    
+
     await state.update_data(avg_pulse=avg_pulse)
-    
+
+    # Определяем пульсовую зону
+    user_id = message.from_user.id
+    pulse_zone = await get_pulse_zone_for_value(user_id, avg_pulse)
+
+    zone_names = {
+        'zone1': '🟢 Зона 1 (Восстановление)',
+        'zone2': '🔵 Зона 2 (Аэробная)',
+        'zone3': '🟡 Зона 3 (Темповая)',
+        'zone4': '🟠 Зона 4 (Анаэробная)',
+        'zone5': '🔴 Зона 5 (Максимальная)'
+    }
+
+    # Формируем сообщение с информацией о зоне
+    zone_info = ""
+    if pulse_zone:
+        zone_info = f"\n{zone_names[pulse_zone]}"
+
     await message.answer(
-        f"✅ Средний пульс: {avg_pulse} уд/мин\n\n"
+        f"✅ Средний пульс: {avg_pulse} уд/мин{zone_info}\n\n"
         "💓 Введите максимальный пульс (уд/мин)\n\n"
         "Например: 175"
     )
-    
+
     await state.set_state(AddTrainingStates.waiting_for_max_pulse)
 
 @router.message(AddTrainingStates.waiting_for_exercises)
@@ -424,23 +471,23 @@ async def process_max_pulse(message: Message, state: FSMContext):
     if message.text == "❌ Отменить":
         await cancel_handler(message, state)
         return
-    
+
     try:
         max_pulse = int(message.text)
-        if max_pulse <= 0 or max_pulse > 250:
+        if max_pulse < 40 or max_pulse > 250:
             raise ValueError
     except ValueError:
         await message.answer(
             "❌ Неверный формат!\n\n"
-            "Введите корректное значение пульса (30-250 уд/мин)\n"
+            "Введите корректное значение пульса (40-250 уд/мин)\n"
             "Например: 175"
         )
         return
-    
+
     # Проверяем, что максимальный пульс не меньше среднего
     data = await state.get_data()
     avg_pulse = data.get('avg_pulse', 0)
-    
+
     if max_pulse < avg_pulse:
         await message.answer(
             f"❌ Ошибка!\n\n"
@@ -448,17 +495,34 @@ async def process_max_pulse(message: Message, state: FSMContext):
             f"Введите корректное значение максимального пульса:"
         )
         return
-    
+
     await state.update_data(max_pulse=max_pulse)
-    
+
+    # Определяем пульсовую зону для максимального пульса
+    user_id = message.from_user.id
+    pulse_zone = await get_pulse_zone_for_value(user_id, max_pulse)
+
+    zone_names = {
+        'zone1': '🟢 Зона 1 (Восстановление)',
+        'zone2': '🔵 Зона 2 (Аэробная)',
+        'zone3': '🟡 Зона 3 (Темповая)',
+        'zone4': '🟠 Зона 4 (Анаэробная)',
+        'zone5': '🔴 Зона 5 (Максимальная)'
+    }
+
+    # Формируем сообщение с информацией о зоне
+    zone_info = ""
+    if pulse_zone:
+        zone_info = f"\n{zone_names[pulse_zone]}"
+
     await message.answer(
-        f"✅ Максимальный пульс: {max_pulse} уд/мин\n\n"
+        f"✅ Максимальный пульс: {max_pulse} уд/мин{zone_info}\n\n"
         "💬 Добавьте комментарий к тренировке\n\n"
         "Например: Хорошая форма, легко пробежал\n\n"
         "Или нажмите ⏭️ Пропустить",
         reply_markup=get_skip_keyboard()
     )
-    
+
     await state.set_state(AddTrainingStates.waiting_for_comment)
 
 @router.message(AddTrainingStates.waiting_for_comment)

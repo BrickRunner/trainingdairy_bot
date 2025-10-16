@@ -28,24 +28,39 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
-def get_training_types_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора типа тренировки"""
+def get_training_types_keyboard(allowed_types: list = None) -> InlineKeyboardMarkup:
+    """
+    Клавиатура выбора типа тренировки
+
+    Args:
+        allowed_types: Список разрешенных типов тренировок.
+                      Если None, показываются все типы.
+    """
+    # Все доступные типы с эмодзи
+    all_types = {
+        'интервальная': '⚡ Интервальная',
+        'силовая': '💪 Силовая',
+        'кросс': '🏃 Кросс',
+        'плавание': '🏊 Плавание',
+        'велотренировка': '🚴 Велотренировка'
+    }
+
+    # Если allowed_types не указан, используем все типы
+    if allowed_types is None:
+        allowed_types = list(all_types.keys())
+
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="⚡ Интервальная", callback_data="training_type:интервальная")
-    )
-    builder.row(
-        InlineKeyboardButton(text="💪 Силовая", callback_data="training_type:силовая")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🏃 Кросс", callback_data="training_type:кросс")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🏊 Плавание", callback_data="training_type:плавание")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🚴 Велотренировка", callback_data="training_type:велотренировка")
-    )
+
+    # Добавляем только разрешенные типы
+    for type_key in all_types.keys():
+        if type_key in allowed_types:
+            builder.row(
+                InlineKeyboardButton(
+                    text=all_types[type_key],
+                    callback_data=f"training_type:{type_key}"
+                )
+            )
+
     builder.row(
         InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
     )

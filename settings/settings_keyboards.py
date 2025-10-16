@@ -64,20 +64,19 @@ def get_profile_settings_keyboard() -> InlineKeyboardMarkup:
 def get_pulse_zones_menu_keyboard() -> InlineKeyboardMarkup:
     """Меню настроек пульсовых зон"""
     builder = InlineKeyboardBuilder()
-    
-    builder.row(
-        InlineKeyboardButton(text="🔄 Автоматический расчет", callback_data="settings:pulse:auto")
-    )
+
+    # TODO: Вернуть после подключения AI
+    # builder.row(
+    #     InlineKeyboardButton(text="🔄 Автоматический расчет", callback_data="settings:pulse:auto")
+    # )
     builder.row(
         InlineKeyboardButton(text="✏️ Ручной ввод", callback_data="settings:pulse:manual")
     )
-    builder.row(
-        InlineKeyboardButton(text="📊 Показать текущие зоны", callback_data="settings:pulse:show")
-    )
+    # Убрана кнопка "Показать текущие зоны" - информация и так отображается в меню
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:menu")
     )
-    
+
     return builder.as_markup()
 
 

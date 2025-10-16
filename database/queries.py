@@ -498,12 +498,23 @@ async def calculate_pulse_zones(max_pulse: int) -> Dict[str, tuple]:
 async def set_pulse_zones_auto(user_id: int, age: int) -> None:
     """
     Установить пульсовые зоны автоматически на основе возраста
-    
+
     Args:
         user_id: Telegram ID пользователя
         age: Возраст пользователя
     """
-    max_pulse = 220 - age
+    # Получаем пол пользователя для более точной формулы
+    settings = await get_user_settings(user_id)
+    gender = settings.get('gender') if settings else None
+
+    # Формула Карвонена с учётом пола:
+    # Мужчины: 220 - возраст
+    # Женщины: 226 - возраст
+    if gender == 'female':
+        max_pulse = 226 - age
+    else:
+        max_pulse = 220 - age
+
     zones = await calculate_pulse_zones(max_pulse)
     
     await init_user_settings(user_id)
@@ -575,18 +586,18 @@ async def set_pulse_zones_manual(user_id: int, max_pulse: int) -> None:
 async def get_pulse_zone_for_value(user_id: int, pulse: int) -> Optional[str]:
     """
     Определить в какой зоне находится значение пульса
-    
+
     Args:
         user_id: Telegram ID пользователя
         pulse: Значение пульса
-        
+
     Returns:
         Название зоны ('zone1', 'zone2', etc.) или None
     """
     settings = await get_user_settings(user_id)
     if not settings or not settings.get('max_pulse'):
         return None
-    
+
     zones = [
         ('zone1', settings['zone1_min'], settings['zone1_max']),
         ('zone2', settings['zone2_min'], settings['zone2_max']),
@@ -594,11 +605,19 @@ async def get_pulse_zone_for_value(user_id: int, pulse: int) -> Optional[str]:
         ('zone4', settings['zone4_min'], settings['zone4_max']),
         ('zone5', settings['zone5_min'], settings['zone5_max']),
     ]
-    
-    for zone_name, zone_min, zone_max in zones:
-        if zone_min <= pulse <= zone_max:
-            return zone_name
-    
+
+    # Используем zone_min <= pulse < zone_max для всех зон кроме последней
+    # Для последней зоны используем zone_min <= pulse <= zone_max
+    for i, (zone_name, zone_min, zone_max) in enumerate(zones):
+        if i == len(zones) - 1:
+            # Последняя зона - включаем верхнюю границу
+            if zone_min <= pulse <= zone_max:
+                return zone_name
+        else:
+            # Остальные зоны - не включаем верхнюю границу
+            if zone_min <= pulse < zone_max:
+                return zone_name
+
     return None
 
 

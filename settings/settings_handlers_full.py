@@ -616,39 +616,40 @@ async def callback_pulse_zones_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "settings:pulse:auto")
-async def callback_pulse_auto(callback: CallbackQuery, state: FSMContext):
-    """Автоматический расчет пульсовых зон"""
-    user_id = callback.from_user.id
-    settings = await get_user_settings(user_id)
-    
-    if settings and settings.get('birth_date'):
-        birth_date = datetime.strptime(settings['birth_date'], '%Y-%m-%d')
-        age = (datetime.now() - birth_date).days // 365
-        
-        await set_pulse_zones_auto(user_id, age)
-        
-        settings = await get_user_settings(user_id)
-        
-        await callback.message.edit_text(
-            f"✅ Пульсовые зоны рассчитаны автоматически!\n\n"
-            f"Ваш возраст: {age} лет\n"
-            f"Максимальный пульс: {settings['max_pulse']} уд/мин\n\n"
-            f"🟢 Зона 1: {settings['zone1_min']}-{settings['zone1_max']}\n"
-            f"🔵 Зона 2: {settings['zone2_min']}-{settings['zone2_max']}\n"
-            f"🟡 Зона 3: {settings['zone3_min']}-{settings['zone3_max']}\n"
-            f"🟠 Зона 4: {settings['zone4_min']}-{settings['zone4_max']}\n"
-            f"🔴 Зона 5: {settings['zone5_min']}-{settings['zone5_max']}\n"
-        )
-        await callback.answer("Зоны рассчитаны!")
-        
-        # Возврат в меню пульсовых зон
-        await callback_pulse_zones_menu(callback)
-    else:
-        await callback.answer(
-            "❌ Сначала укажите дату рождения в настройках профиля!",
-            show_alert=True
-        )
+# TODO: Вернуть после подключения AI
+# @router.callback_query(F.data == "settings:pulse:auto")
+# async def callback_pulse_auto(callback: CallbackQuery, state: FSMContext):
+#     """Автоматический расчет пульсовых зон"""
+#     user_id = callback.from_user.id
+#     settings = await get_user_settings(user_id)
+#
+#     if settings and settings.get('birth_date'):
+#         birth_date = datetime.strptime(settings['birth_date'], '%Y-%m-%d')
+#         age = (datetime.now() - birth_date).days // 365
+#
+#         await set_pulse_zones_auto(user_id, age)
+#
+#         settings = await get_user_settings(user_id)
+#
+#         await callback.message.edit_text(
+#             f"✅ Пульсовые зоны рассчитаны автоматически!\n\n"
+#             f"Ваш возраст: {age} лет\n"
+#             f"Максимальный пульс: {settings['max_pulse']} уд/мин\n\n"
+#             f"🟢 Зона 1: {settings['zone1_min']}-{settings['zone1_max']}\n"
+#             f"🔵 Зона 2: {settings['zone2_min']}-{settings['zone2_max']}\n"
+#             f"🟡 Зона 3: {settings['zone3_min']}-{settings['zone3_max']}\n"
+#             f"🟠 Зона 4: {settings['zone4_min']}-{settings['zone4_max']}\n"
+#             f"🔴 Зона 5: {settings['zone5_min']}-{settings['zone5_max']}\n"
+#         )
+#         await callback.answer("Зоны рассчитаны!")
+#
+#         # Возврат в меню пульсовых зон
+#         await callback_pulse_zones_menu(callback)
+#     else:
+#         await callback.answer(
+#             "❌ Сначала укажите дату рождения в настройках профиля!",
+#             show_alert=True
+#         )
 
 
 @router.callback_query(F.data == "settings:pulse:manual")
@@ -673,9 +674,9 @@ async def process_max_pulse(message: Message, state: FSMContext):
     
     try:
         max_pulse = int(message.text.strip())
-        
-        if max_pulse < 100 or max_pulse > 250:
-            await message.answer("❌ Введите корректное значение (100-250 уд/мин).")
+
+        if max_pulse < 80 or max_pulse > 220:
+            await message.answer("❌ Введите корректное значение (80-220 уд/мин).")
             return
         
         user_id = message.from_user.id
@@ -700,10 +701,11 @@ async def process_max_pulse(message: Message, state: FSMContext):
         await message.answer("❌ Введите целое число.")
 
 
-@router.callback_query(F.data == "settings:pulse:show")
-async def callback_show_pulse_zones(callback: CallbackQuery):
-    """Показать текущие пульсовые зоны"""
-    await callback_pulse_zones_menu(callback)
+# Убрана кнопка "Показать текущие зоны" - информация и так отображается в меню
+# @router.callback_query(F.data == "settings:pulse:show")
+# async def callback_show_pulse_zones(callback: CallbackQuery):
+#     """Показать текущие пульсовые зоны"""
+#     await callback_pulse_zones_menu(callback)
 
 
 # ============== РАЗДЕЛ: ЦЕЛИ (8-11) ==============
