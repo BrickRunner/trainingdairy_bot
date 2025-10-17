@@ -257,7 +257,7 @@ def get_weekday_keyboard() -> InlineKeyboardMarkup:
         )
     
     builder.row(
-        InlineKeyboardButton(text="◀️ Назад", callback_data="settings:notif:weekly_report")
+        InlineKeyboardButton(text="◀️ Назад", callback_data="settings:notifications")
     )
     
     return builder.as_markup()

@@ -38,6 +38,7 @@ from bot.graphs import generate_graphs
 from bot.pdf_export import create_training_pdf
 from utils.unit_converter import format_distance, format_pace, format_swimming_distance
 from utils.date_formatter import DateFormatter, get_user_date_format
+from utils.goals_checker import check_weekly_goals
 
 router = Router()
 
@@ -592,7 +593,13 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     
     # Сохраняем тренировку в БД
     await add_training(data)
-    
+
+    # Проверяем достижение целей после сохранения тренировки
+    try:
+        await check_weekly_goals(callback.from_user.id, callback.bot)
+    except Exception as e:
+        logger.error(f"Ошибка при проверке целей: {str(e)}")
+
     # Формируем итоговое сообщение
     training_type = data['training_type']
     
@@ -965,7 +972,7 @@ async def show_trainings_period(callback: CallbackQuery):
         "📋 *Выберите тренировку для просмотра деталей:*\n\n"
         "Нажмите на номер тренировки или выберите другой период",
         parse_mode="Markdown",
-        reply_markup=get_trainings_list_keyboard(trainings, period)
+        reply_markup=get_trainings_list_keyboard(trainings, period, date_format)
     )
     
     await callback.answer()
@@ -1151,7 +1158,7 @@ async def confirm_delete(callback: CallbackQuery):
             "📋 *Выберите тренировку для просмотра деталей:*\n\n"
             "Нажмите на номер тренировки или выберите другой период",
             parse_mode="Markdown",
-            reply_markup=get_trainings_list_keyboard(trainings, period)
+            reply_markup=get_trainings_list_keyboard(trainings, period, date_format)
         )
     else:
         await callback.message.answer(f"❌ Тренировка не найдена или не ваша.")
@@ -1299,21 +1306,25 @@ async def back_to_list(callback: CallbackQuery):
     """Вернуться к списку тренировок"""
     # Получаем период из callback_data
     period = callback.data.split(":")[1]
-    
+
+    # Получаем настройки пользователя для формата даты
+    user_settings = await get_user_settings(callback.from_user.id)
+    date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
+
     # Получаем список тренировок для этого периода
     trainings = await get_trainings_by_period(callback.from_user.id, period)
-    
+
     if not trainings:
         await callback.answer("❌ Тренировки не найдены", show_alert=True)
         return
-    
+
     # Редактируем сообщение - возвращаем список с кнопками
     try:
         await callback.message.edit_text(
             "📋 *Выберите тренировку для просмотра деталей:*\n\n"
             "Нажмите на номер тренировки или выберите другой период",
             parse_mode="Markdown",
-            reply_markup=get_trainings_list_keyboard(trainings, period)
+            reply_markup=get_trainings_list_keyboard(trainings, period, date_format)
         )
     except Exception as e:
         logger.error(f"Ошибка при возврате к списку: {str(e)}")

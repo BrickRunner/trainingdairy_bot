@@ -2,7 +2,7 @@
 Полные обработчики настроек пользователя с всеми 14 пунктами
 """
 
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -40,6 +40,7 @@ from database.queries import (
     set_training_type_goal,
     format_date_by_setting
 )
+from utils.goals_checker import check_weight_goal
 
 router = Router()
 
@@ -101,29 +102,35 @@ async def send_profile_menu(message: Message, user_id: int):
 async def send_goals_menu(message: Message, user_id: int):
     """Отправить меню целей"""
     settings = await get_user_settings(user_id)
-    
+
     info_text = "🎯 **Настройка целей**\n\n"
-    
+
     if settings:
         distance_unit = settings.get('distance_unit', 'км')
         weight_unit = settings.get('weight_unit', 'кг')
-        
+
         weekly_volume = settings.get('weekly_volume_goal')
         weekly_count = settings.get('weekly_trainings_goal')
         weight_goal = settings.get('weight_goal')
-        
+
         info_text += f"📊 Недельный объем: {weekly_volume or 'не задан'} {distance_unit}\n"
         info_text += f"🔢 Тренировок в неделю: {weekly_count or 'не задано'}\n"
         info_text += f"⚖️ Целевой вес: {weight_goal or 'не задан'} {weight_unit}\n\n"
-        
+
         type_goals = await get_training_type_goals(user_id)
         if type_goals:
             info_text += "🏃 Цели по типам:\n"
             for t_type, goal in type_goals.items():
-                info_text += f"  • {t_type}: {goal} {distance_unit}/неделю\n"
-    
+                # Для силовых - минуты, для остальных - км
+                unit = "мин/неделю" if t_type == 'силовая' else f"{distance_unit}/неделю"
+                info_text += f"  • {t_type}: {goal} {unit}\n"
+    else:
+        info_text += "📊 Недельный объем: не задан км\n"
+        info_text += "🔢 Тренировок в неделю: не задано\n"
+        info_text += "⚖️ Целевой вес: не задан кг\n"
+
     info_text += "\nВыберите параметр для изменения:"
-    
+
     await message.answer(
         info_text,
         reply_markup=get_goals_settings_keyboard(),
@@ -412,19 +419,37 @@ async def callback_save_gender(callback: CallbackQuery):
         "gender:male": "мужской",
         "gender:female": "женский"
     }
-    
+
     gender = gender_map.get(callback.data)
     if gender:
         user_id = callback.from_user.id
         await update_user_setting(user_id, 'gender', gender)
-        
+
+        # Возврат в меню профиля с обновленной информацией
+        settings = await get_user_settings(user_id)
+
+        info_text = "👤 **Настройки профиля**\n\n"
+
+        if settings:
+            info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
+            birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+            info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
+            info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+            weight_unit = settings.get('weight_unit', 'кг')
+            info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {weight_unit}\n"
+            info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
+
+            types = await get_main_training_types(user_id)
+            info_text += f"🏃 Типы тренировок: {', '.join(types)}\n"
+
+        info_text += "\nВыберите параметр для изменения:"
+
         await callback.message.edit_text(
-            f"✅ Пол сохранен: {gender}"
+            info_text,
+            reply_markup=get_profile_settings_keyboard(),
+            parse_mode="Markdown"
         )
         await callback.answer("Сохранено!")
-        
-        # Возврат в меню профиля
-        await callback_profile_settings(callback)
     else:
         await callback.answer("Ошибка!")
 
@@ -462,16 +487,24 @@ async def process_weight(message: Message, state: FSMContext):
         
         user_id = message.from_user.id
         await update_user_setting(user_id, 'weight', weight)
-        
+
         settings = await get_user_settings(user_id)
         weight_unit = settings.get('weight_unit', 'кг')
-        
+
+        # Проверяем достижение целевого веса
+        try:
+            await check_weight_goal(user_id, weight, message.bot)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка при проверке целевого веса: {str(e)}")
+
         await message.answer(
             f"✅ Вес сохранен: {weight} {weight_unit}",
             reply_markup={"remove_keyboard": True}
         )
         await state.clear()
-        
+
         # Возврат в меню профиля
         await send_profile_menu(message, user_id)
         
@@ -568,22 +601,40 @@ async def callback_save_training_types(callback: CallbackQuery, state: FSMContex
     """Сохранение выбранных типов тренировок"""
     data = await state.get_data()
     selected_types = data.get('selected_types', ['кросс'])
-    
+
     if not selected_types:
         await callback.answer("❌ Выберите хотя бы один тип тренировки!", show_alert=True)
         return
-    
+
     user_id = callback.from_user.id
     await set_main_training_types(user_id, selected_types)
-    
+    await state.clear()
+
+    # Возврат в меню профиля с обновленной информацией
+    settings = await get_user_settings(user_id)
+
+    info_text = "👤 **Настройки профиля**\n\n"
+
+    if settings:
+        info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
+        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
+        info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+        weight_unit = settings.get('weight_unit', 'кг')
+        info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {weight_unit}\n"
+        info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
+
+        types = await get_main_training_types(user_id)
+        info_text += f"🏃 Типы тренировок: {', '.join(types)}\n"
+
+    info_text += "\nВыберите параметр для изменения:"
+
     await callback.message.edit_text(
-        f"✅ Основные типы тренировок сохранены:\n{', '.join(selected_types)}"
+        info_text,
+        reply_markup=get_profile_settings_keyboard(),
+        parse_mode="Markdown"
     )
     await callback.answer("Сохранено!")
-    await state.clear()
-    
-    # Возврат в меню профиля
-    await callback_profile_settings(callback)
 
 
 # ============== РАЗДЕЛ: ПУЛЬСОВЫЕ ЗОНЫ (7) ==============
@@ -715,30 +766,36 @@ async def callback_goals_menu(callback: CallbackQuery):
     """Меню настройки целей"""
     user_id = callback.from_user.id
     settings = await get_user_settings(user_id)
-    
+
     info_text = "🎯 **Настройка целей**\n\n"
-    
+
     if settings:
         distance_unit = settings.get('distance_unit', 'км')
         weight_unit = settings.get('weight_unit', 'кг')
-        
+
         weekly_volume = settings.get('weekly_volume_goal')
         weekly_count = settings.get('weekly_trainings_goal')
         weight_goal = settings.get('weight_goal')
-        
+
         info_text += f"📊 Недельный объем: {weekly_volume or 'не задан'} {distance_unit}\n"
         info_text += f"🔢 Тренировок в неделю: {weekly_count or 'не задано'}\n"
         info_text += f"⚖️ Целевой вес: {weight_goal or 'не задан'} {weight_unit}\n\n"
-        
+
         # Цели по типам
         type_goals = await get_training_type_goals(user_id)
         if type_goals:
             info_text += "🏃 Цели по типам:\n"
             for t_type, goal in type_goals.items():
-                info_text += f"  • {t_type}: {goal} {distance_unit}/неделю\n"
-    
+                # Для силовых - минуты, для остальных - км
+                unit = "мин/неделю" if t_type == 'силовая' else f"{distance_unit}/неделю"
+                info_text += f"  • {t_type}: {goal} {unit}\n"
+    else:
+        info_text += "📊 Недельный объем: не задан км\n"
+        info_text += "🔢 Тренировок в неделю: не задано\n"
+        info_text += "⚖️ Целевой вес: не задан кг\n"
+
     info_text += "\nВыберите параметр для изменения:"
-    
+
     await callback.message.edit_text(
         info_text,
         reply_markup=get_goals_settings_keyboard(),
@@ -858,17 +915,26 @@ async def callback_set_type_goals(callback: CallbackQuery):
 async def callback_type_goal_input(callback: CallbackQuery, state: FSMContext):
     """Ввод цели для конкретного типа"""
     training_type = callback.data.split(":")[1]
-    
+
     await state.update_data(current_type_goal=training_type)
-    
+
     settings = await get_user_settings(callback.from_user.id)
     distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
-    
-    await callback.message.answer(
-        f"🎯 Введите цель для типа '{training_type}' в {distance_unit}/неделю:\n\n"
-        "Например: 20",
-        reply_markup=get_simple_cancel_keyboard()
-    )
+
+    # Для силовых тренировок запрашиваем минуты, для остальных - км
+    if training_type == 'силовая':
+        await callback.message.answer(
+            f"🎯 Введите цель для типа '{training_type}' в минутах/неделю:\n\n"
+            "Например: 120 (2 часа в неделю)",
+            reply_markup=get_simple_cancel_keyboard()
+        )
+    else:
+        await callback.message.answer(
+            f"🎯 Введите цель для типа '{training_type}' в {distance_unit}/неделю:\n\n"
+            "Например: 20",
+            reply_markup=get_simple_cancel_keyboard()
+        )
+
     await state.set_state(SettingsStates.waiting_for_type_goal)
     await callback.answer()
 
@@ -878,34 +944,54 @@ async def process_type_goal(message: Message, state: FSMContext):
     """Обработка ввода цели по типу"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
-        await send_goals_menu(message, message.from_user.id)
+        # Возврат к выбору типов тренировок
+        await message.answer(
+            "🏃 **Цели по типам тренировок**\n\n"
+            "Выберите тип тренировки для установки цели:",
+            reply_markup=get_training_type_goals_keyboard(),
+            parse_mode="Markdown"
+        )
         return
-    
+
     try:
         goal = float(message.text.strip().replace(',', '.'))
-        
+
         if goal <= 0 or goal > 500:
             await message.answer("❌ Введите корректное значение (0-500).")
             return
-        
+
         data = await state.get_data()
         training_type = data.get('current_type_goal')
-        
+
         user_id = message.from_user.id
+
+        # Для силовых тренировок goal - это минуты, для остальных - км
         await set_training_type_goal(user_id, training_type, goal)
-        
+
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км')
-        
+
+        # Определяем единицу измерения для отображения
+        if training_type == 'силовая':
+            unit_text = "мин/неделю"
+        else:
+            unit_text = f"{distance_unit}/неделю"
+
+        await state.clear()
+
+        # Возврат к выбору типов тренировок
         await message.answer(
-            f"✅ Цель для '{training_type}' сохранена: {goal} {distance_unit}/неделю",
+            f"✅ Цель для '{training_type}' сохранена: {goal} {unit_text}",
             reply_markup={"remove_keyboard": True}
         )
-        await state.clear()
-        # Возврат в подменю
-        await send_goals_menu(message, message.from_user.id)
-        
+
+        await message.answer(
+            "🏃 **Цели по типам тренировок**\n\n"
+            "Выберите тип тренировки для установки цели:",
+            reply_markup=get_training_type_goals_keyboard(),
+            parse_mode="Markdown"
+        )
+
     except ValueError:
         await message.answer("❌ Введите число.")
 
@@ -999,17 +1085,28 @@ async def callback_set_distance_unit(callback: CallbackQuery):
 async def callback_save_distance_unit(callback: CallbackQuery):
     """Сохранение единицы дистанции"""
     unit = callback.data.split(":")[1]
-    
+
     user_id = callback.from_user.id
     await update_user_setting(user_id, 'distance_unit', unit)
-    
+
+    # Возврат в меню единиц с обновленной информацией
+    settings = await get_user_settings(user_id)
+
+    info_text = "📏 **Единицы измерения**\n\n"
+
+    if settings:
+        info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
+        info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+
+    info_text += "\nВыберите параметр для изменения:"
+
     await callback.message.edit_text(
-        f"✅ Единица дистанции сохранена: {unit}"
+        info_text,
+        reply_markup=get_units_settings_keyboard(),
+        parse_mode="Markdown"
     )
     await callback.answer("Сохранено!")
-    
-    # Возврат в меню единиц
-    await callback_units_menu(callback)
 
 
 @router.callback_query(F.data == "settings:units:weight")
@@ -1026,17 +1123,28 @@ async def callback_set_weight_unit(callback: CallbackQuery):
 async def callback_save_weight_unit(callback: CallbackQuery):
     """Сохранение единицы веса"""
     unit = callback.data.split(":")[1]
-    
+
     user_id = callback.from_user.id
     await update_user_setting(user_id, 'weight_unit', unit)
-    
+
+    # Возврат в меню единиц с обновленной информацией
+    settings = await get_user_settings(user_id)
+
+    info_text = "📏 **Единицы измерения**\n\n"
+
+    if settings:
+        info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
+        info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+
+    info_text += "\nВыберите параметр для изменения:"
+
     await callback.message.edit_text(
-        f"✅ Единица веса сохранена: {unit}"
+        info_text,
+        reply_markup=get_units_settings_keyboard(),
+        parse_mode="Markdown"
     )
     await callback.answer("Сохранено!")
-    
-    # Возврат в меню единиц
-    await callback_units_menu(callback)
 
 
 @router.callback_query(F.data == "settings:units:date")
@@ -1053,17 +1161,28 @@ async def callback_set_date_format(callback: CallbackQuery):
 async def callback_save_date_format(callback: CallbackQuery):
     """Сохранение формата даты"""
     date_format = callback.data.split(":")[1]
-    
+
     user_id = callback.from_user.id
     await update_user_setting(user_id, 'date_format', date_format)
-    
+
+    # Возврат в меню единиц с обновленной информацией
+    settings = await get_user_settings(user_id)
+
+    info_text = "📏 **Единицы измерения**\n\n"
+
+    if settings:
+        info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
+        info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+
+    info_text += "\nВыберите параметр для изменения:"
+
     await callback.message.edit_text(
-        f"✅ Формат даты сохранен: {date_format}"
+        info_text,
+        reply_markup=get_units_settings_keyboard(),
+        parse_mode="Markdown"
     )
     await callback.answer("Сохранено!")
-    
-    # Возврат в меню единиц
-    await callback_units_menu(callback)
 
 
 # ============== РАЗДЕЛ: УВЕДОМЛЕНИЯ (13-14) ==============
