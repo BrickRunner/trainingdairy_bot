@@ -21,18 +21,19 @@ MONTH_NAMES_RU = {
     '09': 'Сентябрь', '10': 'Октябрь', '11': 'Ноябрь', '12': 'Декабрь'
 }
 
-def generate_graphs(workouts: list, period: str, days: int) -> io.BytesIO:
+def generate_graphs(workouts: list, period: str, days: int, distance_unit: str = 'км') -> io.BytesIO:
     """
     Генерирует объединенный график с тремя подграфиками для тренировок за выбранный период:
     1. Линейный график усталости с линией среднего значения.
     2. Столбчатая диаграмма километража с линией среднего значения.
     3. Круговая диаграмма с распределением типов тренировок.
-    
+
     Args:
         workouts: Список словарей с тренировками (уже отфильтрованный по периоду)
         period: Название периода ('week', '2weeks', 'month')
         days: Количество дней в периоде (7, 14, 30)
-    
+        distance_unit: Единица измерения дистанции ('км' или 'мили')
+
     Returns:
         Объект io.BytesIO с объединенным изображением всех графиков или None
     """
@@ -159,20 +160,32 @@ def generate_graphs(workouts: list, period: str, days: int) -> io.BytesIO:
 
         # График 2: Километраж (столбчатая диаграмма) + среднее значение
         ax2 = plt.subplot(3, 1, 2)
-        
-        period_distances = [grouped_data[period]['distance'] for period in periods]
-        
+
+        # Получаем дистанции в км из БД
+        period_distances_km = [grouped_data[period]['distance'] for period in periods]
+
+        # Конвертируем в единицы пользователя если нужно
+        if distance_unit == 'мили':
+            from utils.unit_converter import km_to_miles
+            period_distances = [km_to_miles(d) if d > 0 else 0 for d in period_distances_km]
+            distance_label = 'Мили'
+            unit_text = 'миль'
+        else:
+            period_distances = period_distances_km
+            distance_label = 'Километры'
+            unit_text = 'км'
+
         avg_distance = sum(period_distances) / len([d for d in period_distances if d > 0]) if any(d > 0 for d in period_distances) else 0
-        ax2.bar(period_labels, period_distances, color='#2ecc71', alpha=0.8, label='Километраж')
+        ax2.bar(period_labels, period_distances, color='#2ecc71', alpha=0.8, label=distance_label)
         if avg_distance > 0:
-            ax2.axhline(y=avg_distance, color='r', linestyle='--', linewidth=1.5, label=f'Среднее: {avg_distance:.1f} км')
+            ax2.axhline(y=avg_distance, color='r', linestyle='--', linewidth=1.5, label=f'Среднее: {avg_distance:.1f} {unit_text}')
         ax2.set_xlabel(x_label, fontsize=11)
-        ax2.set_ylabel('Километраж (км)', fontsize=11)
-        ax2.set_title(f'Километраж {title_suffix}', fontsize=13, fontweight='bold')
+        ax2.set_ylabel(f'{distance_label} ({unit_text})', fontsize=11)
+        ax2.set_title(f'{distance_label} {title_suffix}', fontsize=13, fontweight='bold')
         ax2.legend(fontsize=10)
         ax2.grid(True, alpha=0.3, axis='y')
         ax2.tick_params(axis='x', rotation=45)
-        logger.info("График километража создан")
+        logger.info(f"График километража создан ({unit_text})")
 
         # График 3: Круговая диаграмма типов тренировок
         ax3 = plt.subplot(3, 1, 3)

@@ -725,24 +725,83 @@ async def convert_distance(distance: float, from_unit: str, to_unit: str) -> flo
 async def convert_weight(weight: float, from_unit: str, to_unit: str) -> float:
     """
     Конвертировать вес между единицами измерения
-    
+
     Args:
         weight: Значение веса
         from_unit: Исходная единица ('кг' или 'фунты')
         to_unit: Целевая единица ('кг' или 'фунты')
-        
+
     Returns:
         Сконвертированное значение
     """
     if from_unit == to_unit:
         return weight
-    
+
     if from_unit == 'кг' and to_unit == 'фунты':
         return weight * 2.20462
     elif from_unit == 'фунты' and to_unit == 'кг':
         return weight * 0.453592
-    
+
     return weight
+
+
+async def recalculate_all_weights(user_id: int, old_unit: str, new_unit: str) -> dict:
+    """
+    Пересчитать все значения веса пользователя при изменении единиц измерения
+
+    Args:
+        user_id: Telegram ID пользователя
+        old_unit: Старая единица измерения ('кг' или 'фунты')
+        new_unit: Новая единица измерения ('кг' или 'фунты')
+
+    Returns:
+        Словарь с информацией о пересчете:
+        - updated_count: количество обновленных полей
+        - fields: список обновленных полей
+    """
+    if old_unit == new_unit:
+        return {'updated_count': 0, 'fields': []}
+
+    updated_fields = []
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Получаем текущие значения веса из user_settings
+        async with db.execute(
+            "SELECT weight, weight_goal FROM user_settings WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+
+            if row:
+                current_weight = row[0]
+                weight_goal = row[1]
+
+                # Пересчитываем текущий вес если он есть
+                if current_weight is not None:
+                    new_weight = await convert_weight(current_weight, old_unit, new_unit)
+                    new_weight = round(new_weight, 1)  # Округление до 1 знака
+                    await db.execute(
+                        "UPDATE user_settings SET weight = ? WHERE user_id = ?",
+                        (new_weight, user_id)
+                    )
+                    updated_fields.append(f"Текущий вес: {current_weight:.1f} {old_unit} → {new_weight:.1f} {new_unit}")
+
+                # Пересчитываем целевой вес если он есть
+                if weight_goal is not None:
+                    new_goal = await convert_weight(weight_goal, old_unit, new_unit)
+                    new_goal = round(new_goal, 1)  # Округление до 1 знака
+                    await db.execute(
+                        "UPDATE user_settings SET weight_goal = ? WHERE user_id = ?",
+                        (new_goal, user_id)
+                    )
+                    updated_fields.append(f"Целевой вес: {weight_goal:.1f} {old_unit} → {new_goal:.1f} {new_unit}")
+
+        await db.commit()
+
+    return {
+        'updated_count': len(updated_fields),
+        'fields': updated_fields
+    }
 
 
 def format_date_by_setting(date_str: str, format_setting: str) -> str:

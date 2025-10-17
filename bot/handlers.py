@@ -25,6 +25,7 @@ from bot.keyboards import (
     get_training_detail_keyboard,
     get_export_period_keyboard
 )
+from bot.calendar_keyboard import CalendarKeyboard
 from database.queries import (
     add_user, add_training, get_user,
     get_trainings_by_period, get_training_statistics, get_training_by_id,
@@ -147,9 +148,17 @@ async def process_training_type(callback: CallbackQuery, state: FSMContext):
         parse_mode="Markdown"
     )
 
+    # Показываем календарь для выбора даты
+    calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal")
     await callback.message.answer(
         "📅 Когда была тренировка?\n\n"
-        "Выберите или введите дату:",
+        "Выберите дату из календаря или используйте кнопки ниже:",
+        reply_markup=calendar
+    )
+
+    # Также показываем быстрые кнопки
+    await callback.message.answer(
+        "Или выберите быстрый вариант:",
         reply_markup=get_date_keyboard()
     )
 
@@ -321,9 +330,14 @@ async def process_time(message: Message, state: FSMContext):
         await state.set_state(AddTrainingStates.waiting_for_intervals)
     else:
         # Для остальных типов переходим к дистанции
+        # Получаем единицы измерения пользователя
+        user_id = message.from_user.id
+        user_settings = await get_user_settings(user_id)
+        distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+
         await message.answer(
             f"✅ Время: {formatted_time}\n\n"
-            "🏃 Введите дистанцию в километрах\n\n"
+            f"🏃 Введите дистанцию в {distance_unit}\n\n"
             "Например: 10 или 10.5"
         )
         await state.set_state(AddTrainingStates.waiting_for_distance)
@@ -334,30 +348,42 @@ async def process_distance(message: Message, state: FSMContext):
     if message.text == "❌ Отменить":
         await cancel_handler(message, state)
         return
-    
+
+    # Получаем единицы измерения пользователя
+    user_id = message.from_user.id
+    user_settings = await get_user_settings(user_id)
+    distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+
     try:
-        distance = float(message.text.replace(',', '.'))
-        if distance <= 0:
+        distance_input = float(message.text.replace(',', '.'))
+        if distance_input <= 0:
             raise ValueError
     except ValueError:
         await message.answer(
             "❌ Неверный формат!\n\n"
-            "Введите положительное число (километры)\n"
+            f"Введите положительное число ({distance_unit})\n"
             "Например: 10 или 10.5"
         )
         return
-    
-    await state.update_data(distance=distance)
+
+    # Конвертируем в километры для хранения в БД
+    if distance_unit == 'мили':
+        from utils.unit_converter import miles_to_km
+        distance_km = miles_to_km(distance_input)
+    else:
+        distance_km = distance_input
+
+    await state.update_data(distance=distance_km)
     
     # Получаем тип тренировки для адаптивного сообщения
     data = await state.get_data()
     training_type = data.get('training_type', 'кросс')
-    
-    # Адаптивное сообщение в зависимости от типа
+
+    # Адаптивное сообщение в зависимости от типа с учетом единиц пользователя
     if training_type == 'плавание':
-        distance_text = f"✅ Дистанция: {distance} км ({distance * 1000} м)"
+        distance_text = f"✅ Дистанция: {format_swimming_distance(distance_km, distance_unit)}"
     else:
-        distance_text = f"✅ Дистанция: {distance} км"
+        distance_text = f"✅ Дистанция: {format_distance(distance_km, distance_unit)}"
     
     await message.answer(
         f"{distance_text}\n\n"
@@ -947,8 +973,8 @@ async def show_trainings_period(callback: CallbackQuery):
                 'month': 'за месяц'
             }
             caption_suffix = period_captions.get(period, '')
-            
-            combined_graph = generate_graphs(trainings, period, days)
+
+            combined_graph = generate_graphs(trainings, period, days, distance_unit)
             logger.info(f"Отправка объединённого графика для периода {period}...")
             
             if combined_graph:
@@ -1062,13 +1088,14 @@ async def confirm_delete(callback: CallbackQuery):
         message_text += "━━━━━━━━━━━━━━━━━━\n\n"
         message_text += f"🏃 Всего тренировок: *{stats['total_count']}*\n"
         if stats['total_distance'] > 0:
-            message_text += f"📏 Общий километраж: *{stats['total_distance']:.2f} км*\n"
+            distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+            message_text += f"📏 Общий километраж: *{format_distance(stats['total_distance'], distance_unit)}*\n"
             if period in ['2weeks', 'month']:
                 days_in_period = (today - start_date).days + 1
                 weeks_count = days_in_period / 7
                 if weeks_count > 0:
                     avg_per_week = stats['total_distance'] / weeks_count
-                    message_text += f"   _(Средний за неделю: {avg_per_week:.2f} км)_\n"
+                    message_text += f"   _(Средний за неделю: {format_distance(avg_per_week, distance_unit)})_\n"
         if stats['types_count']:
             message_text += f"\n📋 *Типы тренировок:*\n"
             type_emoji = {
@@ -1095,14 +1122,13 @@ async def confirm_delete(callback: CallbackQuery):
                 message_text += f"   ⏰ Время: {training['time']}\n"
             if t_type == 'интервальная':
                 if training.get('calculated_volume'):
-                    message_text += f"   📏 Дистанция: {training['calculated_volume']} км\n"
+                    message_text += f"   📏 Дистанция: {format_distance(training['calculated_volume'], distance_unit)}\n"
             else:
                 if training.get('distance'):
                     if t_type == 'плавание':
-                        meters = int(training['distance'] * 1000)
-                        message_text += f"   📏 Дистанция: {training['distance']} км ({meters} м)\n"
+                        message_text += f"   📏 Дистанция: {format_swimming_distance(training['distance'], distance_unit)}\n"
                     else:
-                        message_text += f"   📏 Дистанция: {training['distance']} км\n"
+                        message_text += f"   📏 Дистанция: {format_distance(training['distance'], distance_unit)}\n"
             if t_type == 'интервальная' and training.get('intervals'):
                 from utils.interval_calculator import calculate_average_interval_pace
                 avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
@@ -1140,7 +1166,7 @@ async def confirm_delete(callback: CallbackQuery):
             try:
                 period_captions = {'week': 'за неделю', '2weeks': 'за 2 недели', 'month': 'за месяц'}
                 caption_suffix = period_captions.get(period, '')
-                combined_graph = generate_graphs(trainings, period, days)
+                combined_graph = generate_graphs(trainings, period, days, distance_unit)
                 if combined_graph:
                     await callback.message.answer_photo(
                         photo=BufferedInputFile(combined_graph.read(), filename="statistics.png"),
@@ -1436,14 +1462,20 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         )
         
     elif period == "custom":
-        # Произвольный период - запрашиваем даты
-        format_desc = DateFormatter.get_format_description(date_format)
+        # Произвольный период - показываем календарь
         await callback.message.edit_text(
             f"📅 *Произвольный период*\n\n"
-            f"Введите начальную дату в формате {format_desc}\n\n"
-            "Или нажмите /cancel для отмены",
+            f"Выберите начальную дату из календаря",
             parse_mode="Markdown"
         )
+
+        # Показываем календарь
+        calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal")
+        await callback.message.answer(
+            "📅 Выберите начальную дату:",
+            reply_markup=calendar
+        )
+
         await state.set_state(ExportPDFStates.waiting_for_start_date)
     
     await callback.answer()
@@ -1451,10 +1483,27 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
 @router.message(ExportPDFStates.waiting_for_start_date)
 async def process_export_start_date(message: Message, state: FSMContext):
     """Обработка начальной даты для произвольного периода"""
+    # Проверка на отмену
+    if message.text == "❌ Отменить":
+        await state.clear()
+        await message.answer(
+            "❌ Экспорт отменен",
+            reply_markup=get_main_menu_keyboard()
+        )
+        return
+
+    # Проверка на None для message.text
+    if not message.text:
+        await message.answer(
+            "❌ Пожалуйста, отправьте текстовое сообщение с датой",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
+
     # Получаем формат даты пользователя
     user_settings = await get_user_settings(message.from_user.id)
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
-    
+
     # Проверяем формат даты согласно настройкам пользователя
     date_pattern = DateFormatter.get_validation_pattern(date_format)
     match = re.match(date_pattern, message.text.strip())
@@ -1492,17 +1541,35 @@ async def process_export_start_date(message: Message, state: FSMContext):
     start_date_str = DateFormatter.format_date(start_date, date_format)
     await message.answer(
         f"✅ Начальная дата: {start_date_str}\n\n"
-        f"Теперь введите конечную дату в формате {format_desc}"
+        f"Теперь введите конечную дату в формате {format_desc}",
+        reply_markup=get_cancel_keyboard()
     )
     await state.set_state(ExportPDFStates.waiting_for_end_date)
 
 @router.message(ExportPDFStates.waiting_for_end_date)
 async def process_export_end_date(message: Message, state: FSMContext):
     """Обработка конечной даты для произвольного периода"""
+    # Проверка на отмену
+    if message.text == "❌ Отменить":
+        await state.clear()
+        await message.answer(
+            "❌ Экспорт отменен",
+            reply_markup=get_main_menu_keyboard()
+        )
+        return
+
+    # Проверка на None для message.text
+    if not message.text:
+        await message.answer(
+            "❌ Пожалуйста, отправьте текстовое сообщение с датой",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
+
     # Получаем формат даты пользователя
     user_settings = await get_user_settings(message.from_user.id)
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
-    
+
     # Проверяем формат даты согласно настройкам пользователя
     date_pattern = DateFormatter.get_validation_pattern(date_format)
     match = re.match(date_pattern, message.text.strip())
@@ -1606,13 +1673,17 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
         # Формируем имя файла
         filename = f"trainings_{start_date}_{end_date}.pdf"
         
+        # Формируем текст distance с проверкой
+        total_distance = stats.get('total_distance', 0)
+        distance_text = format_distance(total_distance, distance_unit) if total_distance else f"0 {distance_unit}"
+
         # Отправляем PDF
         await message.answer_document(
             BufferedInputFile(pdf_buffer.read(), filename=filename),
             caption=f"📥 *Экспорт тренировок*\n\n"
                     f"Период: {period_text}\n"
                     f"Тренировок: {len(trainings)}\n"
-                    f"Километраж: {format_distance(stats['total_distance'], distance_unit)}",
+                    f"Километраж: {distance_text}",
             parse_mode="Markdown"
         )
         
@@ -1631,3 +1702,238 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
             "Попробуйте позже или выберите другой период.",
             reply_markup=get_main_menu_keyboard()
         )
+
+
+# ==================== ОБРАБОТЧИКИ КАЛЕНДАРЯ ====================
+
+@router.callback_query(F.data.startswith("cal_"))
+async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext):
+    """Обработчик навигации по календарю"""
+    # Получаем новую клавиатуру
+    new_keyboard = CalendarKeyboard.handle_navigation(callback.data, prefix="cal")
+
+    if new_keyboard:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=new_keyboard)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении календаря: {str(e)}")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cal_1_select_"))
+async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора даты из календаря"""
+    # Парсим выбранную дату
+    parsed = CalendarKeyboard.parse_callback_data(callback.data)
+    selected_date = parsed.get("date")
+
+    if not selected_date:
+        await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
+        return
+
+    # Получаем текущее состояние
+    current_state = await state.get_state()
+
+    # Проверяем, что дата не из будущего
+    from datetime import timedelta
+    utc_now = datetime.utcnow()
+    moscow_now = utc_now + timedelta(hours=3)
+    today = moscow_now.date()
+
+    if selected_date.date() > today:
+        await callback.answer("❌ Нельзя выбрать дату из будущего!", show_alert=True)
+        return
+
+    # Получаем формат даты пользователя
+    user_id = callback.from_user.id
+    date_format = await get_user_date_format(user_id)
+    date_str = DateFormatter.format_date(selected_date.date(), date_format)
+
+    # В зависимости от состояния сохраняем дату
+    if current_state == AddTrainingStates.waiting_for_date:
+        # Добавление тренировки
+        await state.update_data(date=selected_date.date())
+
+        await callback.message.edit_text(
+            f"✅ Дата: {date_str}\n\n"
+            "⏰ Введите время тренировки\n\n"
+            "Формат: ЧЧ:ММ:СС\n"
+            "Примеры: 01:25:30 или 25:15:45 (для ультрамарафонов)",
+        )
+
+        await callback.message.answer(
+            "Введите время:",
+            reply_markup=get_cancel_keyboard()
+        )
+
+        await state.set_state(AddTrainingStates.waiting_for_time)
+
+    elif current_state == ExportPDFStates.waiting_for_start_date:
+        # Экспорт PDF - начальная дата
+        await state.update_data(start_date=selected_date.date().strftime('%Y-%m-%d'))
+
+        format_desc = DateFormatter.get_format_description(date_format)
+
+        await callback.message.edit_text(
+            f"✅ Начальная дата: {date_str}\n\n"
+            f"Теперь выберите конечную дату"
+        )
+
+        # Показываем календарь для выбора конечной даты
+        calendar = CalendarKeyboard.create_calendar(1, selected_date, "cal_end")
+        await callback.message.answer(
+            "📅 Выберите конечную дату:",
+            reply_markup=calendar
+        )
+
+        await state.set_state(ExportPDFStates.waiting_for_end_date)
+
+    elif current_state == ExportPDFStates.waiting_for_end_date:
+        # Экспорт PDF - конечная дата
+        # Получаем начальную дату из state
+        data = await state.get_data()
+        start_date_str = data.get('start_date')
+
+        if not start_date_str:
+            await callback.answer("❌ Ошибка: начальная дата не найдена", show_alert=True)
+            return
+
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = selected_date.date()
+
+        # Проверяем, что конечная дата >= начальной
+        if end_date < start_date:
+            start_date_formatted = DateFormatter.format_date(start_date, date_format)
+            await callback.answer(
+                f"❌ Конечная дата не может быть раньше начальной ({start_date_formatted})!",
+                show_alert=True
+            )
+            return
+
+        # Формируем текстовое описание периода
+        period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
+
+        await callback.message.edit_text(
+            f"✅ Конечная дата: {date_str}\n\n"
+            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
+        )
+
+        # Генерируем PDF
+        await generate_and_send_pdf(
+            callback.message,
+            callback.from_user.id,
+            start_date_str,
+            end_date.strftime('%Y-%m-%d'),
+            period_text
+        )
+
+        # Очищаем состояние
+        await state.clear()
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cal_end_"))
+async def handle_calendar_end_date_navigation(callback: CallbackQuery, state: FSMContext):
+    """Обработчик навигации по календарю для конечной даты"""
+    # Обрабатываем выбор конечной даты
+    if callback.data.startswith("cal_end_1_select_"):
+        # Это выбор даты - обрабатываем как обычно
+        # Парсим выбранную дату
+        parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_end_", "cal_"))
+        selected_date = parsed.get("date")
+
+        if not selected_date:
+            await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
+            return
+
+        # Проверяем, что дата не из будущего
+        from datetime import timedelta
+        utc_now = datetime.utcnow()
+        moscow_now = utc_now + timedelta(hours=3)
+        today = moscow_now.date()
+
+        if selected_date.date() > today:
+            await callback.answer("❌ Нельзя выбрать дату из будущего!", show_alert=True)
+            return
+
+        # Получаем начальную дату из state
+        data = await state.get_data()
+        start_date_str = data.get('start_date')
+
+        if not start_date_str:
+            await callback.answer("❌ Ошибка: начальная дата не найдена", show_alert=True)
+            return
+
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = selected_date.date()
+
+        # Получаем формат даты пользователя
+        user_id = callback.from_user.id
+        date_format = await get_user_date_format(user_id)
+
+        # Проверяем, что конечная дата >= начальной
+        if end_date < start_date:
+            start_date_formatted = DateFormatter.format_date(start_date, date_format)
+            await callback.answer(
+                f"❌ Конечная дата не может быть раньше начальной ({start_date_formatted})!",
+                show_alert=True
+            )
+            return
+
+        # Формируем текстовое описание периода
+        period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
+        date_str = DateFormatter.format_date(end_date, date_format)
+
+        await callback.message.edit_text(
+            f"✅ Конечная дата: {date_str}\n\n"
+            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
+        )
+
+        # Генерируем PDF
+        await generate_and_send_pdf(
+            callback.message,
+            callback.from_user.id,
+            start_date_str,
+            end_date.strftime('%Y-%m-%d'),
+            period_text
+        )
+
+        # Очищаем состояние
+        await state.clear()
+        await callback.answer()
+
+    else:
+        # Это навигация по календарю
+        callback_data_normalized = callback.data.replace("cal_end_", "cal_")
+        new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal")
+
+        if new_keyboard:
+            # Меняем префикс обратно на cal_end для конечной даты
+            new_keyboard_json = new_keyboard.model_dump()
+            for row in new_keyboard_json.get('inline_keyboard', []):
+                for button in row:
+                    if 'callback_data' in button and button['callback_data'].startswith('cal_'):
+                        button['callback_data'] = button['callback_data'].replace('cal_', 'cal_end_', 1)
+
+            # Пересоздаем клавиатуру с новыми callback_data
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            new_rows = []
+            for row in new_keyboard_json['inline_keyboard']:
+                new_row = []
+                for btn in row:
+                    new_row.append(InlineKeyboardButton(
+                        text=btn['text'],
+                        callback_data=btn['callback_data']
+                    ))
+                new_rows.append(new_row)
+
+            final_keyboard = InlineKeyboardMarkup(inline_keyboard=new_rows)
+
+            try:
+                await callback.message.edit_reply_markup(reply_markup=final_keyboard)
+            except Exception as e:
+                logger.error(f"Ошибка при обновлении календаря: {str(e)}")
+
+        await callback.answer()

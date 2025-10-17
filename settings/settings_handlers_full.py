@@ -38,7 +38,8 @@ from database.queries import (
     set_main_training_types,
     get_training_type_goals,
     set_training_type_goal,
-    format_date_by_setting
+    format_date_by_setting,
+    recalculate_all_weights
 )
 from utils.goals_checker import check_weight_goal
 
@@ -84,9 +85,11 @@ async def send_profile_menu(message: Message, user_id: int):
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
         weight_unit = settings.get('weight_unit', 'кг')
-        info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {weight_unit}\n"
+        weight_value = settings.get('weight')
+        weight_display = f"{weight_value:.2f}" if weight_value else 'не указан'
+        info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
-        
+
         types = await get_main_training_types(user_id)
         info_text += f"🏃 Типы тренировок: {', '.join(types)}\n"
     
@@ -115,7 +118,8 @@ async def send_goals_menu(message: Message, user_id: int):
 
         info_text += f"📊 Недельный объем: {weekly_volume or 'не задан'} {distance_unit}\n"
         info_text += f"🔢 Тренировок в неделю: {weekly_count or 'не задано'}\n"
-        info_text += f"⚖️ Целевой вес: {weight_goal or 'не задан'} {weight_unit}\n\n"
+        weight_goal_display = f"{weight_goal:.1f}" if weight_goal else 'не задан'
+        info_text += f"⚖️ Целевой вес: {weight_goal_display} {weight_unit}\n\n"
 
         type_goals = await get_training_type_goals(user_id)
         if type_goals:
@@ -200,7 +204,10 @@ async def settings_menu(message: Message, state: FSMContext):
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
-        info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
+        weight_value = settings.get('weight')
+        weight_unit = settings.get('weight_unit', 'кг')
+        weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
+        info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
     
     info_text += "\nВыберите раздел для настройки:"
@@ -226,7 +233,10 @@ async def callback_settings_menu(callback: CallbackQuery, state: FSMContext):
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
-        info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
+        weight_value = settings.get('weight')
+        weight_unit = settings.get('weight_unit', 'кг')
+        weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
+        info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
     
     info_text += "\nВыберите раздел для настройки:"
@@ -254,7 +264,10 @@ async def callback_profile_settings(callback: CallbackQuery):
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
-        info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
+        weight_value = settings.get('weight')
+        weight_unit = settings.get('weight_unit', 'кг')
+        weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
+        info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
         
         # Основные типы тренировок
@@ -321,7 +334,10 @@ async def process_name(message: Message, state: FSMContext):
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
-        info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {settings.get('weight_unit', 'кг')}\n"
+        weight_value = settings.get('weight')
+        weight_unit = settings.get('weight_unit', 'кг')
+        weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
+        info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
         
         types = await get_main_training_types(user_id)
@@ -620,8 +636,10 @@ async def callback_save_training_types(callback: CallbackQuery, state: FSMContex
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
         info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+        weight_value = settings.get('weight')
         weight_unit = settings.get('weight_unit', 'кг')
-        info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {weight_unit}\n"
+        weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
+        info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
 
         types = await get_main_training_types(user_id)
@@ -779,7 +797,8 @@ async def callback_goals_menu(callback: CallbackQuery):
 
         info_text += f"📊 Недельный объем: {weekly_volume or 'не задан'} {distance_unit}\n"
         info_text += f"🔢 Тренировок в неделю: {weekly_count or 'не задано'}\n"
-        info_text += f"⚖️ Целевой вес: {weight_goal or 'не задан'} {weight_unit}\n\n"
+        weight_goal_display = f"{weight_goal:.1f}" if weight_goal else 'не задан'
+        info_text += f"⚖️ Целевой вес: {weight_goal_display} {weight_unit}\n\n"
 
         # Цели по типам
         type_goals = await get_training_type_goals(user_id)
@@ -1121,11 +1140,39 @@ async def callback_set_weight_unit(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("weight_unit:"))
 async def callback_save_weight_unit(callback: CallbackQuery):
-    """Сохранение единицы веса"""
-    unit = callback.data.split(":")[1]
+    """Сохранение единицы веса с автоматическим пересчетом"""
+    new_unit = callback.data.split(":")[1]
 
     user_id = callback.from_user.id
-    await update_user_setting(user_id, 'weight_unit', unit)
+
+    # Получаем старую единицу измерения
+    settings = await get_user_settings(user_id)
+    old_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
+
+    # Если единица не изменилась, просто возвращаемся в меню
+    if old_unit == new_unit:
+        info_text = "📏 **Единицы измерения**\n\n"
+
+        if settings:
+            info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
+            info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
+            info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+
+        info_text += "\nВыберите параметр для изменения:"
+
+        await callback.message.edit_text(
+            info_text,
+            reply_markup=get_units_settings_keyboard(),
+            parse_mode="Markdown"
+        )
+        await callback.answer("Единица измерения не изменена")
+        return
+
+    # Пересчитываем все значения веса
+    await recalculate_all_weights(user_id, old_unit, new_unit)
+
+    # Обновляем единицу измерения в настройках
+    await update_user_setting(user_id, 'weight_unit', new_unit)
 
     # Возврат в меню единиц с обновленной информацией
     settings = await get_user_settings(user_id)

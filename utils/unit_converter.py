@@ -33,19 +33,19 @@ def miles_to_km(miles: float) -> float:
 def format_distance(distance_km: float, distance_unit: str = 'км') -> str:
     """
     Форматирует дистанцию в зависимости от единиц измерения
-    
+
     Args:
         distance_km: Дистанция в километрах (всегда хранится в км в БД)
         distance_unit: Единица измерения ('км' или 'мили')
-        
+
     Returns:
         Отформатированная строка с дистанцией
     """
     if distance_unit == 'мили':
         distance = km_to_miles(distance_km)
-        return f"{distance:.2f} миль"
+        return f"{distance:.1f} миль"
     else:
-        return f"{distance_km:.2f} км"
+        return f"{distance_km:.1f} км"
 
 
 def format_pace(distance_km: float, total_seconds: int, 
@@ -102,18 +102,18 @@ def format_pace(distance_km: float, total_seconds: int,
 def format_swimming_distance(distance_km: float, distance_unit: str = 'км') -> str:
     """
     Форматирует дистанцию для плавания (показывает и км/мили и метры/ярды)
-    
+
     Args:
         distance_km: Дистанция в километрах
         distance_unit: Единица измерения ('км' или 'мили')
-        
+
     Returns:
         Отформатированная строка с дистанцией
     """
     if distance_unit == 'мили':
         distance_miles = km_to_miles(distance_km)
         distance_yards = distance_miles * 1760
-        return f"{distance_miles:.2f} миль ({int(distance_yards)} ярдов)"
+        return f"{distance_miles:.1f} миль ({int(distance_yards)} ярдов)"
     else:
         distance_meters = distance_km * 1000
-        return f"{distance_km:.2f} км ({int(distance_meters)} м)"
+        return f"{distance_km:.1f} км ({int(distance_meters)} м)"
