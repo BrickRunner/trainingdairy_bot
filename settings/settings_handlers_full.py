@@ -356,10 +356,15 @@ async def process_name(message: Message, state: FSMContext):
 @router.callback_query(F.data == "settings:profile:birth_date")
 async def callback_set_birth_date(callback: CallbackQuery, state: FSMContext):
     """Начало установки даты рождения"""
+    from bot.calendar_keyboard import CalendarKeyboard
+    from datetime import datetime
+
+    # Показываем календарь для выбора даты рождения
+    calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal_birth")
     await callback.message.answer(
-        "🎂 Введите дату рождения в формате ДД.ММ.ГГГГ (например: 15.03.1990):\n\n"
+        "🎂 Выберите дату рождения из календаря:\n\n"
         "📌 Каждый год в день рождения вы будете получать поздравительное сообщение!",
-        reply_markup=get_simple_cancel_keyboard()
+        reply_markup=calendar
     )
     await state.set_state(SettingsStates.waiting_for_birth_date)
     await callback.answer()
@@ -1390,3 +1395,10 @@ async def process_report_time(message: Message, state: FSMContext):
         
     except ValueError:
         await message.answer("❌ Некорректное время.")
+
+
+# ==================== ОБРАБОТЧИКИ КАЛЕНДАРЯ ДЛЯ ДАТЫ РОЖДЕНИЯ ====================
+from settings.calendar_handlers_birth import register_calendar_birth_handlers
+
+# Регистрируем обработчики календаря даты рождения
+register_calendar_birth_handlers(router)

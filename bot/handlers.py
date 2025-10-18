@@ -1706,21 +1706,6 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
 
 # ==================== ОБРАБОТЧИКИ КАЛЕНДАРЯ ====================
 
-@router.callback_query(F.data.startswith("cal_"))
-async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext):
-    """Обработчик навигации по календарю"""
-    # Получаем новую клавиатуру
-    new_keyboard = CalendarKeyboard.handle_navigation(callback.data, prefix="cal")
-
-    if new_keyboard:
-        try:
-            await callback.message.edit_reply_markup(reply_markup=new_keyboard)
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении календаря: {str(e)}")
-
-    await callback.answer()
-
-
 @router.callback_query(F.data.startswith("cal_1_select_"))
 async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора даты из календаря"""
@@ -1755,15 +1740,17 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         # Добавление тренировки
         await state.update_data(date=selected_date.date())
 
-        await callback.message.edit_text(
+        # Удаляем сообщение с календарем
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass  # Игнорируем ошибки при удалении
+
+        await callback.message.answer(
             f"✅ Дата: {date_str}\n\n"
             "⏰ Введите время тренировки\n\n"
             "Формат: ЧЧ:ММ:СС\n"
             "Примеры: 01:25:30 или 25:15:45 (для ультрамарафонов)",
-        )
-
-        await callback.message.answer(
-            "Введите время:",
             reply_markup=get_cancel_keyboard()
         )
 
@@ -1834,106 +1821,147 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("cal_"))
+async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext):
+    """Обработчик навигации по календарю"""
+    # Исключаем обработку cal_end_ и cal_birth_ (они обрабатываются в своих обработчиках)
+    if callback.data.startswith("cal_end_") or callback.data.startswith("cal_birth_"):
+        return
+
+    # Исключаем обработку выбора даты (она обрабатывается в handle_calendar_date_selection)
+    if callback.data.startswith("cal_1_select_"):
+        return
+
+    # Обрабатываем пустые ячейки
+    if callback.data == "cal_empty":
+        await callback.answer()
+        return
+
+    # Получаем новую клавиатуру для навигации
+    new_keyboard = CalendarKeyboard.handle_navigation(callback.data, prefix="cal")
+
+    if new_keyboard:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=new_keyboard)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении календаря: {str(e)}")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cal_end_1_select_"))
+async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора конечной даты из календаря"""
+    logger.info(f"Обработчик cal_end_1_select_: {callback.data}")
+
+    # Парсим выбранную дату
+    parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_end_", "cal_"))
+    selected_date = parsed.get("date")
+
+    if not selected_date:
+        await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
+        return
+
+    # Проверяем, что дата не из будущего
+    from datetime import timedelta
+    utc_now = datetime.utcnow()
+    moscow_now = utc_now + timedelta(hours=3)
+    today = moscow_now.date()
+
+    if selected_date.date() > today:
+        await callback.answer("❌ Нельзя выбрать дату из будущего!", show_alert=True)
+        return
+
+    # Получаем начальную дату из state
+    data = await state.get_data()
+    start_date_str = data.get('start_date')
+
+    if not start_date_str:
+        await callback.answer("❌ Ошибка: начальная дата не найдена", show_alert=True)
+        return
+
+    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    end_date = selected_date.date()
+
+    # Получаем формат даты пользователя
+    user_id = callback.from_user.id
+    date_format = await get_user_date_format(user_id)
+
+    # Проверяем, что конечная дата >= начальной
+    if end_date < start_date:
+        start_date_formatted = DateFormatter.format_date(start_date, date_format)
+        await callback.answer(
+            f"❌ Конечная дата не может быть раньше начальной ({start_date_formatted})!",
+            show_alert=True
+        )
+        return
+
+    # Формируем текстовое описание периода
+    period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
+    date_str = DateFormatter.format_date(end_date, date_format)
+
+    await callback.message.edit_text(
+        f"✅ Конечная дата: {date_str}\n\n"
+        f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
+    )
+
+    # Генерируем PDF
+    await generate_and_send_pdf(
+        callback.message,
+        callback.from_user.id,
+        start_date_str,
+        end_date.strftime('%Y-%m-%d'),
+        period_text
+    )
+
+    # Очищаем состояние
+    await state.clear()
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("cal_end_"))
 async def handle_calendar_end_date_navigation(callback: CallbackQuery, state: FSMContext):
     """Обработчик навигации по календарю для конечной даты"""
-    # Обрабатываем выбор конечной даты
+    logger.info(f"Обработчик cal_end_ навигация: {callback.data}")
+
+    # Исключаем обработку выбора даты (она обрабатывается в handle_calendar_end_date_selection)
     if callback.data.startswith("cal_end_1_select_"):
-        # Это выбор даты - обрабатываем как обычно
-        # Парсим выбранную дату
-        parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_end_", "cal_"))
-        selected_date = parsed.get("date")
+        return
 
-        if not selected_date:
-            await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
-            return
-
-        # Проверяем, что дата не из будущего
-        from datetime import timedelta
-        utc_now = datetime.utcnow()
-        moscow_now = utc_now + timedelta(hours=3)
-        today = moscow_now.date()
-
-        if selected_date.date() > today:
-            await callback.answer("❌ Нельзя выбрать дату из будущего!", show_alert=True)
-            return
-
-        # Получаем начальную дату из state
-        data = await state.get_data()
-        start_date_str = data.get('start_date')
-
-        if not start_date_str:
-            await callback.answer("❌ Ошибка: начальная дата не найдена", show_alert=True)
-            return
-
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        end_date = selected_date.date()
-
-        # Получаем формат даты пользователя
-        user_id = callback.from_user.id
-        date_format = await get_user_date_format(user_id)
-
-        # Проверяем, что конечная дата >= начальной
-        if end_date < start_date:
-            start_date_formatted = DateFormatter.format_date(start_date, date_format)
-            await callback.answer(
-                f"❌ Конечная дата не может быть раньше начальной ({start_date_formatted})!",
-                show_alert=True
-            )
-            return
-
-        # Формируем текстовое описание периода
-        period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
-        date_str = DateFormatter.format_date(end_date, date_format)
-
-        await callback.message.edit_text(
-            f"✅ Конечная дата: {date_str}\n\n"
-            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
-        )
-
-        # Генерируем PDF
-        await generate_and_send_pdf(
-            callback.message,
-            callback.from_user.id,
-            start_date_str,
-            end_date.strftime('%Y-%m-%d'),
-            period_text
-        )
-
-        # Очищаем состояние
-        await state.clear()
+    # Обрабатываем пустые ячейки
+    if callback.data == "cal_end_empty":
         await callback.answer()
+        return
 
-    else:
-        # Это навигация по календарю
-        callback_data_normalized = callback.data.replace("cal_end_", "cal_")
-        new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal")
+    # Это навигация по календарю
+    callback_data_normalized = callback.data.replace("cal_end_", "cal_")
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal")
 
-        if new_keyboard:
-            # Меняем префикс обратно на cal_end для конечной даты
-            new_keyboard_json = new_keyboard.model_dump()
-            for row in new_keyboard_json.get('inline_keyboard', []):
-                for button in row:
-                    if 'callback_data' in button and button['callback_data'].startswith('cal_'):
-                        button['callback_data'] = button['callback_data'].replace('cal_', 'cal_end_', 1)
+    if new_keyboard:
+        # Меняем префикс обратно на cal_end для конечной даты
+        new_keyboard_json = new_keyboard.model_dump()
+        for row in new_keyboard_json.get('inline_keyboard', []):
+            for button in row:
+                if 'callback_data' in button and button['callback_data'].startswith('cal_'):
+                    button['callback_data'] = button['callback_data'].replace('cal_', 'cal_end_', 1)
 
-            # Пересоздаем клавиатуру с новыми callback_data
-            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-            new_rows = []
-            for row in new_keyboard_json['inline_keyboard']:
-                new_row = []
-                for btn in row:
-                    new_row.append(InlineKeyboardButton(
-                        text=btn['text'],
-                        callback_data=btn['callback_data']
-                    ))
-                new_rows.append(new_row)
+        # Пересоздаем клавиатуру с новыми callback_data
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        new_rows = []
+        for row in new_keyboard_json['inline_keyboard']:
+            new_row = []
+            for btn in row:
+                new_row.append(InlineKeyboardButton(
+                    text=btn['text'],
+                    callback_data=btn['callback_data']
+                ))
+            new_rows.append(new_row)
 
-            final_keyboard = InlineKeyboardMarkup(inline_keyboard=new_rows)
+        final_keyboard = InlineKeyboardMarkup(inline_keyboard=new_rows)
 
-            try:
-                await callback.message.edit_reply_markup(reply_markup=final_keyboard)
-            except Exception as e:
-                logger.error(f"Ошибка при обновлении календаря: {str(e)}")
+        try:
+            await callback.message.edit_reply_markup(reply_markup=final_keyboard)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении календаря: {str(e)}")
 
-        await callback.answer()
+    await callback.answer()
