@@ -77,7 +77,6 @@ async def handle_calendar_birth_date_selection(callback: CallbackQuery, state: F
 async def handle_calendar_birth_date_navigation(callback: CallbackQuery, state: FSMContext, router):
     """Обработчик навигации по календарю для даты рождения"""
     from bot.calendar_keyboard import CalendarKeyboard
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
     logger.info(f"Обработчик cal_birth_ навигация: {callback.data}")
 
@@ -92,33 +91,29 @@ async def handle_calendar_birth_date_navigation(callback: CallbackQuery, state: 
 
     # Это навигация по календарю
     callback_data_normalized = callback.data.replace("cal_birth_", "cal_")
+    logger.info(f"Нормализованный callback: {callback_data_normalized}")
+
     new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal")
+    logger.info(f"Получена новая клавиатура: {new_keyboard is not None}")
 
     if new_keyboard:
         # Меняем префикс обратно на cal_birth для даты рождения
-        new_keyboard_json = new_keyboard.model_dump()
-        for row in new_keyboard_json.get('inline_keyboard', []):
-            for button in row:
-                if 'callback_data' in button and button['callback_data'].startswith('cal_'):
-                    button['callback_data'] = button['callback_data'].replace('cal_', 'cal_birth_', 1)
-
-        # Пересоздаем клавиатуру с новыми callback_data
-        new_rows = []
-        for row in new_keyboard_json['inline_keyboard']:
-            new_row = []
-            for btn in row:
-                new_row.append(InlineKeyboardButton(
-                    text=btn['text'],
-                    callback_data=btn['callback_data']
-                ))
-            new_rows.append(new_row)
-
-        final_keyboard = InlineKeyboardMarkup(inline_keyboard=new_rows)
+        final_keyboard = CalendarKeyboard.replace_prefix_in_keyboard(new_keyboard, "cal", "cal_birth")
+        logger.info(f"Финальная клавиатура после замены префикса: {final_keyboard is not None}")
 
         try:
-            await callback.message.edit_reply_markup(reply_markup=final_keyboard)
+            logger.info("Попытка обновить клавиатуру...")
+            result = await callback.message.edit_reply_markup(reply_markup=final_keyboard)
+            logger.info(f"Клавиатура успешно обновлена! Result type: {type(result)}")
         except Exception as e:
-            logger.error(f"Ошибка при обновлении календаря даты рождения: {str(e)}")
+            error_text = str(e).lower()
+            # Игнорируем ошибку "message is not modified" - это нормально, если пользователь нажал на ту же кнопку
+            if "message is not modified" in error_text:
+                logger.warning(f"⚠️ Telegram отклонил обновление - клавиатура не изменилась: {str(e)}")
+            else:
+                logger.error(f"❌ ОШИБКА при обновлении календаря даты рождения: {str(e)}", exc_info=True)
+    else:
+        logger.warning("new_keyboard is None!")
 
     await callback.answer()
 

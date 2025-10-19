@@ -12,6 +12,7 @@ import os
 
 from bot.handlers import router
 from settings.settings_handlers_full import router as settings_router
+from health.health_handlers import router as health_router
 from database.queries import init_db
 from notifications.notification_scheduler import start_notification_scheduler
 
@@ -41,8 +42,10 @@ async def main():
     dp = Dispatcher(storage=storage)
     
     # Подключение роутеров
-    dp.include_router(router)
+    # ВАЖНО: settings_router должен быть первым, так как содержит более специфичные обработчики (cal_birth_)
     dp.include_router(settings_router)
+    dp.include_router(health_router)
+    dp.include_router(router)
     
     # Инициализация базы данных
     await init_db()

@@ -101,6 +101,34 @@ CREATE TABLE IF NOT EXISTS coach_links (
 )
 """
 
+CREATE_HEALTH_METRICS_TABLE = """
+CREATE TABLE IF NOT EXISTS health_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    date DATE NOT NULL,
+
+    -- Утренние показатели
+    morning_pulse INTEGER,
+    weight REAL,
+    sleep_duration REAL,  -- в часах (например, 7.5)
+    sleep_quality INTEGER, -- 1-5 (1=плохо, 5=отлично)
+
+    -- Дополнительные показатели
+    mood INTEGER, -- 1-5
+    stress_level INTEGER, -- 1-5
+    energy_level INTEGER, -- 1-5
+
+    -- Заметки
+    notes TEXT,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(user_id, date)
+)
+"""
+
 CREATE_USER_SETTINGS_TABLE = """
 CREATE TABLE IF NOT EXISTS user_settings (
     user_id INTEGER PRIMARY KEY,
@@ -164,5 +192,6 @@ ALL_TABLES = [
     CREATE_ACHIEVEMENTS_TABLE,
     CREATE_RATINGS_TABLE,
     CREATE_COACH_LINKS_TABLE,
+    CREATE_HEALTH_METRICS_TABLE,
     CREATE_USER_SETTINGS_TABLE
 ]

@@ -71,42 +71,64 @@ async def send_daily_reminders(bot: Bot):
     """
     import aiosqlite
     import os
-    
+
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
-    
+
     current_time = datetime.now().strftime('%H:%M')
-    
+    today = datetime.now().date()
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        
+
         # Находим пользователей с установленным временем напоминания
         async with db.execute(
             """
-            SELECT user_id, name, daily_pulse_weight_time 
-            FROM user_settings 
+            SELECT user_id, name, daily_pulse_weight_time
+            FROM user_settings
             WHERE daily_pulse_weight_time = ?
             """,
             (current_time,)
         ) as cursor:
             rows = await cursor.fetchall()
-            
+
             for row in rows:
                 user_id = row['user_id']
                 name = row['name'] or "друг"
-                
-                reminder_message = (
-                    f"⏰ **Ежедневное напоминание**\n\n"
-                    f"Привет, {name}! 👋\n\n"
-                    "Не забудь записать сегодня:\n"
-                    "💓 Пульс в покое\n"
-                    "⚖️ Текущий вес\n\n"
-                    "Это поможет отслеживать твой прогресс! 📊"
-                )
-                
-                try:
-                    await bot.send_message(user_id, reminder_message, parse_mode="Markdown")
-                except Exception as e:
-                    print(f"Ошибка отправки напоминания пользователю {user_id}: {e}")
+
+                # Проверяем, какие метрики уже заполнены сегодня
+                async with db.execute(
+                    """
+                    SELECT morning_pulse, weight, sleep_duration
+                    FROM health_metrics
+                    WHERE user_id = ? AND date = ?
+                    """,
+                    (user_id, today)
+                ) as metrics_cursor:
+                    metrics = await metrics_cursor.fetchone()
+
+                # Определяем, что нужно внести
+                missing_metrics = []
+                if not metrics or not metrics['morning_pulse']:
+                    missing_metrics.append("💗 Утренний пульс")
+                if not metrics or not metrics['weight']:
+                    missing_metrics.append("⚖️ Вес")
+                if not metrics or not metrics['sleep_duration']:
+                    missing_metrics.append("😴 Длительность сна")
+
+                # Отправляем напоминание только если есть незаполненные метрики
+                if missing_metrics:
+                    reminder_message = (
+                        f"⏰ **Доброе утро, {name}!** 👋\n\n"
+                        "Не забудь внести данные о здоровье:\n" +
+                        "\n".join(missing_metrics) +
+                        "\n\nПерейди в раздел ❤️ Здоровье → 📝 Внести данные\n\n"
+                        "Регулярное отслеживание поможет лучше понимать свой организм! 📊"
+                    )
+
+                    try:
+                        await bot.send_message(user_id, reminder_message, parse_mode="Markdown")
+                    except Exception as e:
+                        print(f"Ошибка отправки напоминания пользователю {user_id}: {e}")
 
 
 async def send_weekly_reports(bot: Bot):

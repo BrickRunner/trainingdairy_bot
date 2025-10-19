@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile health/health_handlers.py bot/keyboards.py)"
     ],
     "deny": [],
     "ask": []
