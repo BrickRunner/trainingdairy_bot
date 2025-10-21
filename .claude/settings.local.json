@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m py_compile health/health_handlers.py bot/keyboards.py)"
+      "Bash(python -m py_compile health/health_handlers.py bot/keyboards.py)",
+      "Bash(pip install:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(cargo:*)",
+      "Bash(where:*)",
+      "Bash(timeout 60 cmd:*)",
+      "Bash(pip index:*)",
+      "Bash(rustc:*)",
+      "Bash(python:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []
