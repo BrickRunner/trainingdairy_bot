@@ -95,6 +95,8 @@ def _plot_metric(ax, dates, values, title, ylabel, color, emoji):
                 transform=ax.transAxes,
                 fontsize=14, color='gray')
         ax.set_title(f'{emoji} {title}', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Дата', fontsize=10)
+        ax.set_ylabel(ylabel, fontsize=10)
         return
 
     valid_dates, valid_values = zip(*valid_data)
@@ -105,31 +107,45 @@ def _plot_metric(ax, dates, values, title, ylabel, color, emoji):
             markersize=6, markerfacecolor='white',
             markeredgewidth=2, markeredgecolor=color)
 
-    # Заливка под графиком
-    ax.fill_between(valid_dates, valid_values,
+    # Заливка под графиком (добавляем базовую линию 0)
+    min_val = min(valid_values)
+    base_val = min_val - (max(valid_values) - min_val) * 0.1 if len(valid_values) > 1 else 0
+    ax.fill_between(valid_dates, valid_values, base_val,
                      alpha=0.2, color=color)
 
-    # Добавление значений на точках
-    for d, v in zip(valid_dates, valid_values):
-        ax.annotate(f'{v:.1f}',
-                   xy=(d, v),
-                   xytext=(0, 10),
-                   textcoords='offset points',
-                   ha='center',
-                   fontsize=8,
-                   bbox=dict(boxstyle='round,pad=0.3',
-                            facecolor='white',
-                            edgecolor=color,
-                            alpha=0.7))
+    # Добавление значений на точках (только если точек не слишком много)
+    if len(valid_dates) <= 20:
+        for d, v in zip(valid_dates, valid_values):
+            ax.annotate(f'{v:.1f}',
+                       xy=(d, v),
+                       xytext=(0, 10),
+                       textcoords='offset points',
+                       ha='center',
+                       fontsize=8,
+                       bbox=dict(boxstyle='round,pad=0.3',
+                                facecolor='white',
+                                edgecolor=color,
+                                alpha=0.7))
 
     # Настройка осей
     ax.set_title(f'{emoji} {title}', fontsize=12, fontweight='bold')
+    ax.set_xlabel('Дата', fontsize=10)
     ax.set_ylabel(ylabel, fontsize=10)
     ax.grid(True, alpha=0.3, linestyle='--')
 
     # Форматирование оси X
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-    ax.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(valid_dates)//7)))
+    # Динамически рассчитываем интервал (минимум 1 день)
+    if len(valid_dates) <= 7:
+        interval = 1
+    elif len(valid_dates) <= 14:
+        interval = 2
+    elif len(valid_dates) <= 30:
+        interval = 3
+    else:
+        interval = max(1, len(valid_dates) // 10)
+
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=interval))
     plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
 
     # Добавление средней линии
@@ -219,7 +235,16 @@ async def generate_sleep_quality_graph(metrics: List[Dict], days: int) -> io.Byt
 
         # Форматирование оси X
         ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-        ax1.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates)//7)))
+        # Динамически рассчитываем интервал
+        if len(dates) <= 7:
+            interval = 1
+        elif len(dates) <= 14:
+            interval = 2
+        elif len(dates) <= 30:
+            interval = 3
+        else:
+            interval = max(1, len(dates) // 10)
+        ax1.xaxis.set_major_locator(mdates.DayLocator(interval=interval))
         plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
 
         # Сетка

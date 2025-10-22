@@ -7,6 +7,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 class HealthMetricsStates(StatesGroup):
     """Состояния для ввода метрик здоровья"""
+    waiting_for_date_choice = State()
+    waiting_for_custom_date = State()
     waiting_for_pulse = State()
     waiting_for_weight = State()
     waiting_for_sleep_duration = State()

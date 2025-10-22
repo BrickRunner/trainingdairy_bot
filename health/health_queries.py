@@ -135,7 +135,14 @@ async def get_health_metrics_range(
                 ORDER BY date ASC
             """, (user_id, start_date, end_date)) as cursor:
                 rows = await cursor.fetchall()
-                return [dict(row) for row in rows]
+                result = [dict(row) for row in rows]
+
+                # ОТЛАДКА: показываем какие даты найдены
+                if result:
+                    dates_found = [r['date'] for r in result]
+                    logger.info(f"get_health_metrics_range: found dates: {dates_found}")
+
+                return result
     except Exception as e:
         logger.error(f"Ошибка при получении метрик за период: {e}")
         return []
@@ -145,19 +152,75 @@ async def get_latest_health_metrics(user_id: int, days: int = 7) -> List[Dict]:
     """Получает последние N дней метрик"""
     end_date = date.today()
     start_date = end_date - timedelta(days=days-1)
-    return await get_health_metrics_range(user_id, start_date, end_date)
+
+    logger.info(f"get_latest_health_metrics: user_id={user_id}, days={days}")
+    logger.info(f"get_latest_health_metrics: start_date={start_date}, end_date={end_date}")
+
+    result = await get_health_metrics_range(user_id, start_date, end_date)
+    logger.info(f"get_latest_health_metrics: found {len(result)} records")
+
+    return result
+
+
+async def get_current_week_metrics(user_id: int) -> List[Dict]:
+    """Получает метрики за текущую календарную неделю (понедельник - воскресенье)"""
+    today = date.today()
+    # Получаем номер дня недели (0 = понедельник, 6 = воскресенье)
+    weekday = today.weekday()
+
+    # Начало недели (понедельник)
+    start_date = today - timedelta(days=weekday)
+    # Конец недели (воскресенье)
+    end_date = start_date + timedelta(days=6)
+
+    logger.info(f"get_current_week_metrics: user_id={user_id}")
+    logger.info(f"get_current_week_metrics: start_date={start_date}, end_date={end_date}")
+
+    result = await get_health_metrics_range(user_id, start_date, end_date)
+    logger.info(f"get_current_week_metrics: found {len(result)} records")
+
+    return result
+
+
+async def get_current_month_metrics(user_id: int) -> List[Dict]:
+    """Получает метрики за текущий календарный месяц"""
+    today = date.today()
+
+    # Начало месяца (1-е число)
+    start_date = date(today.year, today.month, 1)
+    # Конец месяца (последний день)
+    if today.month == 12:
+        end_date = date(today.year, 12, 31)
+    else:
+        end_date = date(today.year, today.month + 1, 1) - timedelta(days=1)
+
+    logger.info(f"get_current_month_metrics: user_id={user_id}")
+    logger.info(f"get_current_month_metrics: start_date={start_date}, end_date={end_date}")
+
+    result = await get_health_metrics_range(user_id, start_date, end_date)
+    logger.info(f"get_current_month_metrics: found {len(result)} records")
+
+    return result
 
 
 async def get_health_statistics(user_id: int, days: int = 30) -> Dict:
     """Получает статистику здоровья за период"""
+    logger.info(f"get_health_statistics: user_id={user_id}, days={days}")
+
     metrics = await get_latest_health_metrics(user_id, days)
 
+    logger.info(f"get_health_statistics: metrics count={len(metrics)}")
+
     if not metrics:
+        logger.info("get_health_statistics: no metrics found, returning empty dict")
         return {}
 
     pulse_values = [m['morning_pulse'] for m in metrics if m.get('morning_pulse')]
     weight_values = [m['weight'] for m in metrics if m.get('weight')]
     sleep_values = [m['sleep_duration'] for m in metrics if m.get('sleep_duration')]
+
+    logger.info(f"get_health_statistics: pulse_values count={len(pulse_values)}, "
+               f"weight_values count={len(weight_values)}, sleep_values count={len(sleep_values)}")
 
     stats = {
         'total_days': len(metrics),
@@ -179,6 +242,8 @@ async def get_health_statistics(user_id: int, days: int = 30) -> Dict:
             'max': max(sleep_values) if sleep_values else None
         }
     }
+
+    logger.info(f"get_health_statistics: stats calculated successfully")
 
     return stats
 
@@ -202,6 +267,8 @@ async def check_today_metrics_filled(user_id: int) -> Dict[str, bool]:
     today = date.today()
     metrics = await get_health_metrics_by_date(user_id, today)
 
+    logger.info(f"check_today_metrics_filled: metrics from DB = {metrics}")
+
     if not metrics:
         return {
             'morning_pulse': False,
@@ -209,8 +276,12 @@ async def check_today_metrics_filled(user_id: int) -> Dict[str, bool]:
             'sleep_duration': False
         }
 
-    return {
+    result = {
         'morning_pulse': metrics.get('morning_pulse') is not None,
         'weight': metrics.get('weight') is not None,
         'sleep_duration': metrics.get('sleep_duration') is not None
     }
+
+    logger.info(f"check_today_metrics_filled: result = {result}")
+
+    return result

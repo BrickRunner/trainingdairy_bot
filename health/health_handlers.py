@@ -6,7 +6,7 @@ from aiogram import Router, F
 from aiogram.filters import StateFilter
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, BufferedInputFile
 from aiogram.fsm.context import FSMContext
-from datetime import date
+from datetime import date, timedelta
 import re
 import logging
 
@@ -18,20 +18,44 @@ from health.health_keyboards import (
     get_stats_period_keyboard,
     get_graphs_period_keyboard,
     get_cancel_keyboard,
-    get_skip_cancel_keyboard
+    get_skip_cancel_keyboard,
+    get_date_choice_keyboard
 )
 from health.health_queries import (
     save_health_metrics,
     get_health_metrics_by_date,
     get_latest_health_metrics,
     get_health_statistics,
-    check_today_metrics_filled
+    check_today_metrics_filled,
+    get_current_week_metrics,
+    get_current_month_metrics
 )
 from health.health_graphs import generate_health_graphs, generate_sleep_quality_graph
 from health.sleep_analysis import SleepAnalyzer, format_sleep_analysis_message
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+# ============== Вспомогательные функции ==============
+
+async def return_to_health_menu(message: Message):
+    """Возврат в главное меню здоровья"""
+    user_id = message.from_user.id
+    filled = await check_today_metrics_filled(user_id)
+
+    status_text = "📋 <b>Статус на сегодня:</b>\n"
+    status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+    status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+    status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
+    await message.answer(
+        f"❤️ <b>Здоровье и метрики</b>\n\n"
+        f"{status_text}\n"
+        f"Выберите действие:",
+        reply_markup=get_health_menu_keyboard(),
+        parse_mode="HTML"
+    )
 
 
 # ============== Главное меню здоровья ==============
@@ -41,6 +65,8 @@ async def health_menu(message: Message, state: FSMContext):
     """Главное меню раздела здоровья"""
     await state.clear()
     user_id = message.from_user.id
+
+    logger.info(f"health_menu called for user_id = {user_id}")
 
     # Проверяем, какие метрики уже заполнены сегодня
     filled = await check_today_metrics_filled(user_id)
@@ -101,11 +127,9 @@ async def choose_input_type(callback: CallbackQuery):
 
     # Формируем текст сообщения
     if today_metrics and (today_metrics.get('morning_pulse') or today_metrics.get('weight') or today_metrics.get('sleep_duration')):
-        message_text = "📝 <b>Ваши данные на сегодня</b>\n\n"
-        message_text += "Нажмите ✏️ чтобы изменить значение:"
+        message_text = "📝 <b>Ваши данные на сегодня</b>"
     else:
-        message_text = "📝 <b>Внесение данных</b>\n\n"
-        message_text += "Выберите, что хотите внести:"
+        message_text = "📝 <b>Внесение данных</b>"
 
     await callback.message.edit_text(
         message_text,
@@ -175,6 +199,134 @@ async def start_sleep_input(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == "health:choose_date")
+async def choose_date_for_metrics(callback: CallbackQuery, state: FSMContext):
+    """Выбор даты для внесения данных"""
+    await callback.message.answer(
+        "📅 <b>За какую дату вы хотите внести данные?</b>",
+        reply_markup=get_date_choice_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.message.delete()
+    await state.set_state(HealthMetricsStates.waiting_for_date_choice)
+    await callback.answer()
+
+
+@router.message(HealthMetricsStates.waiting_for_date_choice)
+async def process_date_choice(message: Message, state: FSMContext):
+    """Обработка выбора даты"""
+    if message.text == "❌ Отменить":
+        await state.set_state(None)
+        await message.answer(
+            "Действие отменено.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await return_to_health_menu(message)
+        return
+
+    today = date.today()
+
+    if message.text == "📅 Сегодня":
+        selected_date = today
+    elif message.text == "📅 Вчера":
+        selected_date = today - timedelta(days=1)
+    elif message.text == "📅 Позавчера":
+        selected_date = today - timedelta(days=2)
+    elif message.text == "📝 Ввести дату":
+        await message.answer(
+            "📅 Введите дату в формате ДД.ММ.ГГГГ\n\n"
+            "Например: 20.10.2025",
+            reply_markup=get_cancel_keyboard(),
+            parse_mode="HTML"
+        )
+        await state.set_state(HealthMetricsStates.waiting_for_custom_date)
+        return
+    else:
+        await message.answer(
+            "❌ Неверный выбор. Используйте кнопки."
+        )
+        return
+
+    # Сохраняем выбранную дату и показываем меню ввода
+    await state.update_data(selected_date=selected_date)
+
+    user_id = message.from_user.id
+    metrics = await get_health_metrics_by_date(user_id, selected_date)
+
+    date_str = selected_date.strftime("%d.%m.%Y")
+
+    if metrics and (metrics.get('morning_pulse') or metrics.get('weight') or metrics.get('sleep_duration')):
+        message_text = f"📝 <b>Ваши данные на {date_str}</b>"
+    else:
+        message_text = f"📝 <b>Внесение данных за {date_str}</b>"
+
+    await message.answer(
+        message_text,
+        reply_markup=get_quick_input_keyboard(metrics),
+        parse_mode="HTML"
+    )
+    await state.set_state(None)
+
+
+@router.message(HealthMetricsStates.waiting_for_custom_date)
+async def process_custom_date(message: Message, state: FSMContext):
+    """Обработка ввода произвольной даты"""
+    if message.text == "❌ Отменить":
+        await state.set_state(None)
+        await message.answer(
+            "Действие отменено.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await return_to_health_menu(message)
+        return
+
+    # Парсим дату
+    match = re.match(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', message.text)
+    if not match:
+        await message.answer(
+            "❌ Неверный формат даты. Используйте формат ДД.ММ.ГГГГ\n\n"
+            "Например: 20.10.2025"
+        )
+        return
+
+    day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+    try:
+        selected_date = date(year, month, day)
+    except ValueError:
+        await message.answer(
+            "❌ Некорректная дата. Проверьте правильность ввода."
+        )
+        return
+
+    # Проверяем что дата не в будущем
+    if selected_date > date.today():
+        await message.answer(
+            "❌ Нельзя вносить данные за будущую дату."
+        )
+        return
+
+    # Сохраняем выбранную дату и показываем меню ввода
+    await state.update_data(selected_date=selected_date)
+
+    user_id = message.from_user.id
+    metrics = await get_health_metrics_by_date(user_id, selected_date)
+
+    date_str = selected_date.strftime("%d.%m.%Y")
+
+    if metrics and (metrics.get('morning_pulse') or metrics.get('weight') or metrics.get('sleep_duration')):
+        message_text = f"📝 <b>Ваши данные на {date_str}</b>"
+    else:
+        message_text = f"📝 <b>Внесение данных за {date_str}</b>"
+
+    await message.answer(
+        message_text,
+        reply_markup=get_quick_input_keyboard(metrics),
+        parse_mode="HTML"
+    )
+    await state.set_state(None)
+
+
 # ============== Обработка ввода метрик ==============
 
 @router.message(HealthMetricsStates.waiting_for_pulse)
@@ -186,6 +338,7 @@ async def process_pulse(message: Message, state: FSMContext):
             "Ввод данных отменен.",
             reply_markup=ReplyKeyboardRemove()
         )
+        await return_to_health_menu(message)
         return
 
     if message.text == "⏭️ Пропустить":
@@ -235,6 +388,7 @@ async def process_weight(message: Message, state: FSMContext):
             "Ввод данных отменен.",
             reply_markup=ReplyKeyboardRemove()
         )
+        await return_to_health_menu(message)
         return
 
     if message.text == "⏭️ Пропустить":
@@ -290,6 +444,7 @@ async def process_sleep_duration(message: Message, state: FSMContext):
             "Ввод данных отменен.",
             reply_markup=ReplyKeyboardRemove()
         )
+        await return_to_health_menu(message)
         return
 
     if message.text == "⏭️ Пропустить":
@@ -382,16 +537,19 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
     data.update(extra_data)
 
     user_id = message.from_user.id if hasattr(message, 'from_user') else message.chat.id
-    today = date.today()
+
+    # Используем выбранную дату из state, или сегодня по умолчанию
+    metric_date = data.get('selected_date', date.today())
 
     # ОТЛАДКА: Логируем что в state
     logger.info(f"save_and_finish: data from state = {data}")
     logger.info(f"save_and_finish: extra_data = {extra_data}")
+    logger.info(f"save_and_finish: metric_date = {metric_date}")
 
     # Подготавливаем параметры для сохранения - передаем только заполненные значения
     save_params = {
         'user_id': user_id,
-        'metric_date': today
+        'metric_date': metric_date
     }
 
     # Добавляем только те параметры, которые были введены (не None)
@@ -444,14 +602,22 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
         )
 
         # Получаем обновленные метрики и возвращаем в меню ввода данных
-        updated_metrics = await get_health_metrics_by_date(user_id, today)
+        updated_metrics = await get_health_metrics_by_date(user_id, metric_date)
+
+        # Форматируем дату для отображения
+        date_str = metric_date.strftime("%d.%m.%Y")
+        is_today = metric_date == date.today()
 
         if updated_metrics and (updated_metrics.get('morning_pulse') or updated_metrics.get('weight') or updated_metrics.get('sleep_duration')):
-            message_text = "📝 <b>Ваши данные на сегодня</b>\n\n"
-            message_text += "Нажмите ✏️ чтобы изменить значение:"
+            if is_today:
+                message_text = "📝 <b>Ваши данные на сегодня</b>"
+            else:
+                message_text = f"📝 <b>Ваши данные на {date_str}</b>"
         else:
-            message_text = "📝 <b>Внесение данных</b>\n\n"
-            message_text += "Выберите, что хотите внести:"
+            if is_today:
+                message_text = "📝 <b>Внесение данных</b>"
+            else:
+                message_text = f"📝 <b>Внесение данных за {date_str}</b>"
 
         await message.answer(
             message_text,
@@ -469,13 +635,13 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
     # await state.clear()
 
 
-# ============== Статистика ==============
+# ============== Статистика и графики ==============
 
-@router.callback_query(F.data == "health:statistics")
-async def show_statistics_periods(callback: CallbackQuery):
-    """Выбор периода для статистики"""
+@router.callback_query(F.data == "health:stats_and_graphs")
+async def show_stats_graphs_periods(callback: CallbackQuery):
+    """Выбор периода для статистики и графиков"""
     await callback.message.edit_text(
-        "📊 <b>Статистика здоровья</b>\n\n"
+        "📊 <b>Статистика и графики</b>\n\n"
         "Выберите период:",
         reply_markup=get_stats_period_keyboard(),
         parse_mode="HTML"
@@ -483,32 +649,81 @@ async def show_statistics_periods(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("health_stats:"))
-async def show_statistics(callback: CallbackQuery):
-    """Показ статистики за период"""
-    days = int(callback.data.split(":")[1])
+@router.callback_query(F.data.startswith("health_stats_graphs:"))
+async def show_stats_and_graphs(callback: CallbackQuery):
+    """Показ статистики и графиков за период"""
+    period_param = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
-    await callback.message.edit_text(
-        "⏳ Загрузка статистики...",
-        reply_markup=None
-    )
+    await callback.answer("⏳ Загрузка данных...", show_alert=True)
 
-    stats = await get_health_statistics(user_id, days)
+    # Определяем период и название
+    if period_param == "week":
+        metrics = await get_current_week_metrics(user_id)
+        period_name = "эту неделю"
+    elif period_param == "month":
+        metrics = await get_current_month_metrics(user_id)
+        period_name = "этот месяц"
+    else:
+        # Для числовых значений - последние N дней
+        days = int(period_param)
+        metrics = await get_latest_health_metrics(user_id, days)
+        period_name = f"{days} дней"
 
-    if not stats:
+    # Вычисляем статистику на основе полученных метрик
+    if not metrics:
+        stats = {}
+    else:
+        pulse_values = [m['morning_pulse'] for m in metrics if m.get('morning_pulse')]
+        weight_values = [m['weight'] for m in metrics if m.get('weight')]
+        sleep_values = [m['sleep_duration'] for m in metrics if m.get('sleep_duration')]
+
+        from health.health_queries import _calculate_trend
+
+        stats = {
+            'total_days': len(metrics),
+            'pulse': {
+                'avg': sum(pulse_values) / len(pulse_values) if pulse_values else None,
+                'min': min(pulse_values) if pulse_values else None,
+                'max': max(pulse_values) if pulse_values else None,
+                'trend': _calculate_trend(pulse_values) if len(pulse_values) > 1 else None
+            },
+            'weight': {
+                'current': weight_values[-1] if weight_values else None,
+                'start': weight_values[0] if weight_values else None,
+                'change': (weight_values[-1] - weight_values[0]) if len(weight_values) > 1 else None,
+                'trend': _calculate_trend(weight_values) if len(weight_values) > 1 else None
+            },
+            'sleep': {
+                'avg': sum(sleep_values) / len(sleep_values) if sleep_values else None,
+                'min': min(sleep_values) if sleep_values else None,
+                'max': max(sleep_values) if sleep_values else None
+            }
+        }
+
+    if not stats and not metrics:
+        # Возвращаемся в главное меню здоровья
+        filled = await check_today_metrics_filled(user_id)
+        status_text = "📋 <b>Статус на сегодня:</b>\n"
+        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
         await callback.message.edit_text(
-            f"❌ Нет данных за последние {days} дней",
-            reply_markup=get_stats_period_keyboard()
+            f"❌ Нет данных за {period_name}\n\n"
+            f"❤️ <b>Здоровье и метрики</b>\n\n"
+            f"{status_text}\n"
+            f"Выберите действие:",
+            reply_markup=get_health_menu_keyboard(),
+            parse_mode="HTML"
         )
-        await callback.answer()
         return
 
     # Форматируем статистику
-    msg = f"📊 <b>Статистика за {days} дней</b>\n\n"
+    msg = f"📊 <b>Статистика за {period_name}</b>\n\n"
 
     # Пульс
-    if stats['pulse']['avg']:
+    if stats and stats['pulse']['avg']:
         msg += f"💗 <b>Утренний пульс:</b>\n"
         msg += f"   Среднее: {stats['pulse']['avg']:.1f} уд/мин\n"
         msg += f"   Диапазон: {stats['pulse']['min']} - {stats['pulse']['max']}\n"
@@ -517,7 +732,7 @@ async def show_statistics(callback: CallbackQuery):
         msg += f"   Тренд: {trend_emoji}\n\n"
 
     # Вес
-    if stats['weight']['current']:
+    if stats and stats['weight']['current']:
         msg += f"⚖️ <b>Вес:</b>\n"
         msg += f"   Текущий: {stats['weight']['current']:.1f} кг\n"
         if stats['weight']['change']:
@@ -529,7 +744,7 @@ async def show_statistics(callback: CallbackQuery):
         msg += f"   Тренд: {trend_emoji}\n\n"
 
     # Сон
-    if stats['sleep']['avg']:
+    if stats and stats['sleep']['avg']:
         # Форматируем среднюю длительность
         avg_hours = int(stats['sleep']['avg'])
         avg_minutes = int((stats['sleep']['avg'] - avg_hours) * 60)
@@ -558,60 +773,51 @@ async def show_statistics(callback: CallbackQuery):
         else:
             msg += f"   Оценка: ⚠️ Избыточно\n"
 
-    await callback.message.edit_text(
-        msg,
-        reply_markup=get_stats_period_keyboard(),
+    # Отправляем статистику
+    await callback.message.answer(msg, parse_mode="HTML")
+
+    # Генерируем и отправляем графики
+    if metrics:
+        try:
+            # Для генерации графика передаём количество дней (используем len(metrics) как приблизительное значение)
+            days_for_graph = len(metrics) if len(metrics) > 0 else 7
+            graph_buffer = await generate_health_graphs(metrics, days_for_graph)
+            photo = BufferedInputFile(graph_buffer.read(), filename=f"health_stats.png")
+            await callback.message.answer_photo(
+                photo=photo,
+                caption=f"📈 Графики метрик здоровья за {period_name}"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при генерации графиков: {e}")
+            await callback.message.answer("❌ Ошибка при генерации графиков")
+
+    # Возвращаем пользователя в главное меню здоровья
+    filled = await check_today_metrics_filled(user_id)
+    status_text = "📋 <b>Статус на сегодня:</b>\n"
+    status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+    status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+    status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
+    await callback.message.answer(
+        f"❤️ <b>Здоровье и метрики</b>\n\n"
+        f"{status_text}\n"
+        f"Выберите действие:",
+        reply_markup=get_health_menu_keyboard(),
         parse_mode="HTML"
     )
-    await callback.answer()
 
 
-# ============== Графики ==============
+# Оставляем старые обработчики для обратной совместимости
+@router.callback_query(F.data == "health:statistics")
+async def show_statistics_periods(callback: CallbackQuery):
+    """Выбор периода для статистики (перенаправление на новый обработчик)"""
+    await show_stats_graphs_periods(callback)
+
 
 @router.callback_query(F.data == "health:graphs")
 async def show_graphs_periods(callback: CallbackQuery):
-    """Выбор периода для графиков"""
-    await callback.message.edit_text(
-        "📈 <b>Графики метрик</b>\n\n"
-        "Выберите период:",
-        reply_markup=get_graphs_period_keyboard(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("health_graphs:"))
-async def show_graphs(callback: CallbackQuery):
-    """Показ графиков за период"""
-    days = int(callback.data.split(":")[1])
-    user_id = callback.from_user.id
-
-    await callback.answer("⏳ Генерация графиков...", show_alert=True)
-
-    metrics = await get_latest_health_metrics(user_id, days)
-
-    if not metrics:
-        await callback.message.answer(
-            f"❌ Нет данных за последние {days} дней"
-        )
-        return
-
-    try:
-        # Генерируем графики
-        graph_buffer = await generate_health_graphs(metrics, days)
-
-        # Отправляем как фото
-        photo = BufferedInputFile(graph_buffer.read(), filename=f"health_graphs_{days}d.png")
-        await callback.message.answer_photo(
-            photo=photo,
-            caption=f"📈 Графики метрик здоровья за {days} дней"
-        )
-
-    except Exception as e:
-        logger.error(f"Ошибка при генерации графиков: {e}")
-        await callback.message.answer(
-            "❌ Ошибка при генерации графиков"
-        )
+    """Выбор периода для графиков (перенаправление на новый обработчик)"""
+    await show_stats_graphs_periods(callback)
 
 
 # ============== Анализ сна ==============
@@ -627,9 +833,21 @@ async def show_sleep_analysis(callback: CallbackQuery):
     metrics = await get_latest_health_metrics(user_id, 30)
 
     if not metrics or len(metrics) < 3:
+        # Возвращаемся в главное меню здоровья
+        filled = await check_today_metrics_filled(user_id)
+        status_text = "📋 <b>Статус на сегодня:</b>\n"
+        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
         await callback.message.answer(
             "❌ Недостаточно данных для анализа.\n\n"
-            "Для полного анализа нужно минимум 3 дня с данными о сне."
+            "Для полного анализа нужно минимум 3 дня с данными о сне.\n\n"
+            f"❤️ <b>Здоровье и метрики</b>\n\n"
+            f"{status_text}\n"
+            f"Выберите действие:",
+            reply_markup=get_health_menu_keyboard(),
+            parse_mode="HTML"
         )
         return
 
@@ -654,10 +872,38 @@ async def show_sleep_analysis(callback: CallbackQuery):
             caption="📊 График анализа сна"
         )
 
+        # Возвращаем пользователя в главное меню здоровья
+        filled = await check_today_metrics_filled(user_id)
+        status_text = "📋 <b>Статус на сегодня:</b>\n"
+        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
+        await callback.message.answer(
+            f"❤️ <b>Здоровье и метрики</b>\n\n"
+            f"{status_text}\n"
+            f"Выберите действие:",
+            reply_markup=get_health_menu_keyboard(),
+            parse_mode="HTML"
+        )
+
     except Exception as e:
         logger.error(f"Ошибка при анализе сна: {e}")
+
+        # Возвращаемся в главное меню здоровья даже при ошибке
+        filled = await check_today_metrics_filled(user_id)
+        status_text = "📋 <b>Статус на сегодня:</b>\n"
+        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
         await callback.message.answer(
-            "❌ Ошибка при анализе данных"
+            "❌ Ошибка при анализе данных\n\n"
+            f"❤️ <b>Здоровье и метрики</b>\n\n"
+            f"{status_text}\n"
+            f"Выберите действие:",
+            reply_markup=get_health_menu_keyboard(),
+            parse_mode="HTML"
         )
 
 
@@ -675,3 +921,4 @@ async def cancel_handler(message: Message, state: FSMContext):
         "Действие отменено.",
         reply_markup=ReplyKeyboardRemove()
     )
+    await return_to_health_menu(message)
