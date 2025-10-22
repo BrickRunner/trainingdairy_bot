@@ -10,7 +10,8 @@
       "Bash(pip index:*)",
       "Bash(rustc:*)",
       "Bash(python:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\test_health_keyboard.py\")"
     ],
     "deny": [],
     "ask": []

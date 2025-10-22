@@ -25,27 +25,79 @@ async def save_health_metrics(
     energy_level: Optional[int] = None,
     notes: Optional[str] = None
 ) -> bool:
-    """Сохраняет метрики здоровья за день"""
+    """
+    Сохраняет метрики здоровья за день.
+    Обновляет только те поля, которые переданы (не None).
+    """
     try:
+        logger.info(f"save_health_metrics called: user_id={user_id}, date={metric_date}, "
+                   f"pulse={morning_pulse}, weight={weight}, sleep={sleep_duration}, quality={sleep_quality}")
+
         async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("""
-                INSERT INTO health_metrics
-                (user_id, date, morning_pulse, weight, sleep_duration, sleep_quality,
-                 mood, stress_level, energy_level, notes, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id, date) DO UPDATE SET
-                    morning_pulse = COALESCE(excluded.morning_pulse, morning_pulse),
-                    weight = COALESCE(excluded.weight, weight),
-                    sleep_duration = COALESCE(excluded.sleep_duration, sleep_duration),
-                    sleep_quality = COALESCE(excluded.sleep_quality, sleep_quality),
-                    mood = COALESCE(excluded.mood, mood),
-                    stress_level = COALESCE(excluded.stress_level, stress_level),
-                    energy_level = COALESCE(excluded.energy_level, energy_level),
-                    notes = COALESCE(excluded.notes, notes),
-                    updated_at = CURRENT_TIMESTAMP
-            """, (user_id, metric_date, morning_pulse, weight, sleep_duration,
-                  sleep_quality, mood, stress_level, energy_level, notes))
+            # Сначала проверяем, есть ли запись
+            async with db.execute(
+                "SELECT id FROM health_metrics WHERE user_id = ? AND date = ?",
+                (user_id, metric_date)
+            ) as cursor:
+                existing = await cursor.fetchone()
+                logger.info(f"Existing record: {existing}")
+
+            if existing:
+                # Запись существует - обновляем только переданные поля
+                update_parts = []
+                params = []
+
+                if morning_pulse is not None:
+                    update_parts.append("morning_pulse = ?")
+                    params.append(morning_pulse)
+                if weight is not None:
+                    update_parts.append("weight = ?")
+                    params.append(weight)
+                if sleep_duration is not None:
+                    update_parts.append("sleep_duration = ?")
+                    params.append(sleep_duration)
+                if sleep_quality is not None:
+                    update_parts.append("sleep_quality = ?")
+                    params.append(sleep_quality)
+                if mood is not None:
+                    update_parts.append("mood = ?")
+                    params.append(mood)
+                if stress_level is not None:
+                    update_parts.append("stress_level = ?")
+                    params.append(stress_level)
+                if energy_level is not None:
+                    update_parts.append("energy_level = ?")
+                    params.append(energy_level)
+                if notes is not None:
+                    update_parts.append("notes = ?")
+                    params.append(notes)
+
+                if update_parts:
+                    update_parts.append("updated_at = CURRENT_TIMESTAMP")
+                    params.extend([user_id, metric_date])
+
+                    query = f"""
+                        UPDATE health_metrics
+                        SET {', '.join(update_parts)}
+                        WHERE user_id = ? AND date = ?
+                    """
+                    logger.info(f"UPDATE query: {query}")
+                    logger.info(f"UPDATE params: {params}")
+                    await db.execute(query, params)
+            else:
+                # Записи нет - создаем новую
+                logger.info(f"INSERT new record with values: pulse={morning_pulse}, weight={weight}, "
+                           f"sleep={sleep_duration}, quality={sleep_quality}")
+                await db.execute("""
+                    INSERT INTO health_metrics
+                    (user_id, date, morning_pulse, weight, sleep_duration, sleep_quality,
+                     mood, stress_level, energy_level, notes, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (user_id, metric_date, morning_pulse, weight, sleep_duration,
+                      sleep_quality, mood, stress_level, energy_level, notes))
+
             await db.commit()
+            logger.info("Commit successful")
             return True
     except Exception as e:
         logger.error(f"Ошибка при сохранении метрик здоровья: {e}")

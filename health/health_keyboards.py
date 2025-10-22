@@ -4,6 +4,7 @@
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from typing import Optional, Dict
 
 
 def get_health_menu_keyboard() -> InlineKeyboardMarkup:
@@ -27,21 +28,75 @@ def get_health_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_quick_input_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для быстрого ввода данных"""
+def get_quick_input_keyboard(today_metrics: Optional[Dict] = None) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для быстрого ввода данных
+
+    Если today_metrics заполнены, показывает текущие значения с кнопками для изменения
+    Если нет - показывает кнопки для первичного ввода
+    """
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="✏️ Ввести всё", callback_data="health:input_all")
-    )
-    builder.row(
-        InlineKeyboardButton(text="💗 Только пульс", callback_data="health:input_pulse")
-    )
-    builder.row(
-        InlineKeyboardButton(text="⚖️ Только вес", callback_data="health:input_weight")
-    )
-    builder.row(
-        InlineKeyboardButton(text="😴 Только сон", callback_data="health:input_sleep")
-    )
+
+    # Если есть метрики сегодня, показываем текущие значения
+    if today_metrics:
+        # Пульс
+        if today_metrics.get('morning_pulse'):
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"💗 Пульс: {today_metrics['morning_pulse']} уд/мин (изменить)",
+                    callback_data="health:input_pulse"
+                )
+            )
+        else:
+            builder.row(
+                InlineKeyboardButton(text="💗 Добавить пульс", callback_data="health:input_pulse")
+            )
+
+        # Вес
+        if today_metrics.get('weight'):
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"⚖️ Вес: {today_metrics['weight']} кг (изменить)",
+                    callback_data="health:input_weight"
+                )
+            )
+        else:
+            builder.row(
+                InlineKeyboardButton(text="⚖️ Добавить вес", callback_data="health:input_weight")
+            )
+
+        # Сон
+        if today_metrics.get('sleep_duration'):
+            duration = today_metrics['sleep_duration']
+            hours = int(duration)
+            minutes = int((duration - hours) * 60)
+            sleep_text = f"{hours}ч {minutes}м" if minutes > 0 else f"{hours}ч"
+
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"😴 Сон: {sleep_text} (изменить)",
+                    callback_data="health:input_sleep"
+                )
+            )
+        else:
+            builder.row(
+                InlineKeyboardButton(text="😴 Добавить сон", callback_data="health:input_sleep")
+            )
+    else:
+        # Нет данных - показываем стандартные кнопки для ввода
+        builder.row(
+            InlineKeyboardButton(text="✏️ Ввести всё", callback_data="health:input_all")
+        )
+        builder.row(
+            InlineKeyboardButton(text="💗 Только пульс", callback_data="health:input_pulse")
+        )
+        builder.row(
+            InlineKeyboardButton(text="⚖️ Только вес", callback_data="health:input_weight")
+        )
+        builder.row(
+            InlineKeyboardButton(text="😴 Только сон", callback_data="health:input_sleep")
+        )
+
     builder.row(
         InlineKeyboardButton(text="🔙 Назад", callback_data="health:menu")
     )

@@ -62,7 +62,12 @@ async def health_menu(message: Message, state: FSMContext):
 @router.callback_query(F.data == "health:menu")
 async def health_menu_callback(callback: CallbackQuery, state: FSMContext):
     """Возврат в меню здоровья"""
-    await state.clear()
+    # НЕ очищаем state - пусть пользователь продолжит добавлять метрики
+    # await state.clear()
+
+    # Очищаем только состояние FSM, но оставляем данные
+    await state.set_state(None)
+
     user_id = callback.from_user.id
 
     filled = await check_today_metrics_filled(user_id)
@@ -87,10 +92,24 @@ async def health_menu_callback(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:add_metrics")
 async def choose_input_type(callback: CallbackQuery):
     """Выбор типа ввода метрик"""
+    user_id = callback.from_user.id
+
+    # Получаем метрики на сегодня
+    from datetime import date
+    today = date.today()
+    today_metrics = await get_health_metrics_by_date(user_id, today)
+
+    # Формируем текст сообщения
+    if today_metrics and (today_metrics.get('morning_pulse') or today_metrics.get('weight') or today_metrics.get('sleep_duration')):
+        message_text = "📝 <b>Ваши данные на сегодня</b>\n\n"
+        message_text += "Нажмите ✏️ чтобы изменить значение:"
+    else:
+        message_text = "📝 <b>Внесение данных</b>\n\n"
+        message_text += "Выберите, что хотите внести:"
+
     await callback.message.edit_text(
-        "📝 <b>Внесение данных</b>\n\n"
-        "Выберите, что хотите внести:",
-        reply_markup=get_quick_input_keyboard(),
+        message_text,
+        reply_markup=get_quick_input_keyboard(today_metrics),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -113,6 +132,7 @@ async def start_full_input(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:input_pulse")
 async def start_pulse_input(callback: CallbackQuery, state: FSMContext):
     """Ввод только пульса"""
+    # НЕ очищаем state - чтобы сохранить другие метрики!
     await callback.message.answer(
         "💗 Введите ваш <b>утренний пульс</b> (уд/мин):\n\n"
         "Например: 60",
@@ -128,6 +148,7 @@ async def start_pulse_input(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:input_weight")
 async def start_weight_input(callback: CallbackQuery, state: FSMContext):
     """Ввод только веса"""
+    # НЕ очищаем state - чтобы сохранить другие метрики!
     await callback.message.answer(
         "⚖️ Введите ваш <b>вес</b> (кг):\n\n"
         "Например: 75.5",
@@ -142,6 +163,7 @@ async def start_weight_input(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:input_sleep")
 async def start_sleep_input(callback: CallbackQuery, state: FSMContext):
     """Ввод только сна"""
+    # НЕ очищаем state - чтобы сохранить другие метрики!
     await callback.message.answer(
         "😴 Введите <b>длительность сна</b> (часы):\n\n"
         "Например: 7.5 или 8",
@@ -362,15 +384,31 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
     user_id = message.from_user.id if hasattr(message, 'from_user') else message.chat.id
     today = date.today()
 
+    # ОТЛАДКА: Логируем что в state
+    logger.info(f"save_and_finish: data from state = {data}")
+    logger.info(f"save_and_finish: extra_data = {extra_data}")
+
+    # Подготавливаем параметры для сохранения - передаем только заполненные значения
+    save_params = {
+        'user_id': user_id,
+        'metric_date': today
+    }
+
+    # Добавляем только те параметры, которые были введены (не None)
+    if 'pulse' in data and data['pulse'] is not None:
+        save_params['morning_pulse'] = data['pulse']
+    if 'weight' in data and data['weight'] is not None:
+        save_params['weight'] = data['weight']
+    if 'sleep_duration' in data and data['sleep_duration'] is not None:
+        save_params['sleep_duration'] = data['sleep_duration']
+    if 'sleep_quality' in data and data['sleep_quality'] is not None:
+        save_params['sleep_quality'] = data['sleep_quality']
+
+    # ОТЛАДКА: Логируем что передаем в БД
+    logger.info(f"save_and_finish: save_params = {save_params}")
+
     # Сохраняем в БД
-    success = await save_health_metrics(
-        user_id=user_id,
-        metric_date=today,
-        morning_pulse=data.get('pulse'),
-        weight=data.get('weight'),
-        sleep_duration=data.get('sleep_duration'),
-        sleep_quality=data.get('sleep_quality')
-    )
+    success = await save_health_metrics(**save_params)
 
     if success:
         # Формируем сообщение о сохраненных данных
@@ -405,10 +443,19 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
             parse_mode="HTML"
         )
 
-        # Возвращаем в меню здоровья
+        # Получаем обновленные метрики и возвращаем в меню ввода данных
+        updated_metrics = await get_health_metrics_by_date(user_id, today)
+
+        if updated_metrics and (updated_metrics.get('morning_pulse') or updated_metrics.get('weight') or updated_metrics.get('sleep_duration')):
+            message_text = "📝 <b>Ваши данные на сегодня</b>\n\n"
+            message_text += "Нажмите ✏️ чтобы изменить значение:"
+        else:
+            message_text = "📝 <b>Внесение данных</b>\n\n"
+            message_text += "Выберите, что хотите внести:"
+
         await message.answer(
-            "❤️ <b>Здоровье и метрики</b>\n\nВыберите действие:",
-            reply_markup=get_health_menu_keyboard(),
+            message_text,
+            reply_markup=get_quick_input_keyboard(updated_metrics),
             parse_mode="HTML"
         )
     else:
@@ -417,7 +464,9 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
             reply_markup=ReplyKeyboardRemove()
         )
 
-    await state.clear()
+    # НЕ очищаем state - чтобы пользователь мог добавлять другие метрики
+    # State будет очищен только когда пользователь выйдет из раздела здоровья
+    # await state.clear()
 
 
 # ============== Статистика ==============
