@@ -71,6 +71,7 @@ async def send_daily_reminders(bot: Bot):
     """
     import aiosqlite
     import os
+    from health.health_keyboards import get_daily_reminder_keyboard
 
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
@@ -118,15 +119,19 @@ async def send_daily_reminders(bot: Bot):
                 # Отправляем напоминание только если есть незаполненные метрики
                 if missing_metrics:
                     reminder_message = (
-                        f"⏰ **Доброе утро, {name}!** 👋\n\n"
-                        "Не забудь внести данные о здоровье:\n" +
+                        f"⏰ <b>Доброе утро, {name}!</b> 👋\n\n"
+                        "Время внести данные о здоровье:\n" +
                         "\n".join(missing_metrics) +
-                        "\n\nПерейди в раздел ❤️ Здоровье → 📝 Внести данные\n\n"
-                        "Регулярное отслеживание поможет лучше понимать свой организм! 📊"
+                        "\n\n❓ Хочешь внести данные сейчас?"
                     )
 
                     try:
-                        await bot.send_message(user_id, reminder_message, parse_mode="Markdown")
+                        await bot.send_message(
+                            user_id,
+                            reminder_message,
+                            reply_markup=get_daily_reminder_keyboard(),
+                            parse_mode="HTML"
+                        )
                     except Exception as e:
                         print(f"Ошибка отправки напоминания пользователю {user_id}: {e}")
 

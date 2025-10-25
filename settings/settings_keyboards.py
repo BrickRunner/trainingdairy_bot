@@ -227,13 +227,13 @@ def get_date_format_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
     builder.row(
-        InlineKeyboardButton(text="📅 ДД.ММ.ГГГГ", callback_data="date_format:DD.MM.YYYY")
+        InlineKeyboardButton(text="📅 ДД.ММ.ГГГГ", callback_data="date_format:ДД.ММ.ГГГГ")
     )
     builder.row(
-        InlineKeyboardButton(text="📅 ММ/ДД/ГГГГ", callback_data="date_format:MM/DD/YYYY")
+        InlineKeyboardButton(text="📅 ММ/ДД/ГГГГ", callback_data="date_format:ММ/ДД/ГГГГ")
     )
     builder.row(
-        InlineKeyboardButton(text="📅 ГГГГ-ММ-ДД", callback_data="date_format:YYYY-MM-DD")
+        InlineKeyboardButton(text="📅 ГГГГ-ММ-ДД", callback_data="date_format:ГГГГ-ММ-ДД")
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:units")

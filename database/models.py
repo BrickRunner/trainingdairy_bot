@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
     -- Единицы измерения
     distance_unit TEXT DEFAULT 'км',
     weight_unit TEXT DEFAULT 'кг',
-    date_format TEXT DEFAULT 'DD.MM.YYYY',
+    date_format TEXT DEFAULT 'ДД.ММ.ГГГГ',
     
     -- Уведомления
     daily_pulse_weight_time TEXT,

@@ -151,7 +151,7 @@ async def send_units_menu(message: Message, user_id: int):
     if settings:
         info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
         info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
-        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
     
     info_text += "\nВыберите параметр для изменения:"
     
@@ -1083,7 +1083,7 @@ async def callback_units_menu(callback: CallbackQuery):
     if settings:
         info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
         info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
-        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
     
     info_text += "\nВыберите параметр для изменения:"
     
@@ -1121,7 +1121,7 @@ async def callback_save_distance_unit(callback: CallbackQuery):
     if settings:
         info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
         info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
-        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
 
     info_text += "\nВыберите параметр для изменения:"
 
@@ -1161,7 +1161,7 @@ async def callback_save_weight_unit(callback: CallbackQuery):
         if settings:
             info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
             info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
-            info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+            info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
 
         info_text += "\nВыберите параметр для изменения:"
 
@@ -1187,7 +1187,7 @@ async def callback_save_weight_unit(callback: CallbackQuery):
     if settings:
         info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
         info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
-        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
 
     info_text += "\nВыберите параметр для изменения:"
 
@@ -1225,7 +1225,7 @@ async def callback_save_date_format(callback: CallbackQuery):
     if settings:
         info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
         info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
-        info_text += f"📅 Формат даты: {settings.get('date_format', 'DD.MM.YYYY')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
 
     info_text += "\nВыберите параметр для изменения:"
 

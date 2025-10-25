@@ -10,7 +10,7 @@ from datetime import date, timedelta
 import re
 import logging
 
-from health.health_fsm import HealthMetricsStates
+from health.health_fsm import HealthMetricsStates, HealthExportStates
 from health.health_keyboards import (
     get_health_menu_keyboard,
     get_quick_input_keyboard,
@@ -19,7 +19,8 @@ from health.health_keyboards import (
     get_graphs_period_keyboard,
     get_cancel_keyboard,
     get_skip_cancel_keyboard,
-    get_date_choice_keyboard
+    get_date_choice_keyboard,
+    get_export_period_keyboard
 )
 from health.health_queries import (
     save_health_metrics,
@@ -32,12 +33,37 @@ from health.health_queries import (
 )
 from health.health_graphs import generate_health_graphs, generate_sleep_quality_graph
 from health.sleep_analysis import SleepAnalyzer, format_sleep_analysis_message
+from utils.date_formatter import DateFormatter, get_user_date_format
 
 router = Router()
 logger = logging.getLogger(__name__)
 
 
 # ============== Вспомогательные функции ==============
+
+async def format_date_for_user(date_obj: date, user_id: int) -> str:
+    """Форматировать дату согласно настройкам пользователя"""
+    user_format = await get_user_date_format(user_id)
+    return DateFormatter.format_date(date_obj, user_format)
+
+
+async def get_date_format_description(user_id: int) -> str:
+    """Получить описание формата даты для пользователя"""
+    user_format = await get_user_date_format(user_id)
+    return DateFormatter.get_format_description(user_format)
+
+
+async def get_date_validation_pattern(user_id: int) -> str:
+    """Получить паттерн валидации для формата даты пользователя"""
+    user_format = await get_user_date_format(user_id)
+    return DateFormatter.get_validation_pattern(user_format)
+
+
+async def parse_user_date(date_str: str, user_id: int) -> date:
+    """Распарсить дату из строки согласно настройкам пользователя"""
+    user_format = await get_user_date_format(user_id)
+    return DateFormatter.parse_date(date_str, user_format)
+
 
 async def return_to_health_menu(message: Message):
     """Возврат в главное меню здоровья"""
@@ -202,19 +228,103 @@ async def start_sleep_input(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:choose_date")
 async def choose_date_for_metrics(callback: CallbackQuery, state: FSMContext):
     """Выбор даты для внесения данных"""
+    from bot.calendar_keyboard import CalendarKeyboard
+    from datetime import datetime
+
+    # Создаем календарь
+    calendar_keyboard = CalendarKeyboard.create_calendar(
+        calendar_format=1,
+        current_date=datetime.now(),
+        callback_prefix="healthcal"
+    )
+
+    # Отправляем календарь как инлайн-клавиатуру и обычные кнопки одновременно
     await callback.message.answer(
         "📅 <b>За какую дату вы хотите внести данные?</b>",
         reply_markup=get_date_choice_keyboard(),
         parse_mode="HTML"
     )
+
+    # Отправляем календарь
+    await callback.message.answer(
+        "Выберите дату:",
+        reply_markup=calendar_keyboard
+    )
+
     await callback.message.delete()
-    await state.set_state(HealthMetricsStates.waiting_for_date_choice)
+    await state.set_state(HealthMetricsStates.waiting_for_calendar_date)
     await callback.answer()
 
 
-@router.message(HealthMetricsStates.waiting_for_date_choice)
+# ============== Обработка календаря ==============
+
+@router.callback_query(F.data.startswith("healthcal_"))
+async def process_health_calendar(callback: CallbackQuery, state: FSMContext):
+    """Обработка навигации и выбора даты в календаре здоровья"""
+    from bot.calendar_keyboard import CalendarKeyboard
+
+    callback_data = callback.data
+    logger.info(f"=== CALENDAR CALLBACK RECEIVED: {callback_data} ===")
+    logger.info(f"Current state: {await state.get_state()}")
+
+    # Обработка навигации
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="healthcal")
+    logger.info(f"Navigation result: {new_keyboard is not None}")
+
+    if new_keyboard:
+        # Это навигация - обновляем календарь
+        await callback.message.edit_reply_markup(reply_markup=new_keyboard)
+        await callback.answer()
+        return
+
+    # Это выбор даты (action=select, format=1)
+    parsed = CalendarKeyboard.parse_callback_data(callback_data)
+    logger.info(f"Parsed callback data: {parsed}")
+    logger.info(f"Action: {parsed.get('action')}, Format: {parsed.get('format')}, Date: {parsed.get('date')}")
+
+    if parsed.get("action") == "select" and parsed.get("format") == 1:
+        logger.info(">>> DATE SELECTION BLOCK ENTERED <<<")
+        selected_date = parsed["date"].date()
+
+        # Проверяем что дата не в будущем
+        if selected_date > date.today():
+            await callback.answer("❌ Нельзя вносить данные за будущую дату.", show_alert=True)
+            return
+
+        # Сохраняем выбранную дату
+        await state.update_data(selected_date=selected_date)
+
+        user_id = callback.from_user.id
+        metrics = await get_health_metrics_by_date(user_id, selected_date)
+
+        date_str = await format_date_for_user(selected_date, user_id)
+
+        if metrics and (metrics.get('morning_pulse') or metrics.get('weight') or metrics.get('sleep_duration')):
+            message_text = f"📝 <b>Ваши данные на {date_str}</b>"
+        else:
+            message_text = f"📝 <b>Внесение данных за {date_str}</b>"
+
+        await callback.message.answer(
+            message_text,
+            reply_markup=get_quick_input_keyboard(metrics),
+            parse_mode="HTML"
+        )
+
+        # Удаляем календарь
+        await callback.message.delete()
+
+        # Очищаем состояние
+        await state.set_state(None)
+        await callback.answer()
+    else:
+        logger.warning(f"❌ Date selection condition NOT met. Action='{parsed.get('action')}', Format={parsed.get('format')}")
+        logger.warning(f"Full parsed data: {parsed}")
+        await callback.answer("⚠️ Ошибка обработки календаря. Попробуйте еще раз.")
+
+
+@router.message(HealthMetricsStates.waiting_for_calendar_date)
 async def process_date_choice(message: Message, state: FSMContext):
-    """Обработка выбора даты"""
+    """Обработка выбора даты через быстрые кнопки"""
     if message.text == "❌ Отменить":
         await state.set_state(None)
         await message.answer(
@@ -232,15 +342,6 @@ async def process_date_choice(message: Message, state: FSMContext):
         selected_date = today - timedelta(days=1)
     elif message.text == "📅 Позавчера":
         selected_date = today - timedelta(days=2)
-    elif message.text == "📝 Ввести дату":
-        await message.answer(
-            "📅 Введите дату в формате ДД.ММ.ГГГГ\n\n"
-            "Например: 20.10.2025",
-            reply_markup=get_cancel_keyboard(),
-            parse_mode="HTML"
-        )
-        await state.set_state(HealthMetricsStates.waiting_for_custom_date)
-        return
     else:
         await message.answer(
             "❌ Неверный выбор. Используйте кнопки."
@@ -253,7 +354,7 @@ async def process_date_choice(message: Message, state: FSMContext):
     user_id = message.from_user.id
     metrics = await get_health_metrics_by_date(user_id, selected_date)
 
-    date_str = selected_date.strftime("%d.%m.%Y")
+    date_str = await format_date_for_user(selected_date, user_id)
 
     if metrics and (metrics.get('morning_pulse') or metrics.get('weight') or metrics.get('sleep_duration')):
         message_text = f"📝 <b>Ваши данные на {date_str}</b>"
@@ -280,22 +381,15 @@ async def process_custom_date(message: Message, state: FSMContext):
         await return_to_health_menu(message)
         return
 
-    # Парсим дату
-    match = re.match(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', message.text)
-    if not match:
-        await message.answer(
-            "❌ Неверный формат даты. Используйте формат ДД.ММ.ГГГГ\n\n"
-            "Например: 20.10.2025"
-        )
-        return
+    user_id = message.from_user.id
 
-    day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
-
+    # Парсим дату с использованием пользовательского формата
     try:
-        selected_date = date(year, month, day)
+        selected_date = await parse_user_date(message.text, user_id)
     except ValueError:
+        date_format_desc = await get_date_format_description(user_id)
         await message.answer(
-            "❌ Некорректная дата. Проверьте правильность ввода."
+            f"❌ Неверный формат даты. Используйте формат {date_format_desc}"
         )
         return
 
@@ -309,10 +403,9 @@ async def process_custom_date(message: Message, state: FSMContext):
     # Сохраняем выбранную дату и показываем меню ввода
     await state.update_data(selected_date=selected_date)
 
-    user_id = message.from_user.id
     metrics = await get_health_metrics_by_date(user_id, selected_date)
 
-    date_str = selected_date.strftime("%d.%m.%Y")
+    date_str = await format_date_for_user(selected_date, user_id)
 
     if metrics and (metrics.get('morning_pulse') or metrics.get('weight') or metrics.get('sleep_duration')):
         message_text = f"📝 <b>Ваши данные на {date_str}</b>"
@@ -526,22 +619,29 @@ async def process_sleep_quality(callback: CallbackQuery, state: FSMContext):
         quality = int(quality_str)
         await state.update_data(sleep_quality=quality)
 
-    # Сохраняем данные
-    await save_and_finish(callback.message, state)
+    # Сохраняем данные (передаем user_id из callback)
+    await save_and_finish(callback.message, state, user_id=callback.from_user.id)
     await callback.answer()
 
 
 async def save_and_finish(message: Message, state: FSMContext, **extra_data):
     """Сохранение данных и завершение"""
     data = await state.get_data()
-    data.update(extra_data)
 
-    user_id = message.from_user.id if hasattr(message, 'from_user') else message.chat.id
+    # Извлекаем user_id из extra_data, если передан
+    user_id = extra_data.pop('user_id', None)
+
+    # Если user_id не передан, пытаемся получить из message
+    if user_id is None:
+        user_id = message.from_user.id if hasattr(message, 'from_user') else message.chat.id
+
+    data.update(extra_data)
 
     # Используем выбранную дату из state, или сегодня по умолчанию
     metric_date = data.get('selected_date', date.today())
 
     # ОТЛАДКА: Логируем что в state
+    logger.info(f"save_and_finish: user_id = {user_id}")
     logger.info(f"save_and_finish: data from state = {data}")
     logger.info(f"save_and_finish: extra_data = {extra_data}")
     logger.info(f"save_and_finish: metric_date = {metric_date}")
@@ -578,8 +678,11 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
         if data.get('sleep_duration'):
             # Форматируем длительность сна
             duration = data['sleep_duration']
-            hours = int(duration)
-            minutes = int((duration - hours) * 60)
+            # Преобразуем в минуты, округляем, потом обратно в часы и минуты
+            # Это избегает проблем с точностью float
+            total_minutes = round(duration * 60)
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
             if minutes > 0:
                 saved_items.append(f"😴 Сон: {hours} ч {minutes} мин")
             else:
@@ -605,7 +708,7 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
         updated_metrics = await get_health_metrics_by_date(user_id, metric_date)
 
         # Форматируем дату для отображения
-        date_str = metric_date.strftime("%d.%m.%Y")
+        date_str = await format_date_for_user(metric_date, user_id)
         is_today = metric_date == date.today()
 
         if updated_metrics and (updated_metrics.get('morning_pulse') or updated_metrics.get('weight') or updated_metrics.get('sleep_duration')):
@@ -655,20 +758,33 @@ async def show_stats_and_graphs(callback: CallbackQuery):
     period_param = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
+    logger.info(f"=== SHOW_STATS_AND_GRAPHS CALLED ===")
+    logger.info(f"User ID: {user_id}")
+    logger.info(f"Period param: {period_param}")
+
     await callback.answer("⏳ Загрузка данных...", show_alert=True)
 
     # Определяем период и название
     if period_param == "week":
         metrics = await get_current_week_metrics(user_id)
         period_name = "эту неделю"
+        logger.info(f"Period: CURRENT WEEK")
     elif period_param == "month":
         metrics = await get_current_month_metrics(user_id)
         period_name = "этот месяц"
+        logger.info(f"Period: CURRENT MONTH")
     else:
         # Для числовых значений - последние N дней
         days = int(period_param)
         metrics = await get_latest_health_metrics(user_id, days)
         period_name = f"{days} дней"
+        logger.info(f"Period: LAST {days} DAYS")
+
+    logger.info(f"Metrics retrieved: {len(metrics)} records")
+    if metrics:
+        logger.info("Dates in metrics:")
+        for m in metrics:
+            logger.info(f"  {m['date']}: pulse={m.get('morning_pulse')}, weight={m.get('weight')}, sleep={m.get('sleep_duration')}")
 
     # Вычисляем статистику на основе полученных метрик
     if not metrics:
@@ -747,17 +863,26 @@ async def show_stats_and_graphs(callback: CallbackQuery):
     if stats and stats['sleep']['avg']:
         # Форматируем среднюю длительность
         avg_hours = int(stats['sleep']['avg'])
-        avg_minutes = int((stats['sleep']['avg'] - avg_hours) * 60)
+        avg_minutes = round((stats['sleep']['avg'] - avg_hours) * 60)
+        if avg_minutes == 60:
+            avg_hours += 1
+            avg_minutes = 0
         avg_text = f"{avg_hours} ч {avg_minutes} мин" if avg_minutes > 0 else f"{avg_hours} ч"
 
         # Форматируем минимум
         min_hours = int(stats['sleep']['min'])
-        min_minutes = int((stats['sleep']['min'] - min_hours) * 60)
+        min_minutes = round((stats['sleep']['min'] - min_hours) * 60)
+        if min_minutes == 60:
+            min_hours += 1
+            min_minutes = 0
         min_text = f"{min_hours}:{min_minutes:02d}" if min_minutes > 0 else f"{min_hours}:00"
 
         # Форматируем максимум
         max_hours = int(stats['sleep']['max'])
-        max_minutes = int((stats['sleep']['max'] - max_hours) * 60)
+        max_minutes = round((stats['sleep']['max'] - max_hours) * 60)
+        if max_minutes == 60:
+            max_hours += 1
+            max_minutes = 0
         max_text = f"{max_hours}:{max_minutes:02d}" if max_minutes > 0 else f"{max_hours}:00"
 
         msg += f"😴 <b>Сон:</b>\n"
@@ -779,16 +904,24 @@ async def show_stats_and_graphs(callback: CallbackQuery):
     # Генерируем и отправляем графики
     if metrics:
         try:
-            # Для генерации графика передаём количество дней (используем len(metrics) как приблизительное значение)
-            days_for_graph = len(metrics) if len(metrics) > 0 else 7
-            graph_buffer = await generate_health_graphs(metrics, days_for_graph)
+            logger.info(f"Generating graph with {len(metrics)} metrics, period_name={period_name}")
+            logger.info(f"Metrics being passed to graph generation:")
+            for m in metrics:
+                logger.info(f"  {m['date']}: pulse={m.get('morning_pulse')}, weight={m.get('weight')}, sleep={m.get('sleep_duration')}")
+
+            graph_buffer = await generate_health_graphs(metrics, period_name)
+            logger.info(f"Graph generated successfully, buffer size: {len(graph_buffer.getvalue())} bytes")
+
             photo = BufferedInputFile(graph_buffer.read(), filename=f"health_stats.png")
             await callback.message.answer_photo(
                 photo=photo,
                 caption=f"📈 Графики метрик здоровья за {period_name}"
             )
+            logger.info("Graph sent to user successfully")
         except Exception as e:
             logger.error(f"Ошибка при генерации графиков: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             await callback.message.answer("❌ Ошибка при генерации графиков")
 
     # Возвращаем пользователя в главное меню здоровья
@@ -865,7 +998,7 @@ async def show_sleep_analysis(callback: CallbackQuery):
         )
 
         # Генерируем график сна
-        graph_buffer = await generate_sleep_quality_graph(metrics, 30)
+        graph_buffer = await generate_sleep_quality_graph(metrics, "30 дней")
         photo = BufferedInputFile(graph_buffer.read(), filename="sleep_analysis.png")
         await callback.message.answer_photo(
             photo=photo,
@@ -922,3 +1055,322 @@ async def cancel_handler(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()
     )
     await return_to_health_menu(message)
+
+
+# ============== Экспорт в PDF ==============
+
+@router.callback_query(F.data == "health:export_pdf")
+async def show_export_periods(callback: CallbackQuery):
+    """Показать выбор периода для экспорта"""
+    await callback.message.edit_text(
+        "📄 <b>Экспорт данных здоровья в PDF</b>\n\n"
+        "Выберите период для экспорта:",
+        reply_markup=get_export_period_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("health_export:"))
+async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
+    """Экспорт данных здоровья в PDF"""
+    period_param = callback.data.split(":")[1]
+    user_id = callback.from_user.id
+
+    # Если выбран произвольный период - запрашиваем даты
+    if period_param == "custom":
+        user_id = callback.from_user.id
+        date_format_desc = await get_date_format_description(user_id)
+        await callback.message.edit_text(
+            f"📅 <b>Произвольный период</b>\n\n"
+            f"Введите дату начала периода в формате {date_format_desc}",
+            parse_mode="HTML"
+        )
+        await state.set_state(HealthExportStates.waiting_for_start_date)
+        await callback.answer()
+        return
+
+    await callback.answer("⏳ Генерирую PDF...", show_alert=True)
+
+    try:
+        # Импортируем функцию экспорта
+        from health.health_pdf_export import create_health_pdf
+
+        # Генерируем PDF
+        pdf_buffer = await create_health_pdf(user_id, period_param)
+
+        # Определяем название периода для имени файла и caption
+        if period_param == "week":
+            period_name = "неделю"
+            filename_part = "week"
+        elif period_param == "month":
+            period_name = "месяц"
+            filename_part = "month"
+        elif period_param == "180":
+            period_name = "полгода"
+            filename_part = "6months"
+        elif period_param == "365":
+            period_name = "год"
+            filename_part = "year"
+        else:
+            period_name = f"{period_param} дней"
+            filename_part = f"{period_param}days"
+
+        # Формируем имя файла
+        filename = f"health_{filename_part}_{date.today().strftime('%Y%m%d')}.pdf"
+
+        # Отправляем PDF
+        document = BufferedInputFile(pdf_buffer.read(), filename=filename)
+        await callback.message.answer_document(
+            document=document,
+            caption=f"📄 Экспорт данных здоровья за {period_name}"
+        )
+
+        logger.info(f"PDF экспорт здоровья успешно создан для пользователя {user_id}, период: {period_param}")
+
+        # Возвращаем в меню
+        filled = await check_today_metrics_filled(user_id)
+        status_text = "📋 <b>Статус на сегодня:</b>\n"
+        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
+        await callback.message.answer(
+            f"❤️ <b>Здоровье и метрики</b>\n\n"
+            f"{status_text}\n"
+            f"Выберите действие:",
+            reply_markup=get_health_menu_keyboard(),
+            parse_mode="HTML"
+        )
+
+    except ValueError as e:
+        logger.error(f"Ошибка при экспорте PDF: {e}")
+        await callback.message.answer(
+            f"❌ {str(e)}\n\n"
+            "Попробуйте выбрать другой период или внесите больше данных."
+        )
+
+        # Возвращаем в меню
+        filled = await check_today_metrics_filled(user_id)
+        status_text = "📋 <b>Статус на сегодня:</b>\n"
+        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
+        await callback.message.answer(
+            f"❤️ <b>Здоровье и метрики</b>\n\n"
+            f"{status_text}\n"
+            f"Выберите действие:",
+            reply_markup=get_health_menu_keyboard(),
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при экспорте PDF: {e}", exc_info=True)
+        await callback.message.answer(
+            "❌ Произошла ошибка при генерации PDF. Попробуйте позже."
+        )
+
+        # Возвращаем в меню
+        filled = await check_today_metrics_filled(user_id)
+        status_text = "📋 <b>Статус на сегодня:</b>\n"
+        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
+        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
+        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+
+        await callback.message.answer(
+            f"❤️ <b>Здоровье и метрики</b>\n\n"
+            f"{status_text}\n"
+            f"Выберите действие:",
+            reply_markup=get_health_menu_keyboard(),
+            parse_mode="HTML"
+        )
+
+# ============== Обработчики для произвольного периода экспорта ==============
+
+@router.message(HealthExportStates.waiting_for_start_date)
+async def process_export_start_date(message: Message, state: FSMContext):
+    """Обработка даты начала периода экспорта"""
+    user_id = message.from_user.id
+
+    try:
+        # Парсим дату с использованием пользовательского формата
+        start_date = await parse_user_date(message.text, user_id)
+
+        # Проверяем, что дата не в будущем
+        if start_date > date.today():
+            await message.answer(
+                "❌ Дата начала не может быть в будущем!\n\n"
+                "Введите корректную дату:"
+            )
+            return
+
+        # Сохраняем дату начала
+        await state.update_data(export_start_date=start_date)
+
+        # Запрашиваем дату окончания
+        date_format_desc = await get_date_format_description(user_id)
+        formatted_start = await format_date_for_user(start_date, user_id)
+        await message.answer(
+            f"✅ Дата начала: {formatted_start}\n\n"
+            f"📅 Теперь введите дату окончания периода в формате {date_format_desc}"
+        )
+        await state.set_state(HealthExportStates.waiting_for_end_date)
+
+    except ValueError:
+        date_format_desc = await get_date_format_description(user_id)
+        await message.answer(
+            f"❌ Неверный формат даты!\n\n"
+            f"Введите дату в формате {date_format_desc}"
+        )
+
+
+@router.message(HealthExportStates.waiting_for_end_date)
+async def process_export_end_date(message: Message, state: FSMContext):
+    """Обработка даты окончания периода экспорта и генерация PDF"""
+    user_id = message.from_user.id
+
+    try:
+        # Парсим дату с использованием пользовательского формата
+        end_date = await parse_user_date(message.text, user_id)
+
+        # Проверяем, что дата не в будущем
+        if end_date > date.today():
+            await message.answer(
+                "❌ Дата окончания не может быть в будущем!\n\n"
+                "Введите корректную дату:"
+            )
+            return
+
+        # Получаем дату начала
+        data = await state.get_data()
+        start_date = data.get('export_start_date')
+
+        # Проверяем, что дата окончания не раньше даты начала
+        if end_date < start_date:
+            formatted_start = await format_date_for_user(start_date, user_id)
+            await message.answer(
+                f"❌ Дата окончания не может быть раньше даты начала!\n\n"
+                f"Дата начала: {formatted_start}\n"
+                f"Введите дату окончания (не раньше даты начала):"
+            )
+            return
+
+        # Очищаем состояние
+        await state.clear()
+
+        # Показываем сообщение о генерации
+        wait_msg = await message.answer("⏳ Генерирую PDF...")
+
+        try:
+            # Импортируем функцию экспорта
+            from health.health_pdf_export import create_health_pdf
+            from health.health_queries import get_health_metrics_range
+
+            # Получаем метрики за произвольный период
+            metrics = await get_health_metrics_range(user_id, start_date, end_date)
+
+            if not metrics:
+                await wait_msg.delete()
+                formatted_start = await format_date_for_user(start_date, user_id)
+                formatted_end = await format_date_for_user(end_date, user_id)
+                await message.answer(
+                    f"❌ Нет данных за период с {formatted_start} по {formatted_end}\n\n"
+                    "Попробуйте выбрать другой период."
+                )
+                await return_to_health_menu(message)
+                return
+
+            # Генерируем PDF с произвольным периодом
+            formatted_start = await format_date_for_user(start_date, user_id)
+            formatted_end = await format_date_for_user(end_date, user_id)
+            period_name = f"{formatted_start} - {formatted_end}"
+
+            # Создаем специальный параметр для произвольного периода
+            await state.update_data(custom_metrics=metrics, custom_period_name=period_name)
+
+            # Генерируем PDF (передаем специальный параметр "custom_STARTDATE_ENDDATE")
+            period_param = f"custom_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
+            pdf_buffer = await create_health_pdf(user_id, period_param)
+
+            # Очищаем временные данные
+            await state.clear()
+
+            # Формируем имя файла
+            filename = f"health_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.pdf"
+
+            # Удаляем сообщение о генерации
+            await wait_msg.delete()
+
+            # Отправляем PDF
+            document = BufferedInputFile(pdf_buffer.read(), filename=filename)
+            await message.answer_document(
+                document=document,
+                caption=f"📄 Экспорт данных здоровья за период:\n{period_name}"
+            )
+
+            logger.info(f"PDF экспорт здоровья (произвольный период) успешно создан для пользователя {user_id}")
+
+            # Возвращаем в меню
+            await return_to_health_menu(message)
+
+        except Exception as e:
+            logger.error(f"Ошибка при экспорте PDF (произвольный период): {e}", exc_info=True)
+            await wait_msg.delete()
+            await message.answer(
+                "❌ Произошла ошибка при генерации PDF. Попробуйте позже."
+            )
+            await return_to_health_menu(message)
+
+    except ValueError:
+        date_format_desc = await get_date_format_description(user_id)
+        await message.answer(
+            f"❌ Неверный формат даты!\n\n"
+            f"Введите дату в формате {date_format_desc}"
+        )
+
+# ============== Обработчик ежедневного напоминания ==============
+
+@router.callback_query(F.data == "daily_reminder:yes")
+async def handle_daily_reminder_yes(callback: CallbackQuery, state: FSMContext):
+    """Обработка согласия на ввод данных из ежедневного напоминания"""
+    await callback.answer()
+
+    user_id = callback.from_user.id
+
+    # Очищаем состояние на всякий случай
+    await state.clear()
+
+    # Устанавливаем сегодняшнюю дату
+    today = date.today()
+    await state.update_data(selected_date=today)
+
+    # Проверяем какие метрики уже заполнены
+    metrics = await get_health_metrics_by_date(user_id, today)
+
+    # Удаляем сообщение с напоминанием
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    # Начинаем полный ввод всех метрик
+    await callback.message.answer(
+        "💗 Введите ваш <b>утренний пульс</b> (уд/мин):\n\n"
+        "Например: 60",
+        reply_markup=get_skip_cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    await state.set_state(HealthMetricsStates.waiting_for_pulse)
+
+
+@router.callback_query(F.data == "daily_reminder:no")
+async def handle_daily_reminder_no(callback: CallbackQuery):
+    """Обработка отказа от ввода данных из ежедневного напоминания"""
+    await callback.answer("Хорошо, напомню позже! 👌", show_alert=False)
+
+    # Удаляем сообщение с напоминанием
+    try:
+        await callback.message.delete()
+    except:
+        pass

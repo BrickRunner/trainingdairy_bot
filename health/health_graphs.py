@@ -17,18 +17,21 @@ logger = logging.getLogger(__name__)
 plt.rcParams['font.family'] = 'DejaVu Sans'
 
 
-async def generate_health_graphs(metrics: List[Dict], days: int) -> io.BytesIO:
+async def generate_health_graphs(metrics: List[Dict], period_name: str) -> io.BytesIO:
     """
     Генерирует графики метрик здоровья
 
     Args:
         metrics: Список метрик за период
-        days: Количество дней для отображения
+        period_name: Название периода (например, "этот месяц", "7 дней")
 
     Returns:
         BytesIO объект с изображением графиков
     """
     try:
+        logger.info(f"=== GENERATE_HEALTH_GRAPHS CALLED ===")
+        logger.info(f"Received {len(metrics)} metrics, period_name={period_name}")
+
         # Подготовка данных
         dates = []
         pulse_values = []
@@ -42,30 +45,33 @@ async def generate_health_graphs(metrics: List[Dict], days: int) -> io.BytesIO:
             pulse_values.append(metric.get('morning_pulse'))
             weight_values.append(metric.get('weight'))
             sleep_values.append(metric.get('sleep_duration'))
+            logger.info(f"Processing: {metric_date} -> pulse={metric.get('morning_pulse')}, weight={metric.get('weight')}, sleep={metric.get('sleep_duration')}")
+
+        logger.info(f"Total dates collected: {len(dates)}")
 
         # Создание фигуры с подграфиками
         fig, axes = plt.subplots(3, 1, figsize=(12, 10))
-        fig.suptitle(f'Метрики здоровья за {days} дней', fontsize=16, fontweight='bold')
+        fig.suptitle(f'Метрики здоровья за {period_name}', fontsize=16, fontweight='bold')
 
         # График пульса
         _plot_metric(
             axes[0], dates, pulse_values,
             'Утренний пульс', 'уд/мин',
-            '#e74c3c', '💗'
+            '#e74c3c', ''
         )
 
         # График веса
         _plot_metric(
             axes[1], dates, weight_values,
             'Вес', 'кг',
-            '#3498db', '⚖️'
+            '#3498db', ''
         )
 
         # График сна
         _plot_metric(
             axes[2], dates, sleep_values,
             'Длительность сна', 'часы',
-            '#9b59b6', '😴'
+            '#9b59b6', ''
         )
 
         # Настройка отступов
@@ -89,12 +95,15 @@ def _plot_metric(ax, dates, values, title, ylabel, color, emoji):
     # Фильтруем None значения
     valid_data = [(d, v) for d, v in zip(dates, values) if v is not None]
 
+    # Формируем заголовок (с emoji или без)
+    title_text = f'{emoji} {title}'.strip() if emoji else title
+
     if not valid_data:
         ax.text(0.5, 0.5, 'Нет данных',
                 ha='center', va='center',
                 transform=ax.transAxes,
                 fontsize=14, color='gray')
-        ax.set_title(f'{emoji} {title}', fontsize=12, fontweight='bold')
+        ax.set_title(title_text, fontsize=12, fontweight='bold')
         ax.set_xlabel('Дата', fontsize=10)
         ax.set_ylabel(ylabel, fontsize=10)
         return
@@ -128,25 +137,13 @@ def _plot_metric(ax, dates, values, title, ylabel, color, emoji):
                                 alpha=0.7))
 
     # Настройка осей
-    ax.set_title(f'{emoji} {title}', fontsize=12, fontweight='bold')
-    ax.set_xlabel('Дата', fontsize=10)
+    ax.set_title(title_text, fontsize=12, fontweight='bold')
+    ax.set_xlabel('Дни (точка = один день)', fontsize=10)
     ax.set_ylabel(ylabel, fontsize=10)
     ax.grid(True, alpha=0.3, linestyle='--')
 
-    # Форматирование оси X
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-    # Динамически рассчитываем интервал (минимум 1 день)
-    if len(valid_dates) <= 7:
-        interval = 1
-    elif len(valid_dates) <= 14:
-        interval = 2
-    elif len(valid_dates) <= 30:
-        interval = 3
-    else:
-        interval = max(1, len(valid_dates) // 10)
-
-    ax.xaxis.set_major_locator(mdates.DayLocator(interval=interval))
-    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    # Убираем метки дат на оси X - просто нумеруем точки
+    ax.set_xticks([])
 
     # Добавление средней линии
     avg_value = sum(valid_values) / len(valid_values)
@@ -156,13 +153,13 @@ def _plot_metric(ax, dates, values, title, ylabel, color, emoji):
     ax.legend(loc='upper right', fontsize=8)
 
 
-async def generate_sleep_quality_graph(metrics: List[Dict], days: int) -> io.BytesIO:
+async def generate_sleep_quality_graph(metrics: List[Dict], period_name: str) -> io.BytesIO:
     """
     Генерирует график качества сна
 
     Args:
         metrics: Список метрик за период
-        days: Количество дней
+        period_name: Название периода (например, "этот месяц", "30 дней")
 
     Returns:
         BytesIO объект с изображением графика
@@ -196,7 +193,7 @@ async def generate_sleep_quality_graph(metrics: List[Dict], days: int) -> io.Byt
 
         # Создание фигуры с двумя осями Y
         fig, ax1 = plt.subplots(figsize=(12, 6))
-        fig.suptitle(f'😴 Анализ сна за {days} дней', fontsize=16, fontweight='bold')
+        fig.suptitle(f'Анализ сна за {period_name}', fontsize=16, fontweight='bold')
 
         # График длительности сна
         color1 = '#3498db'

@@ -11,29 +11,29 @@ class DateFormatter:
     
     # Маппинг форматов настроек на Python strftime форматы
     FORMAT_MAPPING = {
-        'DD.MM.YYYY': '%d.%m.%Y',
-        'MM/DD/YYYY': '%m/%d/%Y',
-        'YYYY-MM-DD': '%Y-%m-%d'
+        'ДД.ММ.ГГГГ': '%d.%m.%Y',
+        'ММ/ДД/ГГГГ': '%m/%d/%Y',
+        'ГГГГ-ММ-ДД': '%Y-%m-%d'
     }
-    
+
     # Паттерны для валидации ввода
     VALIDATION_PATTERNS = {
-        'DD.MM.YYYY': r'^\d{2}\.\d{2}\.\d{4}$',
-        'MM/DD/YYYY': r'^\d{2}/\d{2}/\d{4}$',
-        'YYYY-MM-DD': r'^\d{4}-\d{2}-\d{2}$'
+        'ДД.ММ.ГГГГ': r'^\d{2}\.\d{2}\.\d{4}$',
+        'ММ/ДД/ГГГГ': r'^\d{2}/\d{2}/\d{4}$',
+        'ГГГГ-ММ-ДД': r'^\d{4}-\d{2}-\d{2}$'
     }
-    
+
     # Описания форматов для пользователя
     FORMAT_DESCRIPTIONS = {
-        'DD.MM.YYYY': 'ДД.ММ.ГГГГ (например, 15.01.2024)',
-        'MM/DD/YYYY': 'ММ/ДД/ГГГГ (например, 01/15/2024)',
-        'YYYY-MM-DD': 'ГГГГ-ММ-ДД (например, 2024-01-15)'
+        'ДД.ММ.ГГГГ': 'ДД.ММ.ГГГГ (например, 15.01.2024)',
+        'ММ/ДД/ГГГГ': 'ММ/ДД/ГГГГ (например, 01/15/2024)',
+        'ГГГГ-ММ-ДД': 'ГГГГ-ММ-ДД (например, 2024-01-15)'
     }
     
     @staticmethod
     def format_date(
         date_obj: Union[date, datetime, str],
-        user_format: str = 'DD.MM.YYYY'
+        user_format: str = 'ДД.ММ.ГГГГ'
     ) -> str:
         """
         Форматировать дату согласно настройкам пользователя
@@ -67,7 +67,7 @@ class DateFormatter:
     @staticmethod
     def format_datetime(
         datetime_obj: Union[datetime, str],
-        user_format: str = 'DD.MM.YYYY',
+        user_format: str = 'ДД.ММ.ГГГГ',
         include_time: bool = True
     ) -> str:
         """
@@ -98,7 +98,7 @@ class DateFormatter:
     @staticmethod
     def parse_date(
         date_str: str,
-        user_format: str = 'DD.MM.YYYY'
+        user_format: str = 'ДД.ММ.ГГГГ'
     ) -> Optional[date]:
         """
         Распарсить строку даты согласно формату пользователя
@@ -118,7 +118,7 @@ class DateFormatter:
             return None
     
     @staticmethod
-    def get_format_description(user_format: str = 'DD.MM.YYYY') -> str:
+    def get_format_description(user_format: str = 'ДД.ММ.ГГГГ') -> str:
         """
         Получить описание формата для пользователя
         
@@ -134,7 +134,7 @@ class DateFormatter:
         )
     
     @staticmethod
-    def get_validation_pattern(user_format: str = 'DD.MM.YYYY') -> str:
+    def get_validation_pattern(user_format: str = 'ДД.ММ.ГГГГ') -> str:
         """
         Получить регулярное выражение для валидации формата
         
@@ -153,7 +153,7 @@ class DateFormatter:
     def format_date_range(
         start_date: Union[date, datetime, str],
         end_date: Union[date, datetime, str],
-        user_format: str = 'DD.MM.YYYY'
+        user_format: str = 'ДД.ММ.ГГГГ'
     ) -> str:
         """
         Форматировать диапазон дат
@@ -174,16 +174,16 @@ class DateFormatter:
 async def get_user_date_format(user_id: int) -> str:
     """
     Получить формат даты пользователя из базы данных
-    
+
     Args:
         user_id: ID пользователя
-        
+
     Returns:
-        Формат даты (по умолчанию 'DD.MM.YYYY')
+        Формат даты (по умолчанию 'ДД.ММ.ГГГГ')
     """
     from database.queries import get_user_settings
-    
+
     settings = await get_user_settings(user_id)
     if settings:
-        return settings.get('date_format', 'DD.MM.YYYY')
-    return 'DD.MM.YYYY'
+        return settings.get('date_format', 'ДД.ММ.ГГГГ')
+    return 'ДД.ММ.ГГГГ'

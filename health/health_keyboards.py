@@ -20,6 +20,9 @@ def get_health_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="😴 Анализ сна", callback_data="health:sleep_analysis")
     )
     builder.row(
+        InlineKeyboardButton(text="📄 Экспорт в PDF", callback_data="health:export_pdf")
+    )
+    builder.row(
         InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
     return builder.as_markup()
@@ -65,8 +68,11 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None) -> InlineKeyb
         # Сон
         if today_metrics.get('sleep_duration'):
             duration = today_metrics['sleep_duration']
-            hours = int(duration)
-            minutes = int((duration - hours) * 60)
+            # Преобразуем в минуты, округляем, потом обратно в часы и минуты
+            # Это избегает проблем с точностью float
+            total_minutes = round(duration * 60)
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
             sleep_text = f"{hours}ч {minutes}м" if minutes > 0 else f"{hours}ч"
 
             builder.row(
@@ -136,16 +142,10 @@ def get_stats_period_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📅 Эта неделя", callback_data="health_stats_graphs:week")
     )
     builder.row(
-        InlineKeyboardButton(text="📅 Этот месяц", callback_data="health_stats_graphs:month")
-    )
-    builder.row(
         InlineKeyboardButton(text="📅 Последние 14 дней", callback_data="health_stats_graphs:14")
     )
     builder.row(
-        InlineKeyboardButton(text="📅 Последние 30 дней", callback_data="health_stats_graphs:30")
-    )
-    builder.row(
-        InlineKeyboardButton(text="📅 Последние 90 дней", callback_data="health_stats_graphs:90")
+        InlineKeyboardButton(text="📅 Этот месяц", callback_data="health_stats_graphs:month")
     )
     builder.row(
         InlineKeyboardButton(text="🔙 Назад", callback_data="health:menu")
@@ -156,6 +156,24 @@ def get_stats_period_keyboard() -> InlineKeyboardMarkup:
 def get_graphs_period_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора периода для графиков (устаревшая, используйте get_stats_period_keyboard)"""
     return get_stats_period_keyboard()
+
+
+def get_export_period_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора периода для экспорта в PDF"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="📅 Полгода", callback_data="health_export:180")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Год", callback_data="health_export:365")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Произвольный период", callback_data="health_export:custom")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔙 Назад", callback_data="health:menu")
+    )
+    return builder.as_markup()
 
 
 def get_cancel_keyboard() -> ReplyKeyboardMarkup:
@@ -176,17 +194,26 @@ def get_skip_cancel_keyboard() -> ReplyKeyboardMarkup:
 
 
 def get_date_choice_keyboard() -> ReplyKeyboardMarkup:
-    """Клавиатура для выбора даты внесения данных"""
+    """Клавиатура для выбора даты внесения данных (быстрые кнопки под календарем)"""
     builder = ReplyKeyboardBuilder()
     builder.row(
         KeyboardButton(text="📅 Сегодня"),
-        KeyboardButton(text="📅 Вчера")
-    )
-    builder.row(
-        KeyboardButton(text="📅 Позавчера"),
-        KeyboardButton(text="📝 Ввести дату")
+        KeyboardButton(text="📅 Вчера"),
+        KeyboardButton(text="📅 Позавчера")
     )
     builder.row(
         KeyboardButton(text="❌ Отменить")
     )
     return builder.as_markup(resize_keyboard=True)
+
+
+def get_daily_reminder_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для ежедневного напоминания о вводе данных"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="✅ Да, внести данные", callback_data="daily_reminder:yes")
+    )
+    builder.row(
+        InlineKeyboardButton(text="❌ Нет, позже", callback_data="daily_reminder:no")
+    )
+    return builder.as_markup()

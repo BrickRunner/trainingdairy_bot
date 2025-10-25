@@ -807,24 +807,24 @@ async def recalculate_all_weights(user_id: int, old_unit: str, new_unit: str) ->
 def format_date_by_setting(date_str: str, format_setting: str) -> str:
     """
     Отформатировать дату согласно настройкам пользователя
-    
+
     Args:
         date_str: Дата в формате 'YYYY-MM-DD'
-        format_setting: Формат из настроек ('DD.MM.YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD')
-        
+        format_setting: Формат из настроек ('ДД.ММ.ГГГГ', 'ММ/ДД/ГГГГ', 'ГГГГ-ММ-ДД')
+
     Returns:
         Отформатированная дата
     """
     from datetime import datetime
-    
+
     try:
         date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        
-        if format_setting == 'DD.MM.YYYY':
+
+        if format_setting == 'ДД.ММ.ГГГГ':
             return date_obj.strftime('%d.%m.%Y')
-        elif format_setting == 'MM/DD/YYYY':
+        elif format_setting == 'ММ/ДД/ГГГГ':
             return date_obj.strftime('%m/%d/%Y')
-        else:  
+        else:
             return date_obj.strftime('%Y-%m-%d')
     except:
         return date_str

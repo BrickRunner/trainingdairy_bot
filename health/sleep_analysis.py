@@ -444,7 +444,12 @@ def format_sleep_analysis_message(analysis: Dict) -> str:
     recommendations = analysis['recommendations']
     if recommendations:
         msg_parts.append("\n<b>💡 РЕКОМЕНДАЦИИ:</b>")
-        for i, rec in enumerate(recommendations, 1):
-            msg_parts.append(f"\n{i}. {rec}")
+        if len(recommendations) == 1:
+            # Если одна рекомендация - без нумерации
+            msg_parts.append(f"\n{recommendations[0]}")
+        else:
+            # Если несколько рекомендаций - с нумерацией
+            for i, rec in enumerate(recommendations, 1):
+                msg_parts.append(f"\n{i}. {rec}")
 
     return "\n".join(msg_parts)
