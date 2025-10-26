@@ -169,7 +169,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
     distance_unit TEXT DEFAULT 'км',
     weight_unit TEXT DEFAULT 'кг',
     date_format TEXT DEFAULT 'ДД.ММ.ГГГГ',
-    
+    timezone TEXT DEFAULT 'Europe/Moscow',
+
     -- Уведомления
     daily_pulse_weight_time TEXT,
     weekly_report_day TEXT DEFAULT 'Понедельник',

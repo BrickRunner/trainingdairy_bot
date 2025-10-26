@@ -6,6 +6,7 @@
 
 import asyncio
 from datetime import datetime, timedelta
+import pytz
 from aiogram import Bot
 from database.queries import (
     get_user_settings,
@@ -68,6 +69,7 @@ async def send_daily_reminders(bot: Bot):
     """
     Отправка ежедневных напоминаний о вводе пульса и веса
     Проверяет установленное время для каждого пользователя
+    Использует timezone-aware datetime для корректной обработки часовых поясов
     """
     import aiosqlite
     import os
@@ -75,26 +77,44 @@ async def send_daily_reminders(bot: Bot):
 
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
-    current_time = datetime.now().strftime('%H:%M')
-    today = datetime.now().date()
+    # Получаем текущее UTC время
+    utc_now = datetime.now(pytz.UTC)
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Находим пользователей с установленным временем напоминания
+        # Получаем всех пользователей с установленным временем напоминания
         async with db.execute(
             """
-            SELECT user_id, name, daily_pulse_weight_time
+            SELECT user_id, name, daily_pulse_weight_time, timezone
             FROM user_settings
-            WHERE daily_pulse_weight_time = ?
-            """,
-            (current_time,)
+            WHERE daily_pulse_weight_time IS NOT NULL
+            """
         ) as cursor:
             rows = await cursor.fetchall()
 
             for row in rows:
                 user_id = row['user_id']
                 name = row['name'] or "друг"
+                reminder_time = row['daily_pulse_weight_time']
+                user_timezone_str = row['timezone'] or 'Europe/Moscow'
+
+                try:
+                    # Получаем часовой пояс пользователя
+                    user_tz = pytz.timezone(user_timezone_str)
+
+                    # Конвертируем UTC время в часовой пояс пользователя
+                    user_now = utc_now.astimezone(user_tz)
+                    current_time = user_now.strftime('%H:%M')
+                    today = user_now.date()
+
+                    # Проверяем, совпадает ли текущее время с временем напоминания
+                    if current_time != reminder_time:
+                        continue
+
+                except Exception as e:
+                    print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
+                    continue
 
                 # Проверяем, какие метрики уже заполнены сегодня
                 async with db.execute(
@@ -138,19 +158,20 @@ async def send_daily_reminders(bot: Bot):
 
 async def send_weekly_reports(bot: Bot):
     """
-    Отправка недельных отчётов о тренировках
+    Отправка недельных отчётов о тренировках и здоровье в виде PDF файла
     Проверяет день недели и время для каждого пользователя
+    Использует timezone-aware datetime для корректной обработки часовых поясов
     """
     import aiosqlite
     import os
-    
+    from aiogram.types import BufferedInputFile
+    from reports.weekly_report_pdf import generate_weekly_report_pdf
+
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
-    
-    # Определяем текущий день недели и время
-    now = datetime.now()
-    current_weekday = now.strftime('%A')  # Английское название дня
-    current_time = now.strftime('%H:%M')
-    
+
+    # Получаем текущее UTC время
+    utc_now = datetime.now(pytz.UTC)
+
     # Маппинг дней недели
     weekday_map = {
         'Monday': 'Понедельник',
@@ -161,73 +182,68 @@ async def send_weekly_reports(bot: Bot):
         'Saturday': 'Суббота',
         'Sunday': 'Воскресенье'
     }
-    
-    current_weekday_ru = weekday_map.get(current_weekday, 'Понедельник')
-    
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        
-        # Находим пользователей с подходящим днём и временем отчёта
+
+        # Получаем всех пользователей с настроенными недельными отчётами
         async with db.execute(
             """
-            SELECT user_id, name, weekly_report_day, weekly_report_time 
-            FROM user_settings 
-            WHERE weekly_report_day = ? AND weekly_report_time = ?
-            """,
-            (current_weekday_ru, current_time)
+            SELECT user_id, name, weekly_report_day, weekly_report_time, timezone
+            FROM user_settings
+            WHERE weekly_report_day IS NOT NULL AND weekly_report_time IS NOT NULL
+            """
         ) as cursor:
             rows = await cursor.fetchall()
-            
+
             for row in rows:
                 user_id = row['user_id']
                 name = row['name'] or "друг"
-                
-                # Получаем статистику за неделю
-                stats = await get_training_statistics(user_id, 'week')
-                settings = await get_user_settings(user_id)
-                
-                distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
-                
-                # Формируем отчёт
-                report_message = (
-                    f"📊 **Недельный отчёт**\n\n"
-                    f"Привет, {name}! 👋\n\n"
-                    f"Твои результаты за неделю:\n\n"
-                    f"🏃 Тренировок: {stats['total_count']}\n"
-                    f"📏 Общий объём: {stats['total_distance']} {distance_unit}\n"
-                )
-                
-                # Добавляем разбивку по типам
-                if stats['types_count']:
-                    report_message += "\n**По типам тренировок:**\n"
-                    for t_type, count in stats['types_count'].items():
-                        report_message += f"  • {t_type}: {count}\n"
-                
-                # Средний уровень усталости
-                if stats['avg_fatigue'] > 0:
-                    report_message += f"\n😴 Средняя усталость: {stats['avg_fatigue']}/10\n"
-                
-                # Проверяем выполнение целей
-                if settings:
-                    weekly_goal = settings.get('weekly_volume_goal')
-                    trainings_goal = settings.get('weekly_trainings_goal')
-                    
-                    if weekly_goal:
-                        progress = (stats['total_distance'] / weekly_goal) * 100
-                        status = "✅" if progress >= 100 else "📈"
-                        report_message += f"\n{status} Цель по объёму: {progress:.0f}% ({stats['total_distance']}/{weekly_goal} {distance_unit})\n"
-                    
-                    if trainings_goal:
-                        progress = (stats['total_count'] / trainings_goal) * 100
-                        status = "✅" if progress >= 100 else "📈"
-                        report_message += f"{status} Цель по количеству: {progress:.0f}% ({stats['total_count']}/{trainings_goal})\n"
-                
-                report_message += "\n💪 Продолжай в том же духе!"
-                
+                report_day = row['weekly_report_day']
+                report_time = row['weekly_report_time']
+                user_timezone_str = row['timezone'] or 'Europe/Moscow'
+
                 try:
-                    await bot.send_message(user_id, report_message, parse_mode="Markdown")
+                    # Получаем часовой пояс пользователя
+                    user_tz = pytz.timezone(user_timezone_str)
+
+                    # Конвертируем UTC время в часовой пояс пользователя
+                    user_now = utc_now.astimezone(user_tz)
+                    current_weekday = user_now.strftime('%A')  # Английское название дня
+                    current_time = user_now.strftime('%H:%M')
+                    current_weekday_ru = weekday_map.get(current_weekday, 'Понедельник')
+
+                    # Проверяем, совпадает ли текущий день и время с настройками отчёта
+                    if current_weekday_ru != report_day or current_time != report_time:
+                        continue
+
                 except Exception as e:
-                    print(f"Ошибка отправки отчёта пользователю {user_id}: {e}")
+                    print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
+                    continue
+
+                # Генерируем PDF отчёт
+                try:
+                    pdf_buffer = await generate_weekly_report_pdf(user_id)
+
+                    # Формируем имя файла
+                    today = user_now.strftime('%Y-%m-%d')
+                    filename = f"weekly_report_{today}.pdf"
+
+                    # Отправляем PDF файл
+                    pdf_file = BufferedInputFile(
+                        pdf_buffer.read(),
+                        filename=filename
+                    )
+
+                    await bot.send_document(
+                        user_id,
+                        pdf_file,
+                        caption=f"📊 <b>Недельный отчёт</b>\n\nПривет, {name}! 👋\n\nТвой подробный отчёт за неделю готов!",
+                        parse_mode="HTML"
+                    )
+
+                except Exception as e:
+                    print(f"Ошибка генерации или отправки отчёта пользователю {user_id}: {e}")
 
 
 async def notification_scheduler(bot: Bot):

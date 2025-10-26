@@ -174,7 +174,10 @@ async def start_full_input(callback: CallbackQuery, state: FSMContext):
         reply_markup=get_skip_cancel_keyboard(),
         parse_mode="HTML"
     )
-    await callback.message.delete()
+    try:
+        await callback.message.delete()
+    except:
+        pass
     await state.set_state(HealthMetricsStates.waiting_for_pulse)
     await callback.answer()
 
@@ -189,7 +192,10 @@ async def start_pulse_input(callback: CallbackQuery, state: FSMContext):
         reply_markup=get_cancel_keyboard(),
         parse_mode="HTML"
     )
-    await callback.message.delete()
+    try:
+        await callback.message.delete()
+    except:
+        pass
     await state.set_state(HealthMetricsStates.waiting_for_pulse)
     await state.update_data(quick_input='pulse')
     await callback.answer()
@@ -251,7 +257,10 @@ async def choose_date_for_metrics(callback: CallbackQuery, state: FSMContext):
         reply_markup=calendar_keyboard
     )
 
-    await callback.message.delete()
+    try:
+        await callback.message.delete()
+    except:
+        pass
     await state.set_state(HealthMetricsStates.waiting_for_calendar_date)
     await callback.answer()
 
@@ -451,8 +460,37 @@ async def process_pulse(message: Message, state: FSMContext):
 
     await state.update_data(pulse=pulse)
 
-    # Проверяем режим ввода
+    # Проверяем изменение пульса по сравнению с вчерашним днем
+    user_id = message.from_user.id
     data = await state.get_data()
+    selected_date = data.get('selected_date', date.today())
+
+    # Получаем пульс за вчерашний день
+    yesterday = selected_date - timedelta(days=1)
+    yesterday_metrics = await get_health_metrics_by_date(user_id, yesterday)
+
+    if yesterday_metrics and yesterday_metrics.get('morning_pulse'):
+        yesterday_pulse = yesterday_metrics['morning_pulse']
+        pulse_diff = pulse - yesterday_pulse
+
+        # Если пульс выше на 20 или более ударов - отправляем предупреждение
+        if pulse_diff >= 20:
+            await message.answer(
+                f"⚠️ <b>Внимание!</b>\n\n"
+                f"Ваш пульс сегодня <b>{pulse} уд/мин</b>, что на <b>+{pulse_diff} уд/мин</b> "
+                f"выше, чем вчера ({yesterday_pulse} уд/мин).\n\n"
+                f"💡 <b>Рекомендация:</b>\n"
+                f"Повышенный пульс может указывать на:\n"
+                f"• Недостаточное восстановление\n"
+                f"• Начало болезни\n"
+                f"• Переутомление\n"
+                f"• Стресс\n\n"
+                f"Рекомендуем сегодня <b>отдохнуть</b> или снизить интенсивность тренировок. "
+                f"Прислушайтесь к своему организму! 🙏",
+                parse_mode="HTML"
+            )
+
+    # Проверяем режим ввода
     if data.get('quick_input') == 'pulse':
         # Быстрый ввод - сохраняем только пульс
         await save_and_finish(message, state, morning_pulse=pulse)

@@ -117,9 +117,12 @@ def get_units_settings_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📅 Формат даты", callback_data="settings:units:date")
     )
     builder.row(
+        InlineKeyboardButton(text="🌍 Часовой пояс", callback_data="settings:units:timezone")
+    )
+    builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:menu")
     )
-    
+
     return builder.as_markup()
 
 
@@ -294,3 +297,48 @@ def get_simple_cancel_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="❌ Отмена"))
     return builder.as_markup(resize_keyboard=True)
+
+
+def get_timezone_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора часового пояса"""
+    builder = InlineKeyboardBuilder()
+
+    # Все часовые пояса России (с запада на восток)
+    builder.row(
+        InlineKeyboardButton(text="🌍 Калининград (UTC+2)", callback_data="timezone:Europe/Kaliningrad")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Москва (UTC+3)", callback_data="timezone:Europe/Moscow")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Самара (UTC+4)", callback_data="timezone:Europe/Samara")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Екатеринбург (UTC+5)", callback_data="timezone:Asia/Yekaterinburg")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Омск (UTC+6)", callback_data="timezone:Asia/Omsk")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Красноярск (UTC+7)", callback_data="timezone:Asia/Krasnoyarsk")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Иркутск (UTC+8)", callback_data="timezone:Asia/Irkutsk")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Якутск (UTC+9)", callback_data="timezone:Asia/Yakutsk")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Владивосток (UTC+10)", callback_data="timezone:Asia/Vladivostok")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Магадан (UTC+11)", callback_data="timezone:Asia/Magadan")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌍 Камчатка (UTC+12)", callback_data="timezone:Asia/Kamchatka")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="settings:units")
+    )
+
+    return builder.as_markup()

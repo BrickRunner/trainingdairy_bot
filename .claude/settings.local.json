@@ -22,7 +22,11 @@
       "Bash(if exist \"d:\\desktop\\coding\\trainingdairy_bot-1\\test_graph_data.py\" del \"d:\\desktop\\coding\\trainingdairy_bot-1\\test_graph_data.py\")",
       "Bash(if exist \"d:\\desktop\\coding\\trainingdairy_bot-1\\check_periods.py\" del \"d:\\desktop\\coding\\trainingdairy_bot-1\\check_periods.py\")",
       "Bash(if exist:*)",
-      "Bash(cmd /c \"del d:\\desktop\\coding\\trainingdairy_bot-1\\test_health_keyboard.py 2>nul\")"
+      "Bash(cmd /c \"del d:\\desktop\\coding\\trainingdairy_bot-1\\test_health_keyboard.py 2>nul\")",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(wmic:*)"
     ],
     "deny": [],
     "ask": []

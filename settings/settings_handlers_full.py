@@ -23,6 +23,7 @@ from settings.settings_keyboards import (
     get_distance_unit_keyboard,
     get_weight_unit_keyboard,
     get_date_format_keyboard,
+    get_timezone_keyboard,
     get_weekday_keyboard,
     get_training_type_goals_keyboard,
     get_simple_cancel_keyboard
@@ -1077,16 +1078,17 @@ async def callback_units_menu(callback: CallbackQuery):
     """Меню единиц измерения"""
     user_id = callback.from_user.id
     settings = await get_user_settings(user_id)
-    
+
     info_text = "📏 **Единицы измерения**\n\n"
-    
+
     if settings:
         info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
         info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
         info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
-    
+        info_text += f"🌍 Часовой пояс: {settings.get('timezone', 'Europe/Moscow')}\n"
+
     info_text += "\nВыберите параметр для изменения:"
-    
+
     await callback.message.edit_text(
         info_text,
         reply_markup=get_units_settings_keyboard(),
@@ -1271,7 +1273,11 @@ async def callback_set_daily_time(callback: CallbackQuery, state: FSMContext):
     """Установка времени ежедневного сообщения"""
     await callback.message.answer(
         "⏰ Введите время для ежедневного напоминания о вводе пульса и веса\n\n"
-        "Формат: ЧЧ:ММ (например: 09:00)\n\n"
+        "Вы можете ввести время в любом удобном формате:\n"
+        "• 8:0 или 8:00\n"
+        "• 09:00\n"
+        "• 9 (будет 09:00)\n"
+        "• 23:30\n\n"
         "Каждый день в это время вы будете получать напоминание.",
         reply_markup=get_simple_cancel_keyboard()
     )
@@ -1287,38 +1293,26 @@ async def process_daily_time(message: Message, state: FSMContext):
         # Возврат в подменю
         await send_notifications_menu(message, message.from_user.id)
         return
-    
-    time_pattern = r'(\d{2}):(\d{2})'
-    match = re.match(time_pattern, message.text.strip())
-    
-    if not match:
-        await message.answer("❌ Неверный формат. Используйте ЧЧ:ММ (например: 09:00)")
+
+    from utils.time_normalizer import validate_and_normalize_time
+
+    # Валидируем и нормализуем время
+    success, normalized_time, error_msg = validate_and_normalize_time(message.text)
+
+    if not success:
+        await message.answer(error_msg)
         return
-    
-    hour, minute = match.groups()
-    
-    try:
-        hour_int = int(hour)
-        minute_int = int(minute)
-        
-        if hour_int < 0 or hour_int > 23 or minute_int < 0 or minute_int > 59:
-            await message.answer("❌ Некорректное время. Часы: 00-23, минуты: 00-59")
-            return
-        
-        user_id = message.from_user.id
-        time_str = f"{hour}:{minute}"
-        await update_user_setting(user_id, 'daily_pulse_weight_time', time_str)
-        
-        await message.answer(
-            f"✅ Время ежедневного напоминания сохранено: {time_str}",
-            reply_markup={"remove_keyboard": True}
-        )
-        await state.clear()
-        # Возврат в подменю
-        await send_notifications_menu(message, message.from_user.id)
-        
-    except ValueError:
-        await message.answer("❌ Некорректное время.")
+
+    user_id = message.from_user.id
+    await update_user_setting(user_id, 'daily_pulse_weight_time', normalized_time)
+
+    await message.answer(
+        f"✅ Время ежедневного напоминания сохранено: {normalized_time}",
+        reply_markup={"remove_keyboard": True}
+    )
+    await state.clear()
+    # Возврат в подменю
+    await send_notifications_menu(message, message.from_user.id)
 
 
 # 14. ВРЕМЯ НЕДЕЛЬНОГО ОТЧЕТА
@@ -1341,7 +1335,12 @@ async def callback_save_weekday(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.answer(
         f"📅 День недели выбран: {weekday}\n\n"
-        "⏰ Теперь введите время отправки отчета в формате ЧЧ:ММ (например: 09:00):",
+        "⏰ Теперь введите время отправки отчета\n\n"
+        "Вы можете ввести время в любом удобном формате:\n"
+        "• 8:0 или 8:00\n"
+        "• 09:00\n"
+        "• 9 (будет 09:00)\n"
+        "• 23:30",
         reply_markup=get_simple_cancel_keyboard()
     )
     await state.set_state(SettingsStates.waiting_for_report_time)
@@ -1356,45 +1355,33 @@ async def process_report_time(message: Message, state: FSMContext):
         # Возврат в подменю
         await send_notifications_menu(message, message.from_user.id)
         return
-    
-    time_pattern = r'(\d{2}):(\d{2})'
-    match = re.match(time_pattern, message.text.strip())
-    
-    if not match:
-        await message.answer("❌ Неверный формат. Используйте ЧЧ:ММ (например: 09:00)")
+
+    from utils.time_normalizer import validate_and_normalize_time
+
+    # Валидируем и нормализуем время
+    success, normalized_time, error_msg = validate_and_normalize_time(message.text)
+
+    if not success:
+        await message.answer(error_msg)
         return
-    
-    hour, minute = match.groups()
-    
-    try:
-        hour_int = int(hour)
-        minute_int = int(minute)
-        
-        if hour_int < 0 or hour_int > 23 or minute_int < 0 or minute_int > 59:
-            await message.answer("❌ Некорректное время. Часы: 00-23, минуты: 00-59")
-            return
-        
-        data = await state.get_data()
-        weekday = data.get('report_weekday')
-        
-        user_id = message.from_user.id
-        time_str = f"{hour}:{minute}"
-        
-        await update_user_setting(user_id, 'weekly_report_day', weekday)
-        await update_user_setting(user_id, 'weekly_report_time', time_str)
-        
-        await message.answer(
-            f"✅ Недельный отчет настроен!\n\n"
-            f"📅 День: {weekday}\n"
-            f"⏰ Время: {time_str}",
-            reply_markup={"remove_keyboard": True}
-        )
-        await state.clear()
-        # Возврат в подменю
-        await send_notifications_menu(message, message.from_user.id)
-        
-    except ValueError:
-        await message.answer("❌ Некорректное время.")
+
+    data = await state.get_data()
+    weekday = data.get('report_weekday')
+
+    user_id = message.from_user.id
+
+    await update_user_setting(user_id, 'weekly_report_day', weekday)
+    await update_user_setting(user_id, 'weekly_report_time', normalized_time)
+
+    await message.answer(
+        f"✅ Недельный отчет настроен!\n\n"
+        f"📅 День: {weekday}\n"
+        f"⏰ Время: {normalized_time}",
+        reply_markup={"remove_keyboard": True}
+    )
+    await state.clear()
+    # Возврат в подменю
+    await send_notifications_menu(message, message.from_user.id)
 
 
 # ==================== ОБРАБОТЧИКИ КАЛЕНДАРЯ ДЛЯ ДАТЫ РОЖДЕНИЯ ====================
@@ -1402,3 +1389,45 @@ from settings.calendar_handlers_birth import register_calendar_birth_handlers
 
 # Регистрируем обработчики календаря даты рождения
 register_calendar_birth_handlers(router)
+
+
+# ============== РАЗДЕЛ: ЧАСОВОЙ ПОЯС ==============
+
+@router.callback_query(F.data == "settings:units:timezone")
+async def callback_set_timezone(callback: CallbackQuery):
+    """Выбор часового пояса"""
+    await callback.message.edit_text(
+        "🌍 Выберите ваш часовой пояс для корректной работы уведомлений:",
+        reply_markup=get_timezone_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("timezone:"))
+async def callback_save_timezone(callback: CallbackQuery):
+    """Сохранение выбранного часового пояса"""
+    timezone = callback.data.split(":")[1]
+    user_id = callback.from_user.id
+    
+    # Сохраняем в БД
+    await update_user_setting(user_id, 'timezone', timezone)
+    
+    # Возвращаемся в меню единиц измерения
+    settings = await get_user_settings(user_id)
+    
+    info_text = "📏 **Единицы измерения**\n\n"
+    
+    if settings:
+        info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
+        info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
+        info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
+        info_text += f"🌍 Часовой пояс: {settings.get('timezone', 'Europe/Moscow')}\n"
+    
+    info_text += "\nВыберите параметр для изменения:"
+    
+    await callback.message.edit_text(
+        info_text,
+        reply_markup=get_units_settings_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer("Сохранено!")
