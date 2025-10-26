@@ -175,6 +175,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
     daily_pulse_weight_time TEXT,
     weekly_report_day TEXT DEFAULT 'Понедельник',
     weekly_report_time TEXT DEFAULT '09:00',
+    last_goal_notification_week TEXT,  -- Неделя последнего уведомления о достижении цели (формат: YYYY-WW) - DEPRECATED, используем goal_notifications
+    goal_notifications TEXT,  -- JSON с информацией о достигнутых целях {week: {goal_type: True/False}}
     
     -- Дата создания и обновления
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -26,7 +26,9 @@
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
       "Bash(taskkill:*)",
-      "Bash(wmic:*)"
+      "Bash(wmic:*)",
+      "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\add_goal_notifications_field.py\")",
+      "Bash(cmd /c \"del d:\\desktop\\coding\\trainingdairy_bot-1\\add_goal_notifications_field.py 2>nul\")"
     ],
     "deny": [],
     "ask": []

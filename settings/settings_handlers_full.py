@@ -26,7 +26,8 @@ from settings.settings_keyboards import (
     get_timezone_keyboard,
     get_weekday_keyboard,
     get_training_type_goals_keyboard,
-    get_simple_cancel_keyboard
+    get_simple_cancel_keyboard,
+    get_cancel_delete_keyboard
 )
 from database.queries import (
     init_user_settings,
@@ -40,7 +41,8 @@ from database.queries import (
     get_training_type_goals,
     set_training_type_goal,
     format_date_by_setting,
-    recalculate_all_weights
+    recalculate_all_weights,
+    get_training_statistics
 )
 from utils.goals_checker import check_weight_goal
 
@@ -117,8 +119,26 @@ async def send_goals_menu(message: Message, user_id: int):
         weekly_count = settings.get('weekly_trainings_goal')
         weight_goal = settings.get('weight_goal')
 
-        info_text += f"📊 Недельный объем: {weekly_volume or 'не задан'} {distance_unit}\n"
-        info_text += f"🔢 Тренировок в неделю: {weekly_count or 'не задано'}\n"
+        # Получаем статистику текущей недели для отображения прогресса
+        stats = await get_training_statistics(user_id, 'week')
+        current_volume = stats.get('total_distance', 0)
+        current_count = stats.get('total_trainings', 0)
+
+        # Недельный объем с прогрессом
+        if weekly_volume:
+            progress_percent = (current_volume / weekly_volume * 100) if weekly_volume > 0 else 0
+            info_text += f"📊 Недельный объем: {current_volume:.1f}/{weekly_volume} {distance_unit} ({progress_percent:.0f}%)\n"
+        else:
+            info_text += f"📊 Недельный объем: {current_volume:.1f} {distance_unit} (цель не задана)\n"
+
+        # Тренировок в неделю с прогрессом
+        if weekly_count:
+            progress_percent = (current_count / weekly_count * 100) if weekly_count > 0 else 0
+            info_text += f"🔢 Тренировок в неделю: {current_count}/{weekly_count} ({progress_percent:.0f}%)\n"
+        else:
+            info_text += f"🔢 Тренировок в неделю: {current_count} (цель не задана)\n"
+
+        # Целевой вес
         weight_goal_display = f"{weight_goal:.1f}" if weight_goal else 'не задан'
         info_text += f"⚖️ Целевой вес: {weight_goal_display} {weight_unit}\n\n"
 
@@ -136,9 +156,14 @@ async def send_goals_menu(message: Message, user_id: int):
 
     info_text += "\nВыберите параметр для изменения:"
 
+    # Определяем наличие целей для кнопок удаления
+    has_volume_goal = bool(settings and settings.get('weekly_volume_goal'))
+    has_count_goal = bool(settings and settings.get('weekly_trainings_goal'))
+    has_weight_goal = bool(settings and settings.get('weight_goal'))
+
     await message.answer(
         info_text,
-        reply_markup=get_goals_settings_keyboard(),
+        reply_markup=get_goals_settings_keyboard(has_volume_goal, has_count_goal, has_weight_goal),
         parse_mode="Markdown"
     )
 
@@ -325,32 +350,8 @@ async def process_name(message: Message, state: FSMContext):
         reply_markup={"remove_keyboard": True}
     )
     await state.clear()
-    
     # Возврат в меню профиля
-    settings = await get_user_settings(user_id)
-    info_text = "👤 **Настройки профиля**\n\n"
-    
-    if settings:
-        info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
-        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
-        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
-        info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
-        weight_value = settings.get('weight')
-        weight_unit = settings.get('weight_unit', 'кг')
-        weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
-        info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
-        info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
-        
-        types = await get_main_training_types(user_id)
-        info_text += f"🏃 Типы тренировок: {', '.join(types)}\n"
-    
-    info_text += "\nВыберите параметр для изменения:"
-    
-    await message.answer(
-        info_text,
-        reply_markup=get_profile_settings_keyboard(),
-        parse_mode="Markdown"
-    )
+    await send_profile_menu(message, user_id)
 
 
 # 2. ДАТА РОЖДЕНИЯ
@@ -377,6 +378,8 @@ async def process_birth_date(message: Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
         await message.answer("❌ Отменено", reply_markup={"remove_keyboard": True})
+        # Возврат в меню профиля
+        await send_profile_menu(message, message.from_user.id)
         return
     
     # Проверяем формат даты
@@ -663,14 +666,12 @@ async def callback_save_training_types(callback: CallbackQuery, state: FSMContex
 
 # ============== РАЗДЕЛ: ПУЛЬСОВЫЕ ЗОНЫ (7) ==============
 
-@router.callback_query(F.data == "settings:pulse_zones")
-async def callback_pulse_zones_menu(callback: CallbackQuery):
-    """Меню настройки пульсовых зон"""
-    user_id = callback.from_user.id
+async def send_pulse_zones_menu(message: Message, user_id: int):
+    """Отправить меню пульсовых зон"""
     settings = await get_user_settings(user_id)
-    
+
     info_text = "💓 **Настройка пульсовых зон**\n\n"
-    
+
     if settings and settings.get('max_pulse'):
         info_text += f"Максимальный пульс: {settings['max_pulse']} уд/мин\n\n"
         info_text += "Ваши зоны:\n"
@@ -682,7 +683,34 @@ async def callback_pulse_zones_menu(callback: CallbackQuery):
     else:
         info_text += "Пульсовые зоны не настроены.\n"
         info_text += "Настройте зоны для более точного анализа тренировок."
-    
+
+    await message.answer(
+        info_text,
+        reply_markup=get_pulse_zones_menu_keyboard(),
+        parse_mode="Markdown"
+    )
+
+
+@router.callback_query(F.data == "settings:pulse_zones")
+async def callback_pulse_zones_menu(callback: CallbackQuery):
+    """Меню настройки пульсовых зон"""
+    user_id = callback.from_user.id
+    settings = await get_user_settings(user_id)
+
+    info_text = "💓 **Настройка пульсовых зон**\n\n"
+
+    if settings and settings.get('max_pulse'):
+        info_text += f"Максимальный пульс: {settings['max_pulse']} уд/мин\n\n"
+        info_text += "Ваши зоны:\n"
+        info_text += f"🟢 Зона 1: {settings['zone1_min']}-{settings['zone1_max']} (восстановление)\n"
+        info_text += f"🔵 Зона 2: {settings['zone2_min']}-{settings['zone2_max']} (аэробная)\n"
+        info_text += f"🟡 Зона 3: {settings['zone3_min']}-{settings['zone3_max']} (темповая)\n"
+        info_text += f"🟠 Зона 4: {settings['zone4_min']}-{settings['zone4_max']} (анаэробная)\n"
+        info_text += f"🔴 Зона 5: {settings['zone5_min']}-{settings['zone5_max']} (максимальная)\n"
+    else:
+        info_text += "Пульсовые зоны не настроены.\n"
+        info_text += "Настройте зоны для более точного анализа тренировок."
+
     await callback.message.edit_text(
         info_text,
         reply_markup=get_pulse_zones_menu_keyboard(),
@@ -744,7 +772,8 @@ async def process_max_pulse(message: Message, state: FSMContext):
     """Обработка ввода максимального пульса"""
     if message.text == "❌ Отмена":
         await state.clear()
-        await settings_menu(message, state)
+        # Возврат в подменю пульсовых зон
+        await send_pulse_zones_menu(message, message.from_user.id)
         return
     
     try:
@@ -770,7 +799,8 @@ async def process_max_pulse(message: Message, state: FSMContext):
             reply_markup={"remove_keyboard": True}
         )
         await state.clear()
-        await settings_menu(message, state)
+        # Возврат в подменю пульсовых зон
+        await send_pulse_zones_menu(message, user_id)
         
     except ValueError:
         await message.answer("❌ Введите целое число.")
@@ -801,8 +831,26 @@ async def callback_goals_menu(callback: CallbackQuery):
         weekly_count = settings.get('weekly_trainings_goal')
         weight_goal = settings.get('weight_goal')
 
-        info_text += f"📊 Недельный объем: {weekly_volume or 'не задан'} {distance_unit}\n"
-        info_text += f"🔢 Тренировок в неделю: {weekly_count or 'не задано'}\n"
+        # Получаем статистику текущей недели для отображения прогресса
+        stats = await get_training_statistics(user_id, 'week')
+        current_volume = stats.get('total_distance', 0)
+        current_count = stats.get('total_trainings', 0)
+
+        # Недельный объем с прогрессом
+        if weekly_volume:
+            progress_percent = (current_volume / weekly_volume * 100) if weekly_volume > 0 else 0
+            info_text += f"📊 Недельный объем: {current_volume:.1f}/{weekly_volume} {distance_unit} ({progress_percent:.0f}%)\n"
+        else:
+            info_text += f"📊 Недельный объем: {current_volume:.1f} {distance_unit} (цель не задана)\n"
+
+        # Тренировок в неделю с прогрессом
+        if weekly_count:
+            progress_percent = (current_count / weekly_count * 100) if weekly_count > 0 else 0
+            info_text += f"🔢 Тренировок в неделю: {current_count}/{weekly_count} ({progress_percent:.0f}%)\n"
+        else:
+            info_text += f"🔢 Тренировок в неделю: {current_count} (цель не задана)\n"
+
+        # Целевой вес
         weight_goal_display = f"{weight_goal:.1f}" if weight_goal else 'не задан'
         info_text += f"⚖️ Целевой вес: {weight_goal_display} {weight_unit}\n\n"
 
@@ -821,24 +869,45 @@ async def callback_goals_menu(callback: CallbackQuery):
 
     info_text += "\nВыберите параметр для изменения:"
 
+    # Определяем наличие целей для кнопок удаления
+    has_volume_goal = bool(settings and settings.get('weekly_volume_goal'))
+    has_count_goal = bool(settings and settings.get('weekly_trainings_goal'))
+    has_weight_goal = bool(settings and settings.get('weight_goal'))
+
     await callback.message.edit_text(
         info_text,
-        reply_markup=get_goals_settings_keyboard(),
+        reply_markup=get_goals_settings_keyboard(has_volume_goal, has_count_goal, has_weight_goal),
         parse_mode="Markdown"
     )
     await callback.answer()
 
 
 # 8. ЦЕЛЕВОЙ ОБЪЕМ
+# Удаление цели по объёму
+@router.callback_query(F.data == "settings:goals:volume:delete")
+async def callback_delete_weekly_volume(callback: CallbackQuery):
+    """Удаление цели по недельному объему"""
+    user_id = callback.from_user.id
+    await update_user_setting(user_id, 'weekly_volume_goal', None)
+    await callback.answer("✅ Цель по объёму удалена", show_alert=True)
+    # Обновляем меню
+    await callback_goals_menu(callback)
+
+
 @router.callback_query(F.data == "settings:goals:volume")
 async def callback_set_weekly_volume(callback: CallbackQuery, state: FSMContext):
     """Установка целевого недельного объема"""
     settings = await get_user_settings(callback.from_user.id)
     distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
-    
+    current_goal = settings.get('weekly_volume_goal') if settings else None
+
+    message_text = f"📊 Введите целевой объем тренировок в неделю ({distance_unit}):\n\n"
+    if current_goal:
+        message_text += f"Текущая цель: {current_goal} {distance_unit}\n\n"
+    message_text += "Например: 30"
+
     await callback.message.answer(
-        f"📊 Введите целевой объем тренировок в неделю ({distance_unit}):\n\n"
-        "Например: 30",
+        message_text,
         reply_markup=get_simple_cancel_keyboard()
     )
     await state.set_state(SettingsStates.waiting_for_weekly_volume)
@@ -856,21 +925,28 @@ async def process_weekly_volume(message: Message, state: FSMContext):
     
     try:
         volume = float(message.text.strip().replace(',', '.'))
-        
+
         if volume <= 0 or volume > 1000:
-            await message.answer("❌ Введите корректное значение (0-1000).")
+            await message.answer("❌ Введите корректное значение (1-1000).")
             return
-        
+
         user_id = message.from_user.id
-        await update_user_setting(user_id, 'weekly_volume_goal', volume)
-        
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км')
-        
-        await message.answer(
-            f"✅ Целевой недельный объем сохранен: {volume} {distance_unit}",
-            reply_markup={"remove_keyboard": True}
-        )
+
+        # Если 0 - удаляем цель (сохраняем NULL)
+        if volume == 0:
+            await update_user_setting(user_id, 'weekly_volume_goal', None)
+            await message.answer(
+                f"✅ Цель по недельному объёму сброшена",
+                reply_markup={"remove_keyboard": True}
+            )
+        else:
+            await update_user_setting(user_id, 'weekly_volume_goal', volume)
+            await message.answer(
+                f"✅ Целевой недельный объем сохранен: {volume} {distance_unit}",
+                reply_markup={"remove_keyboard": True}
+            )
         await state.clear()
         # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
@@ -880,12 +956,30 @@ async def process_weekly_volume(message: Message, state: FSMContext):
 
 
 # 9. КОЛИЧЕСТВО ТРЕНИРОВОК В НЕДЕЛЮ
+# Удаление цели по количеству
+@router.callback_query(F.data == "settings:goals:count:delete")
+async def callback_delete_weekly_count(callback: CallbackQuery):
+    """Удаление цели по количеству тренировок"""
+    user_id = callback.from_user.id
+    await update_user_setting(user_id, 'weekly_trainings_goal', None)
+    await callback.answer("✅ Цель по количеству удалена", show_alert=True)
+    # Обновляем меню
+    await callback_goals_menu(callback)
+
+
 @router.callback_query(F.data == "settings:goals:count")
 async def callback_set_weekly_count(callback: CallbackQuery, state: FSMContext):
     """Установка целевого количества тренировок"""
+    settings = await get_user_settings(callback.from_user.id)
+    current_goal = settings.get('weekly_trainings_goal') if settings else None
+
+    message_text = "🔢 Введите целевое количество тренировок в неделю:\n\n"
+    if current_goal:
+        message_text += f"Текущая цель: {current_goal} тренировок\n\n"
+    message_text += "Например: 5"
+
     await callback.message.answer(
-        "🔢 Введите целевое количество тренировок в неделю:\n\n"
-        "Например: 5",
+        message_text,
         reply_markup=get_simple_cancel_keyboard()
     )
     await state.set_state(SettingsStates.waiting_for_weekly_count)
@@ -903,14 +997,14 @@ async def process_weekly_count(message: Message, state: FSMContext):
     
     try:
         count = int(message.text.strip())
-        
+
         if count <= 0 or count > 30:
             await message.answer("❌ Введите корректное значение (1-30).")
             return
-        
+
         user_id = message.from_user.id
+
         await update_user_setting(user_id, 'weekly_trainings_goal', count)
-        
         await message.answer(
             f"✅ Целевое количество тренировок сохранено: {count} в неделю",
             reply_markup={"remove_keyboard": True}
@@ -927,10 +1021,20 @@ async def process_weekly_count(message: Message, state: FSMContext):
 @router.callback_query(F.data == "settings:goals:by_type")
 async def callback_set_type_goals(callback: CallbackQuery):
     """Выбор типа тренировки для установки цели"""
+    user_id = callback.from_user.id
+    settings = await get_user_settings(user_id)
+    distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+    # Получаем основные типы тренировок пользователя
+    main_types = await get_main_training_types(user_id)
+
+    # Получаем установленные цели
+    type_goals = await get_training_type_goals(user_id)
+
     await callback.message.edit_text(
         "🏃 **Цели по типам тренировок**\n\n"
         "Выберите тип тренировки для установки цели:",
-        reply_markup=get_training_type_goals_keyboard(),
+        reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
         parse_mode="Markdown"
     )
     await callback.answer()
@@ -941,23 +1045,42 @@ async def callback_type_goal_input(callback: CallbackQuery, state: FSMContext):
     """Ввод цели для конкретного типа"""
     training_type = callback.data.split(":")[1]
 
-    await state.update_data(current_type_goal=training_type)
-
-    settings = await get_user_settings(callback.from_user.id)
+    user_id = callback.from_user.id
+    settings = await get_user_settings(user_id)
     distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+    # Получаем текущие цели
+    type_goals = await get_training_type_goals(user_id)
+    current_goal = type_goals.get(training_type)
+
+    # Сохраняем message_id для дальнейшего редактирования
+    await state.update_data(
+        current_type_goal=training_type,
+        type_goals_message_id=callback.message.message_id
+    )
 
     # Для силовых тренировок запрашиваем минуты, для остальных - км
     if training_type == 'силовая':
+        message_text = f"🎯 Введите цель для типа '{training_type}' в минутах/неделю:\n\n"
+        if current_goal:
+            message_text += f"Текущая цель: {current_goal} мин/неделю\n\n"
+        message_text += "Например: 120 (2 часа в неделю)"
+        # Если цель уже установлена - показываем кнопку удаления
+        keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
         await callback.message.answer(
-            f"🎯 Введите цель для типа '{training_type}' в минутах/неделю:\n\n"
-            "Например: 120 (2 часа в неделю)",
-            reply_markup=get_simple_cancel_keyboard()
+            message_text,
+            reply_markup=keyboard
         )
     else:
+        message_text = f"🎯 Введите цель для типа '{training_type}' в {distance_unit}/неделю:\n\n"
+        if current_goal:
+            message_text += f"Текущая цель: {current_goal} {distance_unit}/неделю\n\n"
+        message_text += f"Например: 20"
+        # Если цель уже установлена - показываем кнопку удаления
+        keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
         await callback.message.answer(
-            f"🎯 Введите цель для типа '{training_type}' в {distance_unit}/неделю:\n\n"
-            "Например: 20",
-            reply_markup=get_simple_cancel_keyboard()
+            message_text,
+            reply_markup=keyboard
         )
 
     await state.set_state(SettingsStates.waiting_for_type_goal)
@@ -967,13 +1090,63 @@ async def callback_type_goal_input(callback: CallbackQuery, state: FSMContext):
 @router.message(SettingsStates.waiting_for_type_goal)
 async def process_type_goal(message: Message, state: FSMContext):
     """Обработка ввода цели по типу"""
+    data = await state.get_data()
+    training_type = data.get('current_type_goal')
+    type_goals_message_id = data.get('type_goals_message_id')
+    user_id = message.from_user.id
+
+    # Обработка отмены
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат к выбору типов тренировок
+
+        # Получаем настройки и цели для отображения
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+        main_types = await get_main_training_types(user_id)
+        type_goals = await get_training_type_goals(user_id)
+
+        # Пытаемся отредактировать исходное сообщение
+        if type_goals_message_id:
+            try:
+                await message.bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=type_goals_message_id,
+                    text="🏃 **Цели по типам тренировок**\n\n"
+                         "Выберите тип тренировки для установки цели:",
+                    reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
+                    parse_mode="Markdown"
+                )
+            except:
+                # Если не получилось отредактировать, отправляем новое
+                await message.answer(
+                    "🏃 **Цели по типам тренировок**\n\n"
+                    "Выберите тип тренировки для установки цели:",
+                    reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
+                    parse_mode="Markdown"
+                )
+        return
+
+    # Обработка удаления цели
+    if message.text == "🗑 Удалить цель":
+        await set_training_type_goal(user_id, training_type, None)
+        await message.answer(
+            f"✅ Цель для '{training_type}' удалена",
+            reply_markup={"remove_keyboard": True}
+        )
+
+        await state.clear()
+
+        # Получаем обновлённые цели для отображения
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км')
+        main_types = await get_main_training_types(user_id)
+        type_goals = await get_training_type_goals(user_id)
+
+        # Отправляем новое сообщение с меню (не редактируем старое)
         await message.answer(
             "🏃 **Цели по типам тренировок**\n\n"
             "Выберите тип тренировки для установки цели:",
-            reply_markup=get_training_type_goals_keyboard(),
+            reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
             parse_mode="Markdown"
         )
         return
@@ -981,7 +1154,7 @@ async def process_type_goal(message: Message, state: FSMContext):
     try:
         goal = float(message.text.strip().replace(',', '.'))
 
-        if goal <= 0 or goal > 500:
+        if goal < 0 or goal > 500:
             await message.answer("❌ Введите корректное значение (0-500).")
             return
 
@@ -989,10 +1162,6 @@ async def process_type_goal(message: Message, state: FSMContext):
         training_type = data.get('current_type_goal')
 
         user_id = message.from_user.id
-
-        # Для силовых тренировок goal - это минуты, для остальных - км
-        await set_training_type_goal(user_id, training_type, goal)
-
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км')
 
@@ -1002,18 +1171,24 @@ async def process_type_goal(message: Message, state: FSMContext):
         else:
             unit_text = f"{distance_unit}/неделю"
 
-        await state.clear()
-
-        # Возврат к выбору типов тренировок
+        # Для силовых тренировок goal - это минуты, для остальных - км
+        await set_training_type_goal(user_id, training_type, goal)
         await message.answer(
             f"✅ Цель для '{training_type}' сохранена: {goal} {unit_text}",
             reply_markup={"remove_keyboard": True}
         )
 
+        await state.clear()
+
+        # Получаем обновлённые цели для отображения
+        main_types = await get_main_training_types(user_id)
+        type_goals = await get_training_type_goals(user_id)
+
+        # Отправляем новое сообщение с меню (не редактируем старое)
         await message.answer(
             "🏃 **Цели по типам тренировок**\n\n"
             "Выберите тип тренировки для установки цели:",
-            reply_markup=get_training_type_goals_keyboard(),
+            reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
             parse_mode="Markdown"
         )
 
@@ -1022,15 +1197,31 @@ async def process_type_goal(message: Message, state: FSMContext):
 
 
 # 11. ЦЕЛЕВОЙ ВЕС
+# Удаление целевого веса
+@router.callback_query(F.data == "settings:goals:weight:delete")
+async def callback_delete_weight_goal(callback: CallbackQuery):
+    """Удаление целевого веса"""
+    user_id = callback.from_user.id
+    await update_user_setting(user_id, 'weight_goal', None)
+    await callback.answer("✅ Целевой вес удалён", show_alert=True)
+    # Обновляем меню
+    await callback_goals_menu(callback)
+
+
 @router.callback_query(F.data == "settings:goals:weight")
 async def callback_set_weight_goal(callback: CallbackQuery, state: FSMContext):
     """Установка целевого веса"""
     settings = await get_user_settings(callback.from_user.id)
     weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
-    
+    current_goal = settings.get('weight_goal') if settings else None
+
+    message_text = f"⚖️ Введите целевой вес в {weight_unit}:\n\n"
+    if current_goal:
+        message_text += f"Текущая цель: {current_goal:.1f} {weight_unit}\n\n"
+    message_text += f"Например: 75"
+
     await callback.message.answer(
-        f"⚖️ Введите целевой вес в {weight_unit}:\n\n"
-        "Например: 75",
+        message_text,
         reply_markup=get_simple_cancel_keyboard()
     )
     await state.set_state(SettingsStates.waiting_for_weight_goal)
@@ -1048,17 +1239,24 @@ async def process_weight_goal(message: Message, state: FSMContext):
     
     try:
         weight_goal = float(message.text.strip().replace(',', '.'))
-        
-        if weight_goal <= 0 or weight_goal > 500:
-            await message.answer("❌ Введите корректное значение (0-500).")
-            return
-        
+
         user_id = message.from_user.id
-        await update_user_setting(user_id, 'weight_goal', weight_goal)
-        
         settings = await get_user_settings(user_id)
         weight_unit = settings.get('weight_unit', 'кг')
-        
+
+        # Валидация в зависимости от единиц измерения
+        if weight_unit == 'кг':
+            min_weight, max_weight = 30, 200
+        else:  # фунты
+            min_weight, max_weight = 66, 440
+
+        if weight_goal < min_weight or weight_goal > max_weight:
+            await message.answer(
+                f"❌ Введите корректное значение ({min_weight}-{max_weight} {weight_unit})."
+            )
+            return
+
+        await update_user_setting(user_id, 'weight_goal', weight_goal)
         await message.answer(
             f"✅ Целевой вес сохранен: {weight_goal} {weight_unit}",
             reply_markup={"remove_keyboard": True}

@@ -685,17 +685,24 @@ async def get_training_type_goals(user_id: int) -> dict:
         return {}
 
 
-async def set_training_type_goal(user_id: int, training_type: str, goal: float) -> None:
+async def set_training_type_goal(user_id: int, training_type: str, goal: float = None) -> None:
     """
     Установить цель для конкретного типа тренировки
-    
+
     Args:
         user_id: Telegram ID пользователя
         training_type: Тип тренировки
-        goal: Целевое значение (км или количество)
+        goal: Целевое значение (км или количество), None для удаления цели
     """
     goals = await get_training_type_goals(user_id)
-    goals[training_type] = goal
+
+    if goal is None:
+        # Удаляем цель если goal=None
+        if training_type in goals:
+            del goals[training_type]
+    else:
+        goals[training_type] = goal
+
     await set_training_type_goals(user_id, goals)
 
 

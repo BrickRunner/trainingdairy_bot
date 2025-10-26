@@ -80,26 +80,53 @@ def get_pulse_zones_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_goals_settings_keyboard() -> InlineKeyboardMarkup:
-    """Меню настройки целей"""
+def get_goals_settings_keyboard(has_volume_goal: bool = False, has_count_goal: bool = False, has_weight_goal: bool = False) -> InlineKeyboardMarkup:
+    """
+    Меню настройки целей
+
+    Args:
+        has_volume_goal: Установлена ли цель по объёму
+        has_count_goal: Установлена ли цель по количеству
+        has_weight_goal: Установлена ли цель по весу
+    """
     builder = InlineKeyboardBuilder()
-    
+
+    # Недельный объем с кнопкой удаления если цель установлена
     builder.row(
         InlineKeyboardButton(text="📊 Недельный объем", callback_data="settings:goals:volume")
     )
+    if has_volume_goal:
+        builder.row(
+            InlineKeyboardButton(text="🗑 Удалить цель по объёму", callback_data="settings:goals:volume:delete")
+        )
+
+    # Количество тренировок с кнопкой удаления если цель установлена
     builder.row(
         InlineKeyboardButton(text="🔢 Количество тренировок", callback_data="settings:goals:count")
     )
+    if has_count_goal:
+        builder.row(
+            InlineKeyboardButton(text="🗑 Удалить цель по количеству", callback_data="settings:goals:count:delete")
+        )
+
+    # Цели по типам (удаление внутри)
     builder.row(
         InlineKeyboardButton(text="🏃 Цели по типам", callback_data="settings:goals:by_type")
     )
+
+    # Целевой вес с кнопкой удаления если цель установлена
     builder.row(
         InlineKeyboardButton(text="⚖️ Целевой вес", callback_data="settings:goals:weight")
     )
+    if has_weight_goal:
+        builder.row(
+            InlineKeyboardButton(text="🗑 Удалить целевой вес", callback_data="settings:goals:weight:delete")
+        )
+
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:menu")
     )
-    
+
     return builder.as_markup()
 
 
@@ -266,29 +293,47 @@ def get_weekday_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_training_type_goals_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для настройки целей по типам тренировок"""
+def get_training_type_goals_keyboard(main_types: list = None, type_goals: dict = None, distance_unit: str = 'км') -> InlineKeyboardMarkup:
+    """
+    Клавиатура для настройки целей по типам тренировок
+
+    Args:
+        main_types: Список основных типов тренировок пользователя
+        type_goals: Словарь с установленными целями {тип: значение}
+        distance_unit: Единица измерения дистанции
+    """
     builder = InlineKeyboardBuilder()
-    
-    builder.row(
-        InlineKeyboardButton(text="🏃 Кросс", callback_data="type_goal:кросс")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🏊 Плавание", callback_data="type_goal:плавание")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🚴 Велотренировка", callback_data="type_goal:велотренировка")
-    )
-    builder.row(
-        InlineKeyboardButton(text="💪 Силовая", callback_data="type_goal:силовая")
-    )
-    builder.row(
-        InlineKeyboardButton(text="⚡ Интервальная", callback_data="type_goal:интервальная")
-    )
+
+    type_goals = type_goals or {}
+    main_types = main_types or []
+
+    # Эмодзи для типов
+    type_emoji = {
+        'кросс': '🏃',
+        'плавание': '🏊',
+        'велотренировка': '🚴',
+        'силовая': '💪',
+        'интервальная': '⚡'
+    }
+
+    # Показываем только основные типы пользователя
+    for t_type in main_types:
+        emoji = type_emoji.get(t_type, '🏃')
+
+        # Для силовых - минуты, для остальных - км
+        if t_type == 'силовая':
+            goal_text = f" ({type_goals[t_type]:.0f} мин)" if t_type in type_goals else ""
+        else:
+            goal_text = f" ({type_goals[t_type]} {distance_unit})" if t_type in type_goals else ""
+
+        builder.row(
+            InlineKeyboardButton(text=f"{emoji} {t_type.capitalize()}{goal_text}", callback_data=f"type_goal:{t_type}")
+        )
+
     builder.row(
         InlineKeyboardButton(text="💾 Готово", callback_data="settings:goals")
     )
-    
+
     return builder.as_markup()
 
 
@@ -296,6 +341,16 @@ def get_simple_cancel_keyboard() -> ReplyKeyboardMarkup:
     """Простая клавиатура с кнопкой отмены"""
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="❌ Отмена"))
+    return builder.as_markup(resize_keyboard=True)
+
+
+def get_cancel_delete_keyboard() -> ReplyKeyboardMarkup:
+    """Клавиатура с кнопками отмены и удаления цели"""
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="❌ Отмена"),
+        KeyboardButton(text="🗑 Удалить цель")
+    )
     return builder.as_markup(resize_keyboard=True)
 
 
