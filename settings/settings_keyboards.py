@@ -80,48 +80,29 @@ def get_pulse_zones_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_goals_settings_keyboard(has_volume_goal: bool = False, has_count_goal: bool = False, has_weight_goal: bool = False) -> InlineKeyboardMarkup:
-    """
-    Меню настройки целей
-
-    Args:
-        has_volume_goal: Установлена ли цель по объёму
-        has_count_goal: Установлена ли цель по количеству
-        has_weight_goal: Установлена ли цель по весу
-    """
+def get_goals_settings_keyboard() -> InlineKeyboardMarkup:
+    """Меню настройки целей"""
     builder = InlineKeyboardBuilder()
 
-    # Недельный объем с кнопкой удаления если цель установлена
+    # Недельный объем
     builder.row(
         InlineKeyboardButton(text="📊 Недельный объем", callback_data="settings:goals:volume")
     )
-    if has_volume_goal:
-        builder.row(
-            InlineKeyboardButton(text="🗑 Удалить цель по объёму", callback_data="settings:goals:volume:delete")
-        )
 
-    # Количество тренировок с кнопкой удаления если цель установлена
+    # Количество тренировок
     builder.row(
         InlineKeyboardButton(text="🔢 Количество тренировок", callback_data="settings:goals:count")
     )
-    if has_count_goal:
-        builder.row(
-            InlineKeyboardButton(text="🗑 Удалить цель по количеству", callback_data="settings:goals:count:delete")
-        )
 
-    # Цели по типам (удаление внутри)
+    # Цели по типам
     builder.row(
         InlineKeyboardButton(text="🏃 Цели по типам", callback_data="settings:goals:by_type")
     )
 
-    # Целевой вес с кнопкой удаления если цель установлена
+    # Целевой вес
     builder.row(
         InlineKeyboardButton(text="⚖️ Целевой вес", callback_data="settings:goals:weight")
     )
-    if has_weight_goal:
-        builder.row(
-            InlineKeyboardButton(text="🗑 Удалить целевой вес", callback_data="settings:goals:weight:delete")
-        )
 
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:menu")

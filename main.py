@@ -15,6 +15,7 @@ from settings.settings_handlers_full import router as settings_router
 from health.health_handlers import router as health_router
 from database.queries import init_db
 from notifications.notification_scheduler import start_notification_scheduler
+from utils.birthday_checker import schedule_birthday_check
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -54,7 +55,11 @@ async def main():
     # Запуск планировщика уведомлений
     start_notification_scheduler(bot)
     logger.info("Планировщик уведомлений запущен")
-    
+
+    # Запуск планировщика поздравлений с днём рождения
+    asyncio.create_task(schedule_birthday_check(bot))
+    logger.info("Планировщик поздравлений с днём рождения запущен")
+
     # Запуск бота
     logger.info("Бот запущен!")
     try:

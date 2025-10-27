@@ -835,3 +835,38 @@ def format_date_by_setting(date_str: str, format_setting: str) -> str:
             return date_obj.strftime('%Y-%m-%d')
     except:
         return date_str
+
+
+async def get_all_users_with_birthdays():
+    """
+    Получить всех пользователей с указанными днями рождения
+
+    Returns:
+        list: Список словарей с данными пользователей (user_id, birth_date)
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT id as user_id, birth_date
+            FROM user_settings
+            WHERE birth_date IS NOT NULL
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+            users = []
+            for row in rows:
+                # Конвертируем строку даты в объект date
+                birth_date_str = row['birth_date']
+                if birth_date_str:
+                    try:
+                        birth_date = datetime.strptime(birth_date_str, '%Y-%m-%d').date()
+                        users.append({
+                            'user_id': row['user_id'],
+                            'birth_date': birth_date
+                        })
+                    except ValueError:
+                        continue
+
+            return users

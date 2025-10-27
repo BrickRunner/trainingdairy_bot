@@ -34,6 +34,7 @@ from health.health_queries import (
 from health.health_graphs import generate_health_graphs, generate_sleep_quality_graph
 from health.sleep_analysis import SleepAnalyzer, format_sleep_analysis_message
 from utils.date_formatter import DateFormatter, get_user_date_format
+from database.queries import get_user_settings
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -205,9 +206,18 @@ async def start_pulse_input(callback: CallbackQuery, state: FSMContext):
 async def start_weight_input(callback: CallbackQuery, state: FSMContext):
     """Ввод только веса"""
     # НЕ очищаем state - чтобы сохранить другие метрики!
+    user_id = callback.from_user.id
+    settings = await get_user_settings(user_id)
+    weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
+    weight_goal = settings.get('weight_goal') if settings else None
+
+    message_text = f"⚖️ Введите ваш <b>вес</b> ({weight_unit}):\n\n"
+    if weight_goal:
+        message_text += f"Ваша цель: {weight_goal:.1f} {weight_unit}\n\n"
+    message_text += "Например: 75.5"
+
     await callback.message.answer(
-        "⚖️ Введите ваш <b>вес</b> (кг):\n\n"
-        "Например: 75.5",
+        message_text,
         reply_markup=get_cancel_keyboard(),
         parse_mode="HTML"
     )
@@ -501,9 +511,18 @@ async def process_pulse(message: Message, state: FSMContext):
 
 async def ask_weight(message: Message, state: FSMContext):
     """Запрос веса"""
+    user_id = message.from_user.id
+    settings = await get_user_settings(user_id)
+    weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
+    weight_goal = settings.get('weight_goal') if settings else None
+
+    message_text = f"⚖️ Введите ваш <b>вес</b> ({weight_unit}):\n\n"
+    if weight_goal:
+        message_text += f"Ваша цель: {weight_goal:.1f} {weight_unit}\n\n"
+    message_text += "Например: 75.5"
+
     await message.answer(
-        "⚖️ Введите ваш <b>вес</b> (кг):\n\n"
-        "Например: 75.5",
+        message_text,
         reply_markup=get_skip_cancel_keyboard(),
         parse_mode="HTML"
     )
@@ -707,12 +726,29 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
     success = await save_health_metrics(**save_params)
 
     if success:
+        # Получаем настройки пользователя для целевого веса
+        settings = await get_user_settings(user_id)
+        weight_goal = settings.get('weight_goal') if settings else None
+        weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
+
         # Формируем сообщение о сохраненных данных
         saved_items = []
         if data.get('pulse'):
             saved_items.append(f"💗 Пульс: {data['pulse']} уд/мин")
         if data.get('weight'):
-            saved_items.append(f"⚖️ Вес: {data['weight']} кг")
+            weight_text = f"⚖️ Вес: {data['weight']} {weight_unit}"
+
+            # Добавляем разницу с целевым весом, если он установлен
+            if weight_goal:
+                diff = data['weight'] - weight_goal
+                if abs(diff) < 0.1:
+                    weight_text += f" (🎯 цель достигнута!)"
+                elif diff > 0:
+                    weight_text += f" (до цели: -{diff:.1f} {weight_unit})"
+                else:
+                    weight_text += f" (превышение цели: +{abs(diff):.1f} {weight_unit})"
+
+            saved_items.append(weight_text)
         if data.get('sleep_duration'):
             # Форматируем длительность сна
             duration = data['sleep_duration']
@@ -947,7 +983,11 @@ async def show_stats_and_graphs(callback: CallbackQuery):
             for m in metrics:
                 logger.info(f"  {m['date']}: pulse={m.get('morning_pulse')}, weight={m.get('weight')}, sleep={m.get('sleep_duration')}")
 
-            graph_buffer = await generate_health_graphs(metrics, period_name)
+            # Получаем целевой вес из настроек пользователя
+            settings = await get_user_settings(user_id)
+            weight_goal = settings.get('weight_goal') if settings else None
+
+            graph_buffer = await generate_health_graphs(metrics, period_name, weight_goal)
             logger.info(f"Graph generated successfully, buffer size: {len(graph_buffer.getvalue())} bytes")
 
             photo = BufferedInputFile(graph_buffer.read(), filename=f"health_stats.png")

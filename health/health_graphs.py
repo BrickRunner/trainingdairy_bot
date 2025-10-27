@@ -17,13 +17,14 @@ logger = logging.getLogger(__name__)
 plt.rcParams['font.family'] = 'DejaVu Sans'
 
 
-async def generate_health_graphs(metrics: List[Dict], period_name: str) -> io.BytesIO:
+async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_goal: float = None) -> io.BytesIO:
     """
     Генерирует графики метрик здоровья
 
     Args:
         metrics: Список метрик за период
         period_name: Название периода (например, "этот месяц", "7 дней")
+        weight_goal: Целевой вес (если установлен)
 
     Returns:
         BytesIO объект с изображением графиков
@@ -64,7 +65,7 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str) -> io.By
         _plot_metric(
             axes[1], dates, weight_values,
             'Вес', 'кг',
-            '#3498db', ''
+            '#3498db', '', weight_goal
         )
 
         # График сна
@@ -90,7 +91,7 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str) -> io.By
         raise
 
 
-def _plot_metric(ax, dates, values, title, ylabel, color, emoji):
+def _plot_metric(ax, dates, values, title, ylabel, color, emoji, goal_value=None):
     """Построение одного графика метрики"""
     # Фильтруем None значения
     valid_data = [(d, v) for d, v in zip(dates, values) if v is not None]
@@ -150,6 +151,13 @@ def _plot_metric(ax, dates, values, title, ylabel, color, emoji):
     ax.axhline(y=avg_value, color=color, linestyle='--',
                linewidth=1, alpha=0.5,
                label=f'Среднее: {avg_value:.1f}')
+
+    # Добавление линии целевого значения (если задано)
+    if goal_value is not None:
+        ax.axhline(y=goal_value, color='green', linestyle='-.',
+                   linewidth=2, alpha=0.7,
+                   label=f'Цель: {goal_value:.1f}')
+
     ax.legend(loc='upper right', fontsize=8)
 
 

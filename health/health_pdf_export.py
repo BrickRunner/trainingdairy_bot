@@ -21,6 +21,7 @@ from .health_queries import get_health_metrics_range, get_latest_health_metrics
 from .health_graphs import generate_health_graphs
 from .sleep_analysis import SleepAnalyzer, format_sleep_analysis_message
 from utils.date_formatter import DateFormatter, get_user_date_format
+from database.queries import get_user_settings
 
 logger = logging.getLogger(__name__)
 
@@ -274,8 +275,12 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         story.append(Paragraph("Графики метрик здоровья", heading_style))
         story.append(Spacer(1, 0.5*cm))
 
+        # Получаем целевой вес из настроек пользователя
+        settings = await get_user_settings(user_id)
+        weight_goal = settings.get('weight_goal') if settings else None
+
         # Генерируем график
-        graph_buffer = await generate_health_graphs(metrics, period_name)
+        graph_buffer = await generate_health_graphs(metrics, period_name, weight_goal)
 
         # Добавляем график как изображение
         img = Image(graph_buffer, width=17*cm, height=14*cm)

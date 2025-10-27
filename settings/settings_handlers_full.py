@@ -156,14 +156,9 @@ async def send_goals_menu(message: Message, user_id: int):
 
     info_text += "\nВыберите параметр для изменения:"
 
-    # Определяем наличие целей для кнопок удаления
-    has_volume_goal = bool(settings and settings.get('weekly_volume_goal'))
-    has_count_goal = bool(settings and settings.get('weekly_trainings_goal'))
-    has_weight_goal = bool(settings and settings.get('weight_goal'))
-
     await message.answer(
         info_text,
-        reply_markup=get_goals_settings_keyboard(has_volume_goal, has_count_goal, has_weight_goal),
+        reply_markup=get_goals_settings_keyboard(),
         parse_mode="Markdown"
     )
 
@@ -869,31 +864,15 @@ async def callback_goals_menu(callback: CallbackQuery):
 
     info_text += "\nВыберите параметр для изменения:"
 
-    # Определяем наличие целей для кнопок удаления
-    has_volume_goal = bool(settings and settings.get('weekly_volume_goal'))
-    has_count_goal = bool(settings and settings.get('weekly_trainings_goal'))
-    has_weight_goal = bool(settings and settings.get('weight_goal'))
-
     await callback.message.edit_text(
         info_text,
-        reply_markup=get_goals_settings_keyboard(has_volume_goal, has_count_goal, has_weight_goal),
+        reply_markup=get_goals_settings_keyboard(),
         parse_mode="Markdown"
     )
     await callback.answer()
 
 
 # 8. ЦЕЛЕВОЙ ОБЪЕМ
-# Удаление цели по объёму
-@router.callback_query(F.data == "settings:goals:volume:delete")
-async def callback_delete_weekly_volume(callback: CallbackQuery):
-    """Удаление цели по недельному объему"""
-    user_id = callback.from_user.id
-    await update_user_setting(user_id, 'weekly_volume_goal', None)
-    await callback.answer("✅ Цель по объёму удалена", show_alert=True)
-    # Обновляем меню
-    await callback_goals_menu(callback)
-
-
 @router.callback_query(F.data == "settings:goals:volume")
 async def callback_set_weekly_volume(callback: CallbackQuery, state: FSMContext):
     """Установка целевого недельного объема"""
@@ -906,9 +885,12 @@ async def callback_set_weekly_volume(callback: CallbackQuery, state: FSMContext)
         message_text += f"Текущая цель: {current_goal} {distance_unit}\n\n"
     message_text += "Например: 30"
 
+    # Если цель уже установлена - показываем кнопку удаления
+    keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
+
     await callback.message.answer(
         message_text,
-        reply_markup=get_simple_cancel_keyboard()
+        reply_markup=keyboard
     )
     await state.set_state(SettingsStates.waiting_for_weekly_volume)
     await callback.answer()
@@ -922,7 +904,19 @@ async def process_weekly_volume(message: Message, state: FSMContext):
         # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
         return
-    
+
+    # Обработка удаления цели
+    if message.text == "🗑 Удалить цель":
+        user_id = message.from_user.id
+        await update_user_setting(user_id, 'weekly_volume_goal', None)
+        await message.answer(
+            "✅ Цель по недельному объёму удалена",
+            reply_markup={"remove_keyboard": True}
+        )
+        await state.clear()
+        await send_goals_menu(message, user_id)
+        return
+
     try:
         volume = float(message.text.strip().replace(',', '.'))
 
@@ -934,39 +928,20 @@ async def process_weekly_volume(message: Message, state: FSMContext):
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км')
 
-        # Если 0 - удаляем цель (сохраняем NULL)
-        if volume == 0:
-            await update_user_setting(user_id, 'weekly_volume_goal', None)
-            await message.answer(
-                f"✅ Цель по недельному объёму сброшена",
-                reply_markup={"remove_keyboard": True}
-            )
-        else:
-            await update_user_setting(user_id, 'weekly_volume_goal', volume)
-            await message.answer(
-                f"✅ Целевой недельный объем сохранен: {volume} {distance_unit}",
-                reply_markup={"remove_keyboard": True}
-            )
+        await update_user_setting(user_id, 'weekly_volume_goal', volume)
+        await message.answer(
+            f"✅ Целевой недельный объем сохранен: {volume} {distance_unit}",
+            reply_markup={"remove_keyboard": True}
+        )
         await state.clear()
         # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
-        
+
     except ValueError:
         await message.answer("❌ Введите число (например: 30)")
 
 
 # 9. КОЛИЧЕСТВО ТРЕНИРОВОК В НЕДЕЛЮ
-# Удаление цели по количеству
-@router.callback_query(F.data == "settings:goals:count:delete")
-async def callback_delete_weekly_count(callback: CallbackQuery):
-    """Удаление цели по количеству тренировок"""
-    user_id = callback.from_user.id
-    await update_user_setting(user_id, 'weekly_trainings_goal', None)
-    await callback.answer("✅ Цель по количеству удалена", show_alert=True)
-    # Обновляем меню
-    await callback_goals_menu(callback)
-
-
 @router.callback_query(F.data == "settings:goals:count")
 async def callback_set_weekly_count(callback: CallbackQuery, state: FSMContext):
     """Установка целевого количества тренировок"""
@@ -978,9 +953,12 @@ async def callback_set_weekly_count(callback: CallbackQuery, state: FSMContext):
         message_text += f"Текущая цель: {current_goal} тренировок\n\n"
     message_text += "Например: 5"
 
+    # Если цель уже установлена - показываем кнопку удаления
+    keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
+
     await callback.message.answer(
         message_text,
-        reply_markup=get_simple_cancel_keyboard()
+        reply_markup=keyboard
     )
     await state.set_state(SettingsStates.waiting_for_weekly_count)
     await callback.answer()
@@ -994,7 +972,19 @@ async def process_weekly_count(message: Message, state: FSMContext):
         # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
         return
-    
+
+    # Обработка удаления цели
+    if message.text == "🗑 Удалить цель":
+        user_id = message.from_user.id
+        await update_user_setting(user_id, 'weekly_trainings_goal', None)
+        await message.answer(
+            "✅ Цель по количеству тренировок удалена",
+            reply_markup={"remove_keyboard": True}
+        )
+        await state.clear()
+        await send_goals_menu(message, user_id)
+        return
+
     try:
         count = int(message.text.strip())
 
@@ -1012,7 +1002,7 @@ async def process_weekly_count(message: Message, state: FSMContext):
         await state.clear()
         # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
-        
+
     except ValueError:
         await message.answer("❌ Введите целое число.")
 
@@ -1105,25 +1095,13 @@ async def process_type_goal(message: Message, state: FSMContext):
         main_types = await get_main_training_types(user_id)
         type_goals = await get_training_type_goals(user_id)
 
-        # Пытаемся отредактировать исходное сообщение
-        if type_goals_message_id:
-            try:
-                await message.bot.edit_message_text(
-                    chat_id=message.chat.id,
-                    message_id=type_goals_message_id,
-                    text="🏃 **Цели по типам тренировок**\n\n"
-                         "Выберите тип тренировки для установки цели:",
-                    reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
-                    parse_mode="Markdown"
-                )
-            except:
-                # Если не получилось отредактировать, отправляем новое
-                await message.answer(
-                    "🏃 **Цели по типам тренировок**\n\n"
-                    "Выберите тип тренировки для установки цели:",
-                    reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
-                    parse_mode="Markdown"
-                )
+        # Отправляем новое сообщение с меню (не редактируем старое)
+        await message.answer(
+            "🏃 **Цели по типам тренировок**\n\n"
+            "Выберите тип тренировки для установки цели:",
+            reply_markup=get_training_type_goals_keyboard(main_types, type_goals, distance_unit),
+            parse_mode="Markdown"
+        )
         return
 
     # Обработка удаления цели
@@ -1197,17 +1175,6 @@ async def process_type_goal(message: Message, state: FSMContext):
 
 
 # 11. ЦЕЛЕВОЙ ВЕС
-# Удаление целевого веса
-@router.callback_query(F.data == "settings:goals:weight:delete")
-async def callback_delete_weight_goal(callback: CallbackQuery):
-    """Удаление целевого веса"""
-    user_id = callback.from_user.id
-    await update_user_setting(user_id, 'weight_goal', None)
-    await callback.answer("✅ Целевой вес удалён", show_alert=True)
-    # Обновляем меню
-    await callback_goals_menu(callback)
-
-
 @router.callback_query(F.data == "settings:goals:weight")
 async def callback_set_weight_goal(callback: CallbackQuery, state: FSMContext):
     """Установка целевого веса"""
@@ -1220,9 +1187,12 @@ async def callback_set_weight_goal(callback: CallbackQuery, state: FSMContext):
         message_text += f"Текущая цель: {current_goal:.1f} {weight_unit}\n\n"
     message_text += f"Например: 75"
 
+    # Если цель уже установлена - показываем кнопку удаления
+    keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
+
     await callback.message.answer(
         message_text,
-        reply_markup=get_simple_cancel_keyboard()
+        reply_markup=keyboard
     )
     await state.set_state(SettingsStates.waiting_for_weight_goal)
     await callback.answer()
@@ -1236,7 +1206,19 @@ async def process_weight_goal(message: Message, state: FSMContext):
         # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
         return
-    
+
+    # Обработка удаления цели
+    if message.text == "🗑 Удалить цель":
+        user_id = message.from_user.id
+        await update_user_setting(user_id, 'weight_goal', None)
+        await message.answer(
+            "✅ Целевой вес удалён",
+            reply_markup={"remove_keyboard": True}
+        )
+        await state.clear()
+        await send_goals_menu(message, user_id)
+        return
+
     try:
         weight_goal = float(message.text.strip().replace(',', '.'))
 
@@ -1264,7 +1246,7 @@ async def process_weight_goal(message: Message, state: FSMContext):
         await state.clear()
         # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
-        
+
     except ValueError:
         await message.answer("❌ Введите число.")
 
