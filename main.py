@@ -13,9 +13,11 @@ import os
 from bot.handlers import router
 from settings.settings_handlers_full import router as settings_router
 from health.health_handlers import router as health_router
+from ratings.ratings_handlers import router as ratings_router
 from database.queries import init_db
 from notifications.notification_scheduler import start_notification_scheduler
 from utils.birthday_checker import schedule_birthday_check
+from ratings.rating_updater import schedule_rating_updates
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -46,6 +48,7 @@ async def main():
     # ВАЖНО: settings_router должен быть первым, так как содержит более специфичные обработчики (cal_birth_)
     dp.include_router(settings_router)
     dp.include_router(health_router)
+    dp.include_router(ratings_router)
     dp.include_router(router)
     
     # Инициализация базы данных
@@ -59,6 +62,10 @@ async def main():
     # Запуск планировщика поздравлений с днём рождения
     asyncio.create_task(schedule_birthday_check(bot))
     logger.info("Планировщик поздравлений с днём рождения запущен")
+
+    # Запуск планировщика обновления рейтингов
+    asyncio.create_task(schedule_rating_updates())
+    logger.info("Планировщик обновления рейтингов запущен")
 
     # Запуск бота
     logger.info("Бот запущен!")

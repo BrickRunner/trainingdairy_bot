@@ -289,9 +289,9 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
         # Получаем все тренировки за период (до сегодняшнего дня включительно)
         async with db.execute(
             """
-            SELECT type, distance, calculated_volume, fatigue_level
-            FROM trainings 
-            WHERE user_id = ? 
+            SELECT type, distance, calculated_volume, duration, fatigue_level
+            FROM trainings
+            WHERE user_id = ?
             AND date >= ?
             AND date <= ?
             """,
@@ -304,6 +304,8 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
                 'total_count': 0,
                 'total_distance': 0.0,
                 'types_count': {},
+                'types_distance': {},
+                'types_duration': {},
                 'avg_fatigue': 0
             }
         
@@ -311,34 +313,50 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
         total_count = len(trainings)
         total_distance = 0.0
         types_count = {}
+        types_distance = {}  # Дистанция по типам
+        types_duration = {}  # Длительность по типам (для силовых)
         fatigue_sum = 0
         fatigue_count = 0
-        
+
         for training in trainings:
             # Подсчёт по типам
             t_type = training['type']
-            types_count[t_type] = types_count.get(t_type, 0) + 1
-            
+
+            # Пропускаем тренировки без типа
+            if t_type:
+                types_count[t_type] = types_count.get(t_type, 0) + 1
+
             # Подсчёт дистанции
             distance = training['distance']
             calculated_volume = training['calculated_volume']
-            
+            duration = training['duration']
+
             if calculated_volume:  # Для интервальных тренировок
                 total_distance += calculated_volume
+                if t_type:
+                    types_distance[t_type] = types_distance.get(t_type, 0) + calculated_volume
             elif distance:  # Для остальных
                 total_distance += distance
-            
+                if t_type:
+                    types_distance[t_type] = types_distance.get(t_type, 0) + distance
+
+            # Подсчёт длительности (для силовых тренировок)
+            if duration and t_type:
+                types_duration[t_type] = types_duration.get(t_type, 0) + duration
+
             # Подсчёт усталости
             if training['fatigue_level']:
                 fatigue_sum += training['fatigue_level']
                 fatigue_count += 1
-        
+
         avg_fatigue = round(fatigue_sum / fatigue_count, 1) if fatigue_count > 0 else 0
-        
+
         return {
             'total_count': total_count,
             'total_distance': round(total_distance, 2),
             'types_count': types_count,
+            'types_distance': types_distance,
+            'types_duration': types_duration,  # Пока пустой, т.к. нет поля duration в таблице
             'avg_fatigue': avg_fatigue
         }
 
@@ -848,7 +866,7 @@ async def get_all_users_with_birthdays():
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """
-            SELECT id as user_id, birth_date
+            SELECT user_id, birth_date
             FROM user_settings
             WHERE birth_date IS NOT NULL
             """

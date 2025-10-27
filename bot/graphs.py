@@ -117,8 +117,10 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
             
             if w.get('fatigue_level') is not None:
                 grouped_data[group_key]['fatigue'].append(float(w['fatigue_level']))
-            
-            distance = float(w.get('distance', 0.0) or w.get('calculated_volume', 0.0))
+
+            # Безопасное получение дистанции
+            distance_value = w.get('distance') or w.get('calculated_volume') or 0.0
+            distance = float(distance_value) if distance_value is not None else 0.0
             grouped_data[group_key]['distance'] += distance
             grouped_data[group_key]['types'][w['type']] += 1
             

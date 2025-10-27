@@ -246,6 +246,107 @@ async def send_weekly_reports(bot: Bot):
                     print(f"Ошибка генерации или отправки отчёта пользователю {user_id}: {e}")
 
 
+async def send_training_reminders(bot: Bot):
+    """
+    Отправка напоминаний о тренировках
+    Проверяет день недели и время для каждого пользователя
+    Использует timezone-aware datetime для корректной обработки часовых поясов
+    """
+    import aiosqlite
+    import os
+    import json
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+    DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+    # Получаем текущее UTC время
+    utc_now = datetime.now(pytz.UTC)
+
+    # Маппинг дней недели
+    weekday_map = {
+        'Monday': 'Понедельник',
+        'Tuesday': 'Вторник',
+        'Wednesday': 'Среда',
+        'Thursday': 'Четверг',
+        'Friday': 'Пятница',
+        'Saturday': 'Суббота',
+        'Sunday': 'Воскресенье'
+    }
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Получаем всех пользователей с включенными напоминаниями
+        async with db.execute(
+            """
+            SELECT user_id, name, training_reminder_days, training_reminder_time, timezone
+            FROM user_settings
+            WHERE training_reminders_enabled = 1
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+            for row in rows:
+                user_id = row['user_id']
+                name = row['name'] or "друг"
+                reminder_days_json = row['training_reminder_days']
+                reminder_time = row['training_reminder_time']
+                user_timezone_str = row['timezone'] or 'Europe/Moscow'
+
+                # Парсим дни недели
+                try:
+                    reminder_days = json.loads(reminder_days_json) if reminder_days_json else []
+                except:
+                    reminder_days = []
+
+                if not reminder_days or not reminder_time:
+                    continue
+
+                try:
+                    # Получаем часовой пояс пользователя
+                    user_tz = pytz.timezone(user_timezone_str)
+
+                    # Конвертируем UTC время в часовой пояс пользователя
+                    user_now = utc_now.astimezone(user_tz)
+                    current_weekday = user_now.strftime('%A')  # Английское название дня
+                    current_time = user_now.strftime('%H:%M')
+                    current_weekday_ru = weekday_map.get(current_weekday, 'Понедельник')
+
+                    # Проверяем, совпадает ли текущий день с настройками напоминаний
+                    if current_weekday_ru not in reminder_days:
+                        continue
+
+                    # Проверяем, совпадает ли текущее время с временем напоминания
+                    if current_time != reminder_time:
+                        continue
+
+                except Exception as e:
+                    print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
+                    continue
+
+                # Отправляем напоминание
+                reminder_message = (
+                    f"🔔 <b>Напоминание, {name}!</b> 👋\n\n"
+                    "Не забудь добавить тренировку за сегодня!\n\n"
+                    "💪 Каждая тренировка приближает тебя к цели!"
+                )
+
+                # Создаем inline-кнопку для быстрого добавления тренировки
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Добавить тренировку", callback_data="quick_add_training")]
+                ])
+
+                try:
+                    await bot.send_message(
+                        user_id,
+                        reminder_message,
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    print(f"Ошибка отправки напоминания пользователю {user_id}: {e}")
+
+
 async def notification_scheduler(bot: Bot):
     """
     Главный планировщик уведомлений
@@ -254,20 +355,23 @@ async def notification_scheduler(bot: Bot):
     while True:
         try:
             now = datetime.now()
-            
+
             # Проверяем дни рождения в 00:00
             if now.hour == 0 and now.minute == 0:
                 await check_birthdays(bot)
-            
+
             # Проверяем ежедневные напоминания каждую минуту
             await send_daily_reminders(bot)
-            
+
             # Проверяем недельные отчёты каждую минуту
             await send_weekly_reports(bot)
-            
+
+            # Проверяем напоминания о тренировках каждую минуту
+            await send_training_reminders(bot)
+
         except Exception as e:
             print(f"Ошибка в планировщике уведомлений: {e}")
-        
+
         # Ждём 60 секунд до следующей проверки
         await asyncio.sleep(60)
 

@@ -63,3 +63,7 @@ class SettingsStates(StatesGroup):
     # Уведомления (13-14)
     waiting_for_daily_time = State()            # 13. Время ежедневного сообщения
     waiting_for_report_time = State()           # 14. Время недельного отчета
+
+    # Напоминания о тренировках (15)
+    selecting_reminder_days = State()           # 15. Выбор дней для напоминаний
+    waiting_for_reminder_time = State()         # 15. Время напоминаний о тренировках

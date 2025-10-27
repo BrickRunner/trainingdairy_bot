@@ -40,6 +40,8 @@ from bot.pdf_export import create_training_pdf
 from utils.unit_converter import format_distance, format_pace, format_swimming_distance
 from utils.date_formatter import DateFormatter, get_user_date_format
 from utils.goals_checker import check_weekly_goals
+from ratings.rating_updater import update_single_user_rating
+from database.level_queries import calculate_and_update_user_level
 
 router = Router()
 
@@ -123,6 +125,37 @@ async def start_add_training(message: Message, state: FSMContext):
         parse_mode="Markdown"
     )
     await state.set_state(AddTrainingStates.waiting_for_type)
+
+
+@router.callback_query(F.data == "quick_add_training")
+async def quick_add_training_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработчик быстрого добавления тренировки из напоминания"""
+    user_id = callback.from_user.id
+
+    # Получаем основные типы тренировок из настроек пользователя
+    main_types = await get_main_training_types(user_id)
+
+    # Проверяем, что есть хотя бы один тип
+    if not main_types:
+        await callback.message.answer(
+            "⚠️ **Настройка основных типов тренировок**\n\n"
+            "Вы еще не выбрали основные типы тренировок.\n"
+            "Пожалуйста, перейдите в меню ⚙️ Настройки → 👤 Профиль → "
+            "Установить основные типы тренировок",
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+        return
+
+    await callback.message.answer(
+        "🏋️ **Добавление тренировки**\n\n"
+        "Выберите тип тренировки:",
+        reply_markup=get_training_types_keyboard(main_types),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddTrainingStates.waiting_for_type)
+    await callback.answer()
+
 
 @router.callback_query(F.data.startswith("training_type:"))
 async def process_training_type(callback: CallbackQuery, state: FSMContext):
@@ -619,6 +652,21 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     
     # Сохраняем тренировку в БД
     await add_training(data)
+
+    # Обновляем рейтинг пользователя после добавления тренировки
+    try:
+        await update_single_user_rating(callback.from_user.id)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении рейтинга: {str(e)}")
+
+    # Обновляем уровень пользователя
+    try:
+        level_update = await calculate_and_update_user_level(callback.from_user.id)
+        if level_update['level_changed']:
+            logger.info(f"Уровень пользователя {callback.from_user.id} изменен: "
+                       f"{level_update['old_level']} -> {level_update['new_level']}")
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении уровня: {str(e)}")
 
     # Проверяем достижение целей после сохранения тренировки
     try:
@@ -1141,7 +1189,7 @@ async def confirm_delete(callback: CallbackQuery):
             if training.get('avg_pulse'):
                 message_text += f"   ❤️ Пульс: {training['avg_pulse']} уд/мин\n"
             if training.get('fatigue_level'):
-                message_text += f"   😴 Усталость: {training['fatigue_level']}/10*\n"
+                message_text += f"   😴 Усталость: {training['fatigue_level']}/10\n"
             message_text += "\n"
         if len(trainings) > 15:
             message_text += f"_... и ещё {len(trainings) - 15} тренировок_\n"
@@ -1386,10 +1434,7 @@ async def show_graphs(message: Message):
     """Показать графики (заглушка)"""
     await message.answer("📈 Графики будут доступна позже!")
 
-@router.message(F.text == "🏆 Достижения")
-async def show_achievements(message: Message):
-    """Показать достижения (заглушка)"""
-    await message.answer("🏆 Достижения будут доступны позже!")
+# Обработчик достижений перенесен в ratings/ratings_handlers.py
 
 @router.message(F.text == "ℹ️ Помощь")
 async def show_help(message: Message):

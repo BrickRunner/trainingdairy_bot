@@ -27,7 +27,9 @@ from settings.settings_keyboards import (
     get_weekday_keyboard,
     get_training_type_goals_keyboard,
     get_simple_cancel_keyboard,
-    get_cancel_delete_keyboard
+    get_cancel_delete_keyboard,
+    get_training_reminder_toggle_keyboard,
+    get_training_reminder_days_keyboard
 )
 from database.queries import (
     init_user_settings,
@@ -1588,26 +1590,218 @@ async def callback_save_timezone(callback: CallbackQuery):
     """Сохранение выбранного часового пояса"""
     timezone = callback.data.split(":")[1]
     user_id = callback.from_user.id
-    
+
     # Сохраняем в БД
     await update_user_setting(user_id, 'timezone', timezone)
-    
+
     # Возвращаемся в меню единиц измерения
     settings = await get_user_settings(user_id)
-    
+
     info_text = "📏 **Единицы измерения**\n\n"
-    
+
     if settings:
         info_text += f"📏 Дистанция: {settings.get('distance_unit', 'км')}\n"
         info_text += f"⚖️ Вес: {settings.get('weight_unit', 'кг')}\n"
         info_text += f"📅 Формат даты: {settings.get('date_format', 'ДД.ММ.ГГГГ')}\n"
         info_text += f"🌍 Часовой пояс: {settings.get('timezone', 'Europe/Moscow')}\n"
-    
+
     info_text += "\nВыберите параметр для изменения:"
-    
+
     await callback.message.edit_text(
         info_text,
         reply_markup=get_units_settings_keyboard(),
         parse_mode="Markdown"
     )
     await callback.answer("Сохранено!")
+
+
+# ============== РАЗДЕЛ: НАПОМИНАНИЯ О ТРЕНИРОВКАХ (15) ==============
+
+@router.callback_query(F.data == "settings:notif:training_reminders")
+async def callback_training_reminders_menu(callback: CallbackQuery):
+    """Меню настройки напоминаний о тренировках"""
+    user_id = callback.from_user.id
+    settings = await get_user_settings(user_id)
+
+    # Получаем текущие настройки
+    is_enabled = settings.get('training_reminders_enabled', 0) if settings else 0
+    reminder_days = json.loads(settings.get('training_reminder_days', '[]')) if settings else []
+    reminder_time = settings.get('training_reminder_time', '18:00') if settings else '18:00'
+
+    info_text = "🔔 **Напоминания о тренировках**\n\n"
+
+    if is_enabled:
+        info_text += "✅ Напоминания включены\n\n"
+        if reminder_days:
+            days_str = ", ".join(reminder_days)
+            info_text += f"📅 Дни: {days_str}\n"
+        else:
+            info_text += "📅 Дни: не выбраны\n"
+        info_text += f"⏰ Время: {reminder_time}\n"
+    else:
+        info_text += "🔕 Напоминания выключены\n"
+
+    info_text += "\nВыберите действие:"
+
+    await callback.message.edit_text(
+        info_text,
+        reply_markup=get_training_reminder_toggle_keyboard(bool(is_enabled)),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("toggle_training_reminders:"))
+async def callback_toggle_training_reminders(callback: CallbackQuery):
+    """Включение/выключение напоминаний о тренировках"""
+    action = callback.data.split(":")[1]
+    user_id = callback.from_user.id
+
+    if action == "on":
+        await update_user_setting(user_id, 'training_reminders_enabled', 1)
+        # Устанавливаем дефолтные значения если их нет
+        settings = await get_user_settings(user_id)
+        if not settings.get('training_reminder_days') or settings.get('training_reminder_days') == '[]':
+            # По умолчанию все дни недели
+            default_days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+            await update_user_setting(user_id, 'training_reminder_days', json.dumps(default_days))
+    else:
+        await update_user_setting(user_id, 'training_reminders_enabled', 0)
+
+    # Обновляем меню
+    await callback_training_reminders_menu(callback)
+
+
+@router.callback_query(F.data == "select_reminder_days")
+async def callback_select_reminder_days(callback: CallbackQuery, state: FSMContext):
+    """Выбор дней для напоминаний"""
+    user_id = callback.from_user.id
+    settings = await get_user_settings(user_id)
+
+    # Получаем текущие выбранные дни
+    current_days = json.loads(settings.get('training_reminder_days', '[]')) if settings else []
+
+    # Сохраняем текущие дни в состояние
+    await state.update_data(selected_days=current_days)
+    await state.set_state(SettingsStates.selecting_reminder_days)
+
+    await callback.message.edit_text(
+        "📅 Выберите дни недели для напоминаний о тренировках:\n\n"
+        "Нажмите на день, чтобы добавить/убрать его из списка.",
+        reply_markup=get_training_reminder_days_keyboard(current_days)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("toggle_reminder_day:"), SettingsStates.selecting_reminder_days)
+async def callback_toggle_reminder_day(callback: CallbackQuery, state: FSMContext):
+    """Переключение дня для напоминаний"""
+    day = callback.data.split(":")[1]
+
+    # Получаем текущий список из состояния
+    data = await state.get_data()
+    selected_days = data.get('selected_days', [])
+
+    # Переключаем день
+    if day in selected_days:
+        selected_days.remove(day)
+    else:
+        selected_days.append(day)
+
+    # Сохраняем обновленный список
+    await state.update_data(selected_days=selected_days)
+
+    # Обновляем клавиатуру
+    await callback.message.edit_reply_markup(
+        reply_markup=get_training_reminder_days_keyboard(selected_days)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "save_reminder_days", SettingsStates.selecting_reminder_days)
+async def callback_save_reminder_days(callback: CallbackQuery, state: FSMContext):
+    """Сохранение выбранных дней"""
+    data = await state.get_data()
+    selected_days = data.get('selected_days', [])
+
+    if not selected_days:
+        await callback.answer("❌ Выберите хотя бы один день!", show_alert=True)
+        return
+
+    user_id = callback.from_user.id
+    await update_user_setting(user_id, 'training_reminder_days', json.dumps(selected_days))
+
+    await state.clear()
+
+    # Обновляем меню напоминаний
+    settings = await get_user_settings(user_id)
+    is_enabled = settings.get('training_reminders_enabled', 0) if settings else 0
+    reminder_days = json.loads(settings.get('training_reminder_days', '[]')) if settings else []
+    reminder_time = settings.get('training_reminder_time', '18:00') if settings else '18:00'
+
+    info_text = "🔔 **Напоминания о тренировках**\n\n"
+
+    if is_enabled:
+        info_text += "✅ Напоминания включены\n\n"
+        if reminder_days:
+            days_str = ", ".join(reminder_days)
+            info_text += f"📅 Дни: {days_str}\n"
+        else:
+            info_text += "📅 Дни: не выбраны\n"
+        info_text += f"⏰ Время: {reminder_time}\n"
+    else:
+        info_text += "🔕 Напоминания выключены\n"
+
+    info_text += "\nВыберите действие:"
+
+    await callback.message.edit_text(
+        info_text,
+        reply_markup=get_training_reminder_toggle_keyboard(bool(is_enabled)),
+        parse_mode="Markdown"
+    )
+    await callback.answer("✅ Дни сохранены!")
+
+
+@router.callback_query(F.data == "change_reminder_time")
+async def callback_change_reminder_time(callback: CallbackQuery, state: FSMContext):
+    """Изменение времени напоминаний"""
+    await callback.message.answer(
+        "⏰ Введите время для напоминаний о тренировках\n\n"
+        "Вы можете ввести время в любом удобном формате:\n"
+        "• 8:0 или 8:00\n"
+        "• 18:00\n"
+        "• 18 (будет 18:00)\n"
+        "• 20:30\n\n"
+        "В выбранные дни в это время вы будете получать напоминание о необходимости внести тренировку.",
+        reply_markup=get_simple_cancel_keyboard()
+    )
+    await state.set_state(SettingsStates.waiting_for_reminder_time)
+    await callback.answer()
+
+
+@router.message(SettingsStates.waiting_for_reminder_time)
+async def process_reminder_time(message: Message, state: FSMContext):
+    """Обработка ввода времени напоминаний"""
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await send_notifications_menu(message, message.from_user.id)
+        return
+
+    from utils.time_normalizer import validate_and_normalize_time
+
+    # Валидируем и нормализуем время
+    success, normalized_time, error_msg = validate_and_normalize_time(message.text)
+
+    if not success:
+        await message.answer(error_msg)
+        return
+
+    user_id = message.from_user.id
+    await update_user_setting(user_id, 'training_reminder_time', normalized_time)
+
+    await message.answer(
+        f"✅ Время напоминаний сохранено: {normalized_time}",
+        reply_markup={"remove_keyboard": True}
+    )
+    await state.clear()
+    await send_notifications_menu(message, user_id)

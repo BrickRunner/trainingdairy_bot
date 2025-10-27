@@ -137,7 +137,7 @@ def get_units_settings_keyboard() -> InlineKeyboardMarkup:
 def get_notifications_settings_keyboard() -> InlineKeyboardMarkup:
     """Меню настройки уведомлений"""
     builder = InlineKeyboardBuilder()
-    
+
     builder.row(
         InlineKeyboardButton(text="⏰ Время ежедневного ввода", callback_data="settings:notif:daily_time")
     )
@@ -145,9 +145,12 @@ def get_notifications_settings_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📊 Недельный отчет", callback_data="settings:notif:weekly_report")
     )
     builder.row(
+        InlineKeyboardButton(text="🔔 Напоминания о тренировках", callback_data="settings:notif:training_reminders")
+    )
+    builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:menu")
     )
-    
+
     return builder.as_markup()
 
 
@@ -375,6 +378,78 @@ def get_timezone_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:units")
+    )
+
+    return builder.as_markup()
+
+
+def get_training_reminder_days_keyboard(selected_days: list) -> InlineKeyboardMarkup:
+    """
+    Клавиатура выбора дней недели для напоминаний о тренировках
+
+    Args:
+        selected_days: Список уже выбранных дней
+    """
+    builder = InlineKeyboardBuilder()
+
+    weekdays = [
+        ("Понедельник", "Пн"),
+        ("Вторник", "Вт"),
+        ("Среда", "Ср"),
+        ("Четверг", "Чт"),
+        ("Пятница", "Пт"),
+        ("Суббота", "Сб"),
+        ("Воскресенье", "Вс")
+    ]
+
+    for day_full, day_short in weekdays:
+        # Добавляем галочку если день уже выбран
+        text = f"✅ {day_short}" if day_full in selected_days else day_short
+        builder.button(
+            text=text,
+            callback_data=f"toggle_reminder_day:{day_full}"
+        )
+
+    # Размещаем по 4 кнопки в ряду
+    builder.adjust(4, 3)
+
+    builder.row(
+        InlineKeyboardButton(text="💾 Сохранить", callback_data="save_reminder_days")
+    )
+    builder.row(
+        InlineKeyboardButton(text="❌ Отмена", callback_data="settings:notif:training_reminders")
+    )
+
+    return builder.as_markup()
+
+
+def get_training_reminder_toggle_keyboard(is_enabled: bool) -> InlineKeyboardMarkup:
+    """
+    Клавиатура управления напоминаниями о тренировках
+
+    Args:
+        is_enabled: Включены ли напоминания
+    """
+    builder = InlineKeyboardBuilder()
+
+    # Кнопка включения/выключения
+    if is_enabled:
+        builder.row(
+            InlineKeyboardButton(text="🔕 Выключить напоминания", callback_data="toggle_training_reminders:off")
+        )
+        builder.row(
+            InlineKeyboardButton(text="📅 Выбрать дни", callback_data="select_reminder_days")
+        )
+        builder.row(
+            InlineKeyboardButton(text="⏰ Изменить время", callback_data="change_reminder_time")
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(text="🔔 Включить напоминания", callback_data="toggle_training_reminders:on")
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="settings:notifications")
     )
 
     return builder.as_markup()

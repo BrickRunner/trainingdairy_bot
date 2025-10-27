@@ -87,7 +87,7 @@ async def schedule_birthday_check(bot: Bot):
     while True:
         try:
             now = datetime.now()
-            target_time = time(9, 32)  # 9:10 утра
+            target_time = time(9, 0)  # 9:10 утра
 
             # Вычисляем время до следующей проверки
             from datetime import timedelta

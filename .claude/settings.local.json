@@ -28,7 +28,8 @@
       "Bash(taskkill:*)",
       "Bash(wmic:*)",
       "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\add_goal_notifications_field.py\")",
-      "Bash(cmd /c \"del d:\\desktop\\coding\\trainingdairy_bot-1\\add_goal_notifications_field.py 2>nul\")"
+      "Bash(cmd /c \"del d:\\desktop\\coding\\trainingdairy_bot-1\\add_goal_notifications_field.py 2>nul\")",
+      "Bash(del test_reminders.py)"
     ],
     "deny": [],
     "ask": []
