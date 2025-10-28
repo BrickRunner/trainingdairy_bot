@@ -324,6 +324,23 @@ async def send_training_reminders(bot: Bot):
                     print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
                     continue
 
+                # Проверяем, есть ли уже тренировки за сегодня
+                today_date = user_now.date()
+                async with db.execute(
+                    """
+                    SELECT COUNT(*) as count
+                    FROM trainings
+                    WHERE user_id = ? AND date = ?
+                    """,
+                    (user_id, today_date)
+                ) as training_cursor:
+                    training_row = await training_cursor.fetchone()
+                    trainings_today = training_row['count'] if training_row else 0
+
+                # Если есть тренировки за сегодня - не отправляем напоминание
+                if trainings_today > 0:
+                    continue
+
                 # Отправляем напоминание
                 reminder_message = (
                     f"🔔 <b>Напоминание, {name}!</b> 👋\n\n"

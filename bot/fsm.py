@@ -5,6 +5,17 @@ FSM состояния для многошаговых операций
 from aiogram.fsm.state import State, StatesGroup
 
 
+class RegistrationStates(StatesGroup):
+    """Состояния для регистрации нового пользователя"""
+
+    waiting_for_name = State()          # Имя пользователя
+    waiting_for_birth_date = State()    # Дата рождения
+    waiting_for_gender = State()        # Пол
+    waiting_for_height = State()        # Рост
+    waiting_for_weight = State()        # Вес
+    selecting_main_types = State()      # Основные типы тренировок
+
+
 class AddTrainingStates(StatesGroup):
     """Состояния для добавления тренировки"""
     
@@ -29,7 +40,7 @@ class AddTrainingStates(StatesGroup):
     
     # Общие завершающие поля
     waiting_for_comment = State()       # Комментарий
-    waiting_for_fatigue = State()       # Уровень усталости (1-10)
+    waiting_for_fatigue = State()       # Уровень усилий (1-10)
 
 
 class ExportPDFStates(StatesGroup):

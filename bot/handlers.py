@@ -50,16 +50,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @router.message(Command("start"))
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
     """Обработчик команды /start"""
     user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
-    
+
     # Добавляем пользователя в БД, если его нет
     await add_user(user_id, username)
-    
+
+    # Проверяем, заполнен ли профиль
+    settings = await get_user_settings(user_id)
+
+    # Если профиль не заполнен (нет имени или даты рождения) - запускаем регистрацию
+    if not settings or not settings.get('name') or not settings.get('birth_date'):
+        from registration.registration_handlers import start_registration
+        await start_registration(message, state)
+        return
+
+    # Если профиль заполнен - показываем главное меню
+    name = settings.get('name', username)
     welcome_text = (
-        f"👋 Привет, {username}!\n\n"
+        f"👋 Привет, {name}!\n\n"
         "Добро пожаловать в <b>Trainingdairy_bot</b> — твой личный дневник тренировок! 🏃‍♂️\n\n"
         "Что я умею:\n"
         "➕ Добавлять тренировки\n"
@@ -68,7 +79,7 @@ async def cmd_start(message: Message):
         "🏆 Отслеживать достижения\n\n"
         "Выбери действие из меню ниже 👇"
     )
-    
+
     await message.answer(
         welcome_text,
         reply_markup=get_main_menu_keyboard(),
@@ -596,14 +607,14 @@ async def process_comment(message: Message, state: FSMContext):
     await state.update_data(comment=comment)
     
     await message.answer(
-        "😴 Оцените уровень усталости после тренировки\n\n"
-        "Выберите от 1 (совсем не устал) до 10 (очень устал):",
+        "💪 Оцените уровень усилий на тренировке\n\n"
+        "Выберите от 1 (очень легко) до 10 (максимальные усилия):",
         reply_markup=ReplyKeyboardRemove()
     )
-    
+
     # Отправляем inline-клавиатуру отдельным сообщением
     await message.answer(
-        "Выберите уровень усталости:",
+        "Выберите уровень усилий:",
         reply_markup=get_fatigue_keyboard()
     )
     
@@ -611,7 +622,7 @@ async def process_comment(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("fatigue:"))
 async def process_fatigue(callback: CallbackQuery, state: FSMContext):
-    """Обработка уровня усталости и сохранение тренировки"""
+    """Обработка уровня усилий и сохранение тренировки"""
     fatigue_level = int(callback.data.split(":")[1])
     
     # Получаем все данные из состояния
@@ -670,7 +681,7 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
 
     # Проверяем достижение целей после сохранения тренировки
     try:
-        await check_weekly_goals(callback.from_user.id, callback.bot)
+        await check_weekly_goals(callback.from_user.id, callback.bot, training_type)
     except Exception as e:
         logger.error(f"Ошибка при проверке целей: {str(e)}")
 
@@ -751,7 +762,7 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     if data.get('comment'):
         summary += f"💬 Комментарий: {data['comment']}\n"
     
-    summary += f"😴 Усталость: {fatigue_level}/10"
+    summary += f"💪 Усилия: {fatigue_level}/10"
     
     await callback.message.edit_text(summary, parse_mode="Markdown")
     await callback.message.answer(
@@ -919,9 +930,9 @@ async def show_trainings_period(callback: CallbackQuery):
             percentage = (count / stats['total_count']) * 100
             message_text += f"  {emoji} {t_type.capitalize()}: {count} ({percentage:.1f}%)\n"
     
-    # 4. Средний уровень усталости
+    # 4. Средний уровень усилий
     if stats['avg_fatigue'] > 0:
-        message_text += f"\n😴 Средняя усталость: *{stats['avg_fatigue']}/10*\n"
+        message_text += f"\n💪 Средний уровень усилий: *{stats['avg_fatigue']}/10*\n"
     
     message_text += "\n━━━━━━━━━━━━━━━━━━\n"
     message_text += "📝 *СПИСОК ТРЕНИРОВОК*\n"
@@ -984,10 +995,10 @@ async def show_trainings_period(callback: CallbackQuery):
         # Дополнительно: пульс
         if training.get('avg_pulse'):
             message_text += f"   ❤️ Пульс: {training['avg_pulse']} уд/мин\n"
-        
-        # Усталость
+
+        # Усилия
         if training.get('fatigue_level'):
-            message_text += f"   😴 Усталость: {training['fatigue_level']}/10\n"
+            message_text += f"   💪 Усилия: {training['fatigue_level']}/10\n"
         
         message_text += "\n"
     
@@ -1155,7 +1166,7 @@ async def confirm_delete(callback: CallbackQuery):
                 percentage = (count / stats['total_count']) * 100
                 message_text += f"  {emoji} {t_type.capitalize()}: {count} ({percentage:.1f}%)\n"
         if stats['avg_fatigue'] > 0:
-            message_text += f"\n😴 Средняя усталость: *{stats['avg_fatigue']}/10*\n"
+            message_text += f"\n💪 Средний уровень усилий: *{stats['avg_fatigue']}/10*\n"
         message_text += "\n━━━━━━━━━━━━━━━━━━\n"
         message_text += "📝 *СПИСОК ТРЕНИРОВОК*\n"
         message_text += "━━━━━━━━━━━━━━━━━━\n\n"
@@ -1189,7 +1200,7 @@ async def confirm_delete(callback: CallbackQuery):
             if training.get('avg_pulse'):
                 message_text += f"   ❤️ Пульс: {training['avg_pulse']} уд/мин\n"
             if training.get('fatigue_level'):
-                message_text += f"   😴 Усталость: {training['fatigue_level']}/10\n"
+                message_text += f"   💪 Усилия: {training['fatigue_level']}/10\n"
             message_text += "\n"
         if len(trainings) > 15:
             message_text += f"_... и ещё {len(trainings) - 15} тренировок_\n"
@@ -1341,9 +1352,9 @@ async def show_training_detail(callback: CallbackQuery):
     if training.get('comment'):
         detail_text += f"\n💬 *Комментарий:*\n_{training['comment']}_\n"
     
-    # Усталость
+    # Усилия
     if training.get('fatigue_level'):
-        detail_text += f"\n😴 *Уровень усталости:* {training['fatigue_level']}/10\n"
+        detail_text += f"\n💪 *Уровень усилий:* {training['fatigue_level']}/10\n"
     
     detail_text += "\n━━━━━━━━━━━━━━━━━"
     

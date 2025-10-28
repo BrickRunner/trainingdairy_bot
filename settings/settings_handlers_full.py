@@ -1428,19 +1428,42 @@ async def callback_notifications_menu(callback: CallbackQuery):
     """Меню уведомлений"""
     user_id = callback.from_user.id
     settings = await get_user_settings(user_id)
-    
+
     info_text = "🔔 **Настройка уведомлений**\n\n"
-    
+
     if settings:
         daily_time = settings.get('daily_pulse_weight_time')
         report_day = settings.get('weekly_report_day', 'Понедельник')
         report_time = settings.get('weekly_report_time', '09:00')
-        
+
+        # Информация о напоминаниях о тренировках
+        training_reminders_enabled = settings.get('training_reminders_enabled', 0)
+        training_reminder_days = json.loads(settings.get('training_reminder_days', '[]')) if settings.get('training_reminder_days') else []
+        training_reminder_time = settings.get('training_reminder_time', '18:00')
+
         info_text += f"⏰ Время ежедневного ввода: {daily_time or 'не задано'}\n"
         info_text += f"📊 Недельный отчет: {report_day}, {report_time}\n"
-    
+
+        # Добавляем информацию о напоминаниях о тренировках
+        if training_reminders_enabled:
+            if training_reminder_days:
+                # Сокращаем названия дней для компактности
+                days_short = []
+                day_map = {
+                    'Понедельник': 'Пн', 'Вторник': 'Вт', 'Среда': 'Ср',
+                    'Четверг': 'Чт', 'Пятница': 'Пт', 'Суббота': 'Сб', 'Воскресенье': 'Вс'
+                }
+                for day in training_reminder_days:
+                    days_short.append(day_map.get(day, day[:2]))
+                days_str = ", ".join(days_short)
+                info_text += f"🔔 Напоминания о тренировках: {days_str}, {training_reminder_time}\n"
+            else:
+                info_text += f"🔔 Напоминания о тренировках: включены, {training_reminder_time}\n"
+        else:
+            info_text += "🔔 Напоминания о тренировках: выключены\n"
+
     info_text += "\nВыберите параметр для изменения:"
-    
+
     await callback.message.edit_text(
         info_text,
         reply_markup=get_notifications_settings_keyboard(),

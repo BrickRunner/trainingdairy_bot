@@ -24,7 +24,7 @@ MONTH_NAMES_RU = {
 def generate_graphs(workouts: list, period: str, days: int, distance_unit: str = 'км') -> io.BytesIO:
     """
     Генерирует объединенный график с тремя подграфиками для тренировок за выбранный период:
-    1. Линейный график усталости с линией среднего значения.
+    1. Линейный график усилий с линией среднего значения.
     2. Столбчатая диаграмма километража с линией среднего значения.
     3. Круговая диаграмма с распределением типов тренировок.
 
@@ -136,8 +136,8 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
         # Создаём единую фигуру с тремя подграфиками
         # Размещаем графики вертикально (3 строки, 1 столбец)
         fig = plt.figure(figsize=(12, 16))
-        
-        # График 1: Усталость (линейный график) + среднее значение
+
+        # График 1: Усилия (линейный график) + среднее значение
         ax1 = plt.subplot(3, 1, 1)
         
         # Заполняем все периоды, включая пустые (0)
@@ -148,17 +148,17 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
         ]
         
         avg_fatigue = sum(period_fatigues) / len([f for f in period_fatigues if f > 0]) if any(f > 0 for f in period_fatigues) else 0
-        ax1.plot(period_labels, period_fatigues, marker='o', color='b', linewidth=2, markersize=6, label='Средняя усталость')
+        ax1.plot(period_labels, period_fatigues, marker='o', color='b', linewidth=2, markersize=6, label='Средний уровень усилий')
         if avg_fatigue > 0:
             ax1.axhline(y=avg_fatigue, color='r', linestyle='--', linewidth=1.5, label=f'Среднее: {avg_fatigue:.1f}')
         ax1.set_xlabel(x_label, fontsize=11)
-        ax1.set_ylabel('Усталость', fontsize=11)
-        ax1.set_title(f'Усталость {title_suffix}', fontsize=13, fontweight='bold')
+        ax1.set_ylabel('Усилия', fontsize=11)
+        ax1.set_title(f'Усилия {title_suffix}', fontsize=13, fontweight='bold')
         ax1.set_ylim(0, 10.5)
         ax1.legend(fontsize=10)
         ax1.grid(True, alpha=0.3)
         ax1.tick_params(axis='x', rotation=45)
-        logger.info("График усталости создан")
+        logger.info("График усилий создан")
 
         # График 2: Километраж (столбчатая диаграмма) + среднее значение
         ax2 = plt.subplot(3, 1, 2)

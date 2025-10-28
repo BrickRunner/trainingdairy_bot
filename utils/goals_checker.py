@@ -16,7 +16,7 @@ from database.queries import (
 )
 
 
-async def check_weekly_goals(user_id: int, bot: Bot) -> None:
+async def check_weekly_goals(user_id: int, bot: Bot, last_training_type: str = None) -> None:
     """
     Проверить достижение недельных целей пользователя
     Отправляет отдельное уведомление о достижении каждой цели только один раз за неделю
@@ -25,6 +25,7 @@ async def check_weekly_goals(user_id: int, bot: Bot) -> None:
     Args:
         user_id: ID пользователя
         bot: Экземпляр бота для отправки сообщений
+        last_training_type: Тип последней добавленной тренировки (для фильтрации уведомлений)
     """
     settings = await get_user_settings(user_id)
     if not settings:
@@ -49,8 +50,9 @@ async def check_weekly_goals(user_id: int, bot: Bot) -> None:
     week_goals = goal_notifications.get(current_week, {})
 
     # 1. Проверка цели по недельному объему
+    # Не показываем прогресс по объему для силовых и интервальных тренировок
     weekly_volume_goal = settings.get('weekly_volume_goal')
-    if weekly_volume_goal:
+    if weekly_volume_goal and last_training_type not in ['силовая', 'интервальная']:
         total_distance = stats['total_distance']
         progress_percent = (total_distance / weekly_volume_goal) * 100 if weekly_volume_goal > 0 else 0
 

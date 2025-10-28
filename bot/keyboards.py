@@ -85,7 +85,7 @@ def get_skip_keyboard() -> ReplyKeyboardMarkup:
 
 
 def get_fatigue_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для выбора уровня усталости"""
+    """Клавиатура для выбора уровня усилий"""
     builder = InlineKeyboardBuilder()
     for i in range(1, 11):
         builder.button(text=str(i), callback_data=f"fatigue:{i}")

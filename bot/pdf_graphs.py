@@ -133,8 +133,8 @@ def create_pdf_graphs(trainings: list, start_date: str, end_date: str, date_form
             date_str = training['date']
             date = datetime.strptime(date_str, input_date_fmt)
             dates.append(date)
-            
-            # Усталость
+
+            # Усилия
             fatigue_levels.append(training.get('fatigue_level', 0))
             
             # Дистанция
@@ -151,22 +151,22 @@ def create_pdf_graphs(trainings: list, start_date: str, end_date: str, date_form
             logger.error(f"Ошибка формата даты в тренировке '{date_str}': {e}")
             continue
     
-    # === ГРАФИК 1: Динамика усталости ===
+    # === ГРАФИК 1: Динамика усилий ===
     valid_fatigue = [(d, f) for d, f in zip(dates, fatigue_levels) if f > 0]
     if valid_fatigue:
         f_dates, f_values = zip(*valid_fatigue)
         ax1.plot(f_dates, f_values, marker='o', linewidth=2, markersize=6, color='#e74c3c')
-        ax1.set_title('Динамика усталости', fontsize=14, fontweight='bold')
-        ax1.set_ylabel('Уровень усталости', fontsize=12)
+        ax1.set_title('Динамика усилий', fontsize=14, fontweight='bold')
+        ax1.set_ylabel('Уровень усилий', fontsize=12)
         ax1.set_ylim(0, 11)
         ax1.grid(True, alpha=0.3)
         ax1.xaxis.set_major_formatter(mdates.DateFormatter(short_fmt))  # Используем короткий формат
         ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
         plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
     else:
-        ax1.text(0.5, 0.5, 'Нет данных об усталости', 
+        ax1.text(0.5, 0.5, 'Нет данных об усилиях',
                 ha='center', va='center', transform=ax1.transAxes, fontsize=12)
-        ax1.set_title('Динамика усталости', fontsize=14, fontweight='bold')
+        ax1.set_title('Динамика усилий', fontsize=14, fontweight='bold')
     
     # === ГРАФИК 2: Километраж по тренировкам ===
     valid_distances = [(d, dist) for d, dist in zip(dates, distances) if dist > 0]

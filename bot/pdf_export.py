@@ -187,7 +187,7 @@ async def create_training_pdf(trainings: list, period_text: str, stats: dict, us
     stats_data = [
         ["Всего тренировок:", f"{stats['total_count']}"],
         ["Общий километраж:", format_distance(stats['total_distance'], distance_unit)],
-        ["Средняя усталость:", f"{stats['avg_fatigue']}/10" if stats['avg_fatigue'] > 0 else "Не указана"]
+        ["Средний уровень усилий:", f"{stats['avg_fatigue']}/10" if stats['avg_fatigue'] > 0 else "Не указан"]
     ]
     
     stats_table = Table(stats_data, colWidths=[8*cm, 6*cm])
@@ -347,9 +347,9 @@ async def create_training_pdf(trainings: list, period_text: str, stats: dict, us
         if training.get('max_pulse'):
             details.append(["Макс. пульс:", f"{training['max_pulse']} уд/мин"])
         
-        # Усталость
+        # Усилия
         if training.get('fatigue_level'):
-            details.append(["Усталость:", f"{training['fatigue_level']}/10"])
+            details.append(["Усилия:", f"{training['fatigue_level']}/10"])
         
         # Создаем таблицу с деталями
         if details:

@@ -263,7 +263,7 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
         - total_count: общее количество тренировок
         - total_distance: общий километраж
         - types_count: словарь с количеством тренировок по типам
-        - avg_fatigue: средний уровень усталости
+        - avg_fatigue: средний уровень усилий
     """
     from datetime import datetime, timedelta
     
@@ -344,7 +344,7 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
             if duration and t_type:
                 types_duration[t_type] = types_duration.get(t_type, 0) + duration
 
-            # Подсчёт усталости
+            # Подсчёт усилий
             if training['fatigue_level']:
                 fatigue_sum += training['fatigue_level']
                 fatigue_count += 1
@@ -419,7 +419,7 @@ async def get_statistics_by_custom_period(user_id: int, start_date: str, end_dat
         t_type = training['type']
         types_count[t_type] = types_count.get(t_type, 0) + 1
         
-        # Подсчёт усталости
+        # Подсчёт усилий
         if training.get('fatigue_level'):
             fatigue_sum += training['fatigue_level']
             fatigue_count += 1
