@@ -52,6 +52,8 @@ logger = logging.getLogger(__name__)
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     """Обработчик команды /start"""
+    from coach.coach_queries import is_user_coach
+
     user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
 
@@ -66,6 +68,9 @@ async def cmd_start(message: Message, state: FSMContext):
         from registration.registration_handlers import start_registration
         await start_registration(message, state)
         return
+
+    # Проверяем статус тренера
+    is_coach_status = await is_user_coach(user_id)
 
     # Если профиль заполнен - показываем главное меню
     name = settings.get('name', username)
@@ -82,7 +87,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
     await message.answer(
         welcome_text,
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(is_coach_status),
         parse_mode="HTML"
     )
 
@@ -1452,6 +1457,28 @@ async def show_help(message: Message):
     """Показать помощь"""
     await cmd_help(message)
 
+@router.message(F.text == "🏃 Соревнования")
+async def show_competitions(message: Message):
+    """Показать меню соревнований"""
+    text = (
+        "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+        "Здесь вы можете:\n"
+        "• Найти предстоящие марафоны и забеги\n"
+        "• Зарегистрироваться на соревнование\n"
+        "• Отслеживать свою подготовку\n"
+        "• Добавлять результаты\n"
+        "• Вести историю участия\n\n"
+        "Выберите раздел:"
+    )
+
+    from competitions.competitions_keyboards import get_competitions_main_menu
+
+    await message.answer(
+        text,
+        reply_markup=get_competitions_main_menu(),
+        parse_mode="HTML"
+    )
+
 # ==================== ЭКСПОРТ В PDF ====================
 
 @router.message(F.text == "📥 Экспорт в PDF")
@@ -2013,3 +2040,30 @@ async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext)
         logger.warning(f"Навигация календаря не сработала для callback: {callback.data}")
 
     await callback.answer()
+
+
+# ============== ОБРАБОТЧИК КНОПКИ "ТРЕНЕР" ==============
+
+@router.message(F.text == "👨‍🏫 Тренер")
+async def show_coach_section(message: Message):
+    """Показать раздел тренера"""
+    from coach.coach_queries import is_user_coach
+    from coach.coach_keyboards import get_coach_main_menu
+
+    user_id = message.from_user.id
+
+    # Проверяем что пользователь тренер
+    if not await is_user_coach(user_id):
+        await message.answer(
+            "У вас нет доступа к этому разделу.\n\n"
+            "Чтобы стать тренером, включите режим тренера в ⚙️ Настройки"
+        )
+        return
+
+    await message.answer(
+        "👨‍🏫 <b>Раздел тренера</b>\n\n"
+        "Здесь вы можете управлять своими учениками, "
+        "просматривать их тренировки и прогресс.",
+        reply_markup=get_coach_main_menu(),
+        parse_mode="HTML"
+    )

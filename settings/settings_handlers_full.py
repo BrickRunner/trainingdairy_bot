@@ -214,14 +214,17 @@ async def send_notifications_menu(message: Message, user_id: int):
 @router.message(Command("settings"))
 async def settings_menu(message: Message, state: FSMContext):
     """Главное меню настроек"""
+    from coach.coach_queries import is_user_coach
+
     await state.clear()
     user_id = message.from_user.id
     await init_user_settings(user_id)
-    
+
     settings = await get_user_settings(user_id)
-    
+    is_coach = await is_user_coach(user_id)
+
     info_text = "⚙️ **Настройки профиля**\n\n"
-    
+
     if settings:
         info_text += f"👤 Имя: {settings.get('name') or 'не указано'}\n"
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
@@ -232,12 +235,12 @@ async def settings_menu(message: Message, state: FSMContext):
         weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
         info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
-    
+
     info_text += "\nВыберите раздел для настройки:"
-    
+
     await message.answer(
         info_text,
-        reply_markup=get_settings_menu_keyboard(),
+        reply_markup=get_settings_menu_keyboard(is_coach),
         parse_mode="Markdown"
     )
 
@@ -245,28 +248,41 @@ async def settings_menu(message: Message, state: FSMContext):
 @router.callback_query(F.data == "settings:menu")
 async def callback_settings_menu(callback: CallbackQuery, state: FSMContext):
     """Возврат в главное меню настроек"""
+    from coach.coach_queries import is_user_coach
+
     await state.clear()
     user_id = callback.from_user.id
     settings = await get_user_settings(user_id)
-    
+    is_coach = await is_user_coach(user_id)
+
     info_text = "⚙️ **Настройки профиля**\n\n"
-    
+
     if settings:
         info_text += f"👤 Имя: {settings.get('name') or 'не указано'}\n"
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
-        info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+
+        # Форматируем пол
+        gender = settings.get('gender')
+        if gender == 'male':
+            gender_text = '👨 Мужской'
+        elif gender == 'female':
+            gender_text = '👩 Женский'
+        else:
+            gender_text = 'не указан'
+        info_text += f"⚧️ Пол: {gender_text}\n"
+
         weight_value = settings.get('weight')
         weight_unit = settings.get('weight_unit', 'кг')
         weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
         info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
-    
+
     info_text += "\nВыберите раздел для настройки:"
-    
+
     await callback.message.edit_text(
         info_text,
-        reply_markup=get_settings_menu_keyboard(),
+        reply_markup=get_settings_menu_keyboard(is_coach),
         parse_mode="Markdown"
     )
     await callback.answer()
@@ -286,16 +302,27 @@ async def callback_profile_settings(callback: CallbackQuery):
         info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
-        info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+
+        # Форматируем пол
+        gender = settings.get('gender')
+        if gender == 'male':
+            gender_text = '👨 Мужской'
+        elif gender == 'female':
+            gender_text = '👩 Женский'
+        else:
+            gender_text = 'не указан'
+        info_text += f"⚧️ Пол: {gender_text}\n"
+
         weight_value = settings.get('weight')
         weight_unit = settings.get('weight_unit', 'кг')
         weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
         info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
-        
+
         # Основные типы тренировок
         types = await get_main_training_types(user_id)
-        info_text += f"🏃 Типы тренировок: {', '.join(types)}\n"
+        types_display = ', '.join(types) if types else 'не выбраны'
+        info_text += f"🏃 Типы тренировок: {types_display}\n"
     
     info_text += "\nВыберите параметр для изменения:"
     
@@ -1828,3 +1855,72 @@ async def process_reminder_time(message: Message, state: FSMContext):
     )
     await state.clear()
     await send_notifications_menu(message, user_id)
+
+
+# ============== 17. РЕЖИМ ТРЕНЕРА ==============
+
+@router.callback_query(F.data == "settings:coach_mode")
+async def toggle_coach_mode(callback: CallbackQuery):
+    """Переключить режим тренера"""
+    from coach.coach_queries import is_user_coach, set_coach_mode
+
+    user_id = callback.from_user.id
+    current_mode = await is_user_coach(user_id)
+
+    if current_mode:
+        # Выключаем режим тренера
+        await set_coach_mode(user_id, False)
+        await callback.answer("Режим тренера выключен", show_alert=True)
+    else:
+        # Включаем режим тренера
+        link_code = await set_coach_mode(user_id, True)
+        await callback.answer(
+            f"Режим тренера включён!\nВаш код: {link_code}",
+            show_alert=True
+        )
+
+    # Обновляем меню настроек
+    settings = await get_user_settings(user_id)
+    is_coach_now = await is_user_coach(user_id)
+
+    info_text = "⚙️ **Настройки профиля**\n\n"
+
+    if settings:
+        info_text += f"👤 Имя: {settings.get('name') or 'не указано'}\n"
+        birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
+        info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
+
+        gender = settings.get('gender')
+        if gender == 'male':
+            gender_text = '👨 Мужской'
+        elif gender == 'female':
+            gender_text = '👩 Женский'
+        else:
+            gender_text = 'не указан'
+        info_text += f"⚧️ Пол: {gender_text}\n"
+
+        weight_value = settings.get('weight')
+        weight_unit = settings.get('weight_unit', 'кг')
+        if weight_value:
+            info_text += f"⚖️ Вес: {weight_value:.2f} {weight_unit}\n"
+        else:
+            info_text += "⚖️ Вес: не указан\n"
+
+        height_value = settings.get('height')
+        if height_value:
+            info_text += f"📏 Рост: {height_value} см\n"
+        else:
+            info_text += "📏 Рост: не указан\n"
+
+        types = await get_main_training_types(user_id)
+        info_text += f"🏃 Типы тренировок: {', '.join(types)}\n"
+
+        info_text += f"🌍 Часовой пояс: {settings.get('timezone', 'Europe/Moscow')}\n"
+
+    info_text += "\nВыберите раздел для настройки:"
+
+    await callback.message.edit_text(
+        info_text,
+        reply_markup=get_settings_menu_keyboard(is_coach_now),
+        parse_mode="Markdown"
+    )

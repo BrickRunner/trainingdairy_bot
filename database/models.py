@@ -43,23 +43,68 @@ CREATE TABLE IF NOT EXISTS trainings (
 CREATE_COMPETITIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS competitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    creator_id INTEGER NOT NULL,
+
+    -- Основная информация
     name TEXT NOT NULL,
     date DATE NOT NULL,
-    status TEXT DEFAULT 'planned',
+    city TEXT,
+    country TEXT DEFAULT 'Россия',
+    location TEXT,
+
+    -- Детали соревнования
+    distances TEXT,  -- JSON массив: ["42.195", "21.1", "10", "5"]
+    type TEXT,  -- 'марафон', 'полумарафон', 'трейл', 'забег', 'ультра'
+    description TEXT,
+    official_url TEXT,
+
+    -- Организатор
+    organizer TEXT,  -- 'Беговое сообщество', 'Russia Running', 'Лига героев' и т.д.
+
+    -- Статусы
+    registration_status TEXT DEFAULT 'unknown',  -- 'open', 'closed', 'upcoming', 'unknown'
+    status TEXT DEFAULT 'upcoming',  -- 'upcoming', 'ongoing', 'finished', 'cancelled'
+
+    -- Метаданные
+    created_by INTEGER,  -- user_id создателя (если это пользовательское)
+    is_official BOOLEAN DEFAULT 0,  -- официальное или созданное пользователем
+    source_url TEXT,  -- URL источника данных
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (creator_id) REFERENCES users(id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (created_by) REFERENCES users(id)
 )
 """
 
 CREATE_COMPETITION_PARTICIPANTS_TABLE = """
 CREATE TABLE IF NOT EXISTS competition_participants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+
     competition_id INTEGER NOT NULL,
-    participant_id INTEGER NOT NULL,
-    place INTEGER,
+    user_id INTEGER NOT NULL,
+
+    -- Выбор дистанции и цели
+    distance REAL,  -- выбранная дистанция (42.195, 21.1, 10, 5 и т.д.)
+    target_time TEXT,  -- целевое время (HH:MM:SS)
+
+    -- Результат после забега
+    finish_time TEXT,  -- финишное время (HH:MM:SS)
+    place_overall INTEGER,  -- место в общем зачёте
+    place_age_category INTEGER,  -- место в возрастной категории
+    age_category TEXT,  -- возрастная категория (например M30-39)
+    result_comment TEXT,  -- впечатления
+    result_photo TEXT,  -- путь к фото финишера
+
+    -- Статусы
+    status TEXT DEFAULT 'registered',  -- 'registered', 'dns' (не стартовал), 'dnf' (не финишировал), 'finished'
+
+    -- Даты
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    result_added_at TIMESTAMP,
+
     FOREIGN KEY (competition_id) REFERENCES competitions(id),
-    FOREIGN KEY (participant_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(competition_id, user_id, distance)
 )
 """
 
@@ -93,11 +138,13 @@ CREATE TABLE IF NOT EXISTS coach_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     coach_id INTEGER NOT NULL,
     student_id INTEGER NOT NULL,
-    status TEXT DEFAULT 'pending',
+    status TEXT DEFAULT 'active',  -- 'active', 'pending', 'removed'
     link_code TEXT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    removed_at TIMESTAMP,
     FOREIGN KEY (coach_id) REFERENCES users(id),
-    FOREIGN KEY (student_id) REFERENCES users(id)
+    FOREIGN KEY (student_id) REFERENCES users(id),
+    UNIQUE(coach_id, student_id)
 )
 """
 
@@ -177,12 +224,38 @@ CREATE TABLE IF NOT EXISTS user_settings (
     weekly_report_time TEXT DEFAULT '09:00',
     last_goal_notification_week TEXT,  -- Неделя последнего уведомления о достижении цели (формат: YYYY-WW) - DEPRECATED, используем goal_notifications
     goal_notifications TEXT,  -- JSON с информацией о достигнутых целях {week: {goal_type: True/False}}
+
+    -- Режим тренера
+    is_coach BOOLEAN DEFAULT 0,  -- Является ли пользователь тренером
+    coach_link_code TEXT UNIQUE,  -- Уникальный код для подключения учеников
     
     -- Дата создания и обновления
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (user_id) REFERENCES users(id)
+)
+"""
+
+CREATE_PERSONAL_RECORDS_TABLE = """
+CREATE TABLE IF NOT EXISTS personal_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    user_id INTEGER NOT NULL,
+    distance REAL NOT NULL,  -- 5, 10, 21.1, 42.195 и т.д.
+
+    -- Лучший результат
+    best_time TEXT NOT NULL,  -- лучшее время (HH:MM:SS)
+    competition_id INTEGER,  -- на каком соревновании установлен (если есть)
+    date DATE NOT NULL,  -- дата установления рекорда
+
+    -- Метаданные
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (competition_id) REFERENCES competitions(id),
+    UNIQUE(user_id, distance)
 )
 """
 
@@ -196,5 +269,6 @@ ALL_TABLES = [
     CREATE_RATINGS_TABLE,
     CREATE_COACH_LINKS_TABLE,
     CREATE_HEALTH_METRICS_TABLE,
-    CREATE_USER_SETTINGS_TABLE
+    CREATE_USER_SETTINGS_TABLE,
+    CREATE_PERSONAL_RECORDS_TABLE
 ]

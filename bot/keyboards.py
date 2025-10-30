@@ -7,24 +7,50 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from database.queries import format_date_by_setting  # Добавил импорт
 
 
-def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
-    """Главное меню бота"""
+def get_main_menu_keyboard(is_coach: bool = False) -> ReplyKeyboardMarkup:
+    """
+    Главное меню бота
+
+    Args:
+        is_coach: Является ли пользователь тренером
+    """
     builder = ReplyKeyboardBuilder()
     builder.row(
         KeyboardButton(text="➕ Добавить тренировку"),
         KeyboardButton(text="📊 Мои тренировки")
     )
     builder.row(
-        KeyboardButton(text="❤️ Здоровье"),
+        KeyboardButton(text="🏃 Соревнования"),
         KeyboardButton(text="🏆 Достижения")
     )
-    builder.row(
-        KeyboardButton(text="📥 Экспорт в PDF"),
-        KeyboardButton(text="⚙️ Настройки")
-    )
-    builder.row(
-        KeyboardButton(text="ℹ️ Помощь")
-    )
+
+    # Кнопка "Тренер" показывается только если is_coach=True
+    if is_coach:
+        builder.row(
+            KeyboardButton(text="👨‍🏫 Тренер"),
+            KeyboardButton(text="❤️ Здоровье")
+        )
+    else:
+        builder.row(
+            KeyboardButton(text="❤️ Здоровье"),
+            KeyboardButton(text="⚙️ Настройки")
+        )
+
+    # Настройки всегда видны, но в разных позициях
+    if is_coach:
+        builder.row(
+            KeyboardButton(text="⚙️ Настройки"),
+            KeyboardButton(text="📥 Экспорт в PDF")
+        )
+        builder.row(
+            KeyboardButton(text="ℹ️ Помощь")
+        )
+    else:
+        builder.row(
+            KeyboardButton(text="📥 Экспорт в PDF"),
+            KeyboardButton(text="ℹ️ Помощь")
+        )
+
     return builder.as_markup(resize_keyboard=True)
 
 

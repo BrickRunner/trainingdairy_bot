@@ -14,6 +14,9 @@ from bot.handlers import router
 from settings.settings_handlers_full import router as settings_router
 from health.health_handlers import router as health_router
 from ratings.ratings_handlers import router as ratings_router
+from registration.registration_handlers import router as registration_router
+from competitions.competitions_handlers import router as competitions_router
+from coach.coach_handlers import router as coach_router
 from database.queries import init_db
 from notifications.notification_scheduler import start_notification_scheduler
 from utils.birthday_checker import schedule_birthday_check
@@ -45,11 +48,14 @@ async def main():
     dp = Dispatcher(storage=storage)
     
     # Подключение роутеров
-    # ВАЖНО: settings_router должен быть первым, так как содержит более специфичные обработчики (cal_birth_)
-    dp.include_router(settings_router)
+    # ВАЖНО: Порядок имеет значение - более специфичные роутеры должны быть первыми
+    dp.include_router(registration_router)  # Роутер регистрации
+    dp.include_router(settings_router)  # settings_router содержит специфичные обработчики (cal_birth_)
+    dp.include_router(competitions_router)  # Роутер соревнований
+    dp.include_router(coach_router)  # Роутер тренеров
     dp.include_router(health_router)
     dp.include_router(ratings_router)
-    dp.include_router(router)
+    dp.include_router(router)  # Основной роутер (общие команды)
     
     # Инициализация базы данных
     await init_db()

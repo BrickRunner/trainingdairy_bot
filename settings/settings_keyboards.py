@@ -6,10 +6,15 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 
-def get_settings_menu_keyboard() -> InlineKeyboardMarkup:
-    """Главное меню настроек"""
+def get_settings_menu_keyboard(is_coach: bool = False) -> InlineKeyboardMarkup:
+    """
+    Главное меню настроек
+
+    Args:
+        is_coach: Показывать ли статус тренера
+    """
     builder = InlineKeyboardBuilder()
-    
+
     builder.row(
         InlineKeyboardButton(text="👤 Профиль", callback_data="settings:profile")
     )
@@ -25,10 +30,24 @@ def get_settings_menu_keyboard() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="🔔 Уведомления", callback_data="settings:notifications")
     )
+
+    # Режим тренера и Мой тренер
+    if is_coach:
+        builder.row(
+            InlineKeyboardButton(text="✅ Режим тренера", callback_data="settings:coach_mode")
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(text="❌ Режим тренера", callback_data="settings:coach_mode")
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="👨‍🏫 Мой тренер", callback_data="student:my_coach")
+    )
     builder.row(
         InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
-    
+
     return builder.as_markup()
 
 

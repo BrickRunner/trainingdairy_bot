@@ -78,3 +78,35 @@ class SettingsStates(StatesGroup):
     # Напоминания о тренировках (15)
     selecting_reminder_days = State()           # 15. Выбор дней для напоминаний
     waiting_for_reminder_time = State()         # 15. Время напоминаний о тренировках
+
+
+class CompetitionStates(StatesGroup):
+    """Состояния для работы с соревнованиями"""
+
+    # Регистрация на соревнование
+    waiting_for_target_time = State()           # Целевое время
+
+    # Добавление результата
+    waiting_for_finish_time = State()           # Финишное время
+    waiting_for_place_overall = State()         # Место в общем зачёте
+    waiting_for_place_age = State()             # Место в возрастной категории
+    waiting_for_result_comment = State()        # Комментарий к результату
+    waiting_for_result_photo = State()          # Фото финишера
+
+    # Поиск соревнований
+    waiting_for_search_query = State()          # Поисковый запрос
+    waiting_for_city = State()                  # Город
+
+    # Создание пользовательского соревнования
+    waiting_for_comp_name = State()             # Название
+    waiting_for_comp_date = State()             # Дата
+    waiting_for_comp_city = State()             # Город
+    waiting_for_comp_distances = State()        # Дистанции
+    waiting_for_comp_url = State()              # URL сайта
+
+
+class CoachStates(StatesGroup):
+    """Состояния для работы с тренерским разделом"""
+
+    # Добавление тренера (со стороны ученика)
+    waiting_for_coach_code = State()            # Ввод кода тренера

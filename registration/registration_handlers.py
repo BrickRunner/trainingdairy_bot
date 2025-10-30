@@ -246,11 +246,33 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
     # Сохраняем типы тренировок в БД
     await update_user_setting(user_id, 'main_training_types', json.dumps(selected_types))
 
-    # Получаем автоопределённый часовой пояс
-    # Telegram API возвращает timezone_offset в секундах
-    # Но мы будем использовать базовый Europe/Moscow как дефолт
-    # В будущем можно улучшить через определение по геолокации или IP
-    await update_user_setting(user_id, 'timezone', 'Europe/Moscow')
+    # Автоопределение часового пояса на основе языка пользователя
+    try:
+        # Получаем языковой код пользователя из Telegram
+        language_code = callback.from_user.language_code or 'ru'
+
+        # Определение часового пояса по языковому коду
+        timezone_map = {
+            'ru': 'Europe/Moscow',
+            'en': 'Europe/London',
+            'de': 'Europe/Berlin',
+            'fr': 'Europe/Paris',
+            'es': 'Europe/Madrid',
+            'it': 'Europe/Rome',
+            'pt': 'Europe/Lisbon',
+            'uk': 'Europe/Kiev',
+            'be': 'Europe/Minsk',
+            'kk': 'Asia/Almaty',
+            'uz': 'Asia/Tashkent'
+        }
+
+        timezone = timezone_map.get(language_code, 'Europe/Moscow')
+        logger.info(f"Автоопределён часовой пояс {timezone} для пользователя {user_id} (язык: {language_code})")
+    except Exception as e:
+        logger.error(f"Ошибка автоопределения часового пояса: {e}")
+        timezone = 'Europe/Moscow'
+
+    await update_user_setting(user_id, 'timezone', timezone)
 
     # Завершаем регистрацию
     await state.clear()
@@ -269,12 +291,27 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
     }
     selected_names = [type_names.get(t, t) for t in selected_types]
 
+    # Форматируем дату рождения
+    birth_date_str = data.get('birth_date', '')
+    if birth_date_str:
+        birth_date_formatted = datetime.strptime(birth_date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+    else:
+        birth_date_formatted = 'не указана'
+
+    # Форматируем пол
+    gender_text = 'Мужской' if data.get('gender') == 'male' else 'Женский'
+
     completion_text = (
         f"🎉 <b>Отлично, {name}! Регистрация завершена!</b>\n\n"
         "📋 <b>Твой профиль:</b>\n"
+        f"👤 Имя: {name}\n"
+        f"🎂 Дата рождения: {birth_date_formatted}\n"
+        f"⚧️ Пол: {gender_text}\n"
         f"📏 Рост: {data.get('height')} см\n"
         f"⚖️ Вес: {data.get('weight')} кг\n"
-        f"🏃 Основные типы тренировок: {', '.join(selected_names)}\n\n"
+        f"🏃 Основные типы тренировок: {', '.join(selected_names)}\n"
+        f"🌍 Часовой пояс: {timezone}\n\n"
+        "⚠️ <b>Важно:</b> Только выбранные типы тренировок будут отображаться при добавлении тренировки.\n\n"
         "Теперь ты можешь начать добавлять тренировки!\n"
         "Настройки профиля всегда можно изменить в разделе ⚙️ Настройки."
     )

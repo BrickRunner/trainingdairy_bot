@@ -29,7 +29,10 @@
       "Bash(wmic:*)",
       "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\add_goal_notifications_field.py\")",
       "Bash(cmd /c \"del d:\\desktop\\coding\\trainingdairy_bot-1\\add_goal_notifications_field.py 2>nul\")",
-      "Bash(del test_reminders.py)"
+      "Bash(del test_reminders.py)",
+      "Bash(if not exist \"d:\\desktop\\coding\\trainingdairy_bot-1\\competitions\" mkdir \"d:\\desktop\\coding\\trainingdairy_bot-1\\competitions\")",
+      "Bash(cmd /c \"if not exist d:\\desktop\\coding\\trainingdairy_bot-1\\competitions mkdir d:\\desktop\\coding\\trainingdairy_bot-1\\competitions\")",
+      "Bash(cmd /c \"if not exist d:\\desktop\\coding\\trainingdairy_bot-1\\coach mkdir d:\\desktop\\coding\\trainingdairy_bot-1\\coach\")"
     ],
     "deny": [],
     "ask": []
