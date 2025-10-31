@@ -34,7 +34,13 @@
       "Bash(cmd /c \"if not exist d:\\desktop\\coding\\trainingdairy_bot-1\\competitions mkdir d:\\desktop\\coding\\trainingdairy_bot-1\\competitions\")",
       "Bash(cmd /c \"if not exist d:\\desktop\\coding\\trainingdairy_bot-1\\coach mkdir d:\\desktop\\coding\\trainingdairy_bot-1\\coach\")",
       "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && if exist bot_data.db del bot_data.db && if exist training_diary.db del training_diary.db && echo Removed extra databases\")",
-      "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\check_db.py\")"
+      "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\check_db.py\")",
+      "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\check_competitions.py\")",
+      "Bash(cmd /c \"del d:\\desktop\\coding\\trainingdairy_bot-1\\check_competitions.py\")",
+      "Bash(venvScriptspython.exe -m pip install beautifulsoup4)",
+      "Bash(\"venv/Scripts/python.exe\" -m pip:*)",
+      "Bash(\"venv/Scripts/python.exe\":*)",
+      "Bash(\"venv/Scripts/python.exe\" -c \"from competitions.competitions_parser import RunCRunParser, RussiaRunningAPI, load_competitions_from_api; print(''All parsers imported successfully'')\")"
     ],
     "deny": [],
     "ask": []

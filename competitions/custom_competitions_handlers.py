@@ -16,27 +16,37 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.fsm import CompetitionStates
+from bot.calendar_keyboard import CalendarKeyboard
 from competitions.competitions_queries import (
     add_competition,
     register_for_competition,
     get_competition,
     add_competition_result
 )
+from competitions.competitions_utils import (
+    format_competition_distance,
+    parse_user_distance_input,
+    format_competition_date,
+    parse_user_date_input,
+    get_date_format_description,
+    get_distance_unit_name,
+    determine_competition_type
+)
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 
-# ========== СОЗДАНИЕ ПОЛЬЗОВАТЕЛЬСКОГО СОРЕВНОВАНИЯ ==========
+# ========== ДОБАВЛЕНИЕ СОРЕВНОВАНИЯ ВРУЧНУЮ ==========
 
 @router.callback_query(F.data == "comp:create_custom")
 async def start_create_custom_competition(callback: CallbackQuery, state: FSMContext):
-    """Начать создание пользовательского соревнования"""
+    """Начать добавление соревнования вручную"""
 
     text = (
-        "➕ <b>СОЗДАНИЕ СВОЕГО СОРЕВНОВАНИЯ</b>\n\n"
-        "Вы можете добавить своё соревнование вручную.\n\n"
-        "📝 <b>Шаг 1 из 5</b>\n\n"
+        "🔍 <b>ДОБАВЛЕНИЕ СОРЕВНОВАНИЯ ВРУЧНУЮ</b>\n\n"
+        "Вы можете добавить соревнование, в котором планируете участвовать.\n\n"
+        "📝 <b>Шаг 1 из 6</b>\n\n"
         "Введите <b>название</b> соревнования:\n"
         "<i>Например: Московский марафон 2026</i>"
     )
@@ -63,43 +73,71 @@ async def process_comp_name(message: Message, state: FSMContext):
 
     text = (
         f"✅ Название: <b>{comp_name}</b>\n\n"
-        f"📝 <b>Шаг 2 из 5</b>\n\n"
-        f"Введите <b>дату</b> соревнования:\n"
-        f"<i>Формат: ДД.ММ.ГГГГ\nНапример: 25.09.2026</i>"
+        f"📝 <b>Шаг 2 из 6</b>\n\n"
+        f"Введите <b>город</b>, где будет проходить соревнование:\n"
+        f"<i>Например: Москва, Санкт-Петербург, Казань</i>"
     )
 
     await message.answer(text, parse_mode="HTML")
+    await state.set_state(CompetitionStates.waiting_for_comp_city)
+
+
+@router.message(CompetitionStates.waiting_for_comp_city)
+async def process_comp_city(message: Message, state: FSMContext):
+    """Обработать город соревнования"""
+
+    comp_city = message.text.strip()
+
+    if not comp_city or len(comp_city) < 2:
+        await message.answer(
+            "❌ Название города слишком короткое. Введите корректное название города."
+        )
+        return
+
+    # Сохраняем город
+    await state.update_data(comp_city=comp_city)
+
+    # Показываем календарь для выбора даты
+    calendar = CalendarKeyboard.create_calendar(
+        calendar_format=1,
+        current_date=datetime.now(),
+        callback_prefix="cal_comp"
+    )
+
+    text = (
+        f"✅ Город: <b>{comp_city}</b>\n\n"
+        f"📝 <b>Шаг 3 из 6</b>\n\n"
+        f"Выберите <b>дату</b> соревнования из календаря:"
+    )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=calendar)
     await state.set_state(CompetitionStates.waiting_for_comp_date)
 
 
-@router.message(CompetitionStates.waiting_for_comp_date)
-async def process_comp_date(message: Message, state: FSMContext):
-    """Обработать дату соревнования"""
+# Обработчики календаря для выбора даты соревнования
+@router.callback_query(F.data.startswith("cal_comp_1_select_"), CompetitionStates.waiting_for_comp_date)
+async def handle_comp_calendar_day_select(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора дня в календаре"""
 
-    date_text = message.text.strip()
+    parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_comp_", "cal_"))
+    selected_date = parsed.get("date")
 
-    # Парсим дату
-    try:
-        comp_date = datetime.strptime(date_text, '%d.%m.%Y').date()
+    if not selected_date:
+        await callback.answer("❌ Ошибка выбора даты", show_alert=True)
+        return
 
-        # Проверяем что дата в будущем
-        if comp_date < date.today():
-            await message.answer(
-                "❌ Дата соревнования должна быть в будущем.\n"
-                "Введите корректную дату:"
-            )
-            return
+    comp_date = selected_date.date()
 
-    except ValueError:
-        await message.answer(
-            "❌ Неверный формат даты.\n"
-            "Используйте формат: ДД.ММ.ГГГГ\n"
-            "Например: 25.09.2026"
-        )
+    # Проверяем что дата в будущем
+    if comp_date < date.today():
+        await callback.answer("❌ Дата соревнования должна быть в будущем!", show_alert=True)
         return
 
     # Сохраняем дату
     await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
+
+    user_id = callback.from_user.id
+    formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
     # Создаём клавиатуру с типами
     builder = InlineKeyboardBuilder()
@@ -110,8 +148,116 @@ async def process_comp_date(message: Message, state: FSMContext):
     builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="comptype:trail"))
 
     text = (
-        f"✅ Дата: <b>{comp_date.strftime('%d.%m.%Y')}</b>\n\n"
-        f"📝 <b>Шаг 3 из 5</b>\n\n"
+        f"✅ Дата: <b>{formatted_date}</b>\n\n"
+        f"📝 <b>Шаг 4 из 6</b>\n\n"
+        f"Выберите <b>вид спорта</b>:"
+    )
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await state.set_state(CompetitionStates.waiting_for_comp_type)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cal_comp_"), CompetitionStates.waiting_for_comp_date)
+async def handle_comp_calendar_navigation(callback: CallbackQuery, state: FSMContext):
+    """Обработка навигации по календарю (переключение месяцев/годов)"""
+
+    parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_comp_", "cal_"))
+
+    # Получаем текущую дату из callback или используем текущую
+    current_date = parsed.get("date")
+    if not current_date:
+        current_date = datetime.now()
+
+    action = parsed.get("action", "")
+    cal_format = parsed.get("format", 1)
+
+    # Обрабатываем навигацию
+    if action == "less":
+        # Предыдущий период
+        if cal_format == 1:  # Дни - переключаем месяц назад
+            current_date = current_date.replace(day=1)
+            if current_date.month == 1:
+                current_date = current_date.replace(year=current_date.year - 1, month=12)
+            else:
+                current_date = current_date.replace(month=current_date.month - 1)
+        elif cal_format == 2:  # Месяцы - переключаем год назад
+            current_date = current_date.replace(year=current_date.year - 1)
+    elif action == "more":
+        # Следующий период
+        if cal_format == 1:  # Дни - переключаем месяц вперед
+            current_date = current_date.replace(day=1)
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        elif cal_format == 2:  # Месяцы - переключаем год вперед
+            current_date = current_date.replace(year=current_date.year + 1)
+    elif action == "change":
+        # Переключаем формат календаря
+        if cal_format == 1:
+            cal_format = 2  # С дней на месяцы
+        elif cal_format == 2:
+            cal_format = 3  # С месяцев на годы
+
+    # Создаем обновленный календарь
+    calendar = CalendarKeyboard.create_calendar(
+        calendar_format=cal_format,
+        current_date=current_date,
+        callback_prefix="cal_comp"
+    )
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=calendar)
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error updating calendar: {e}")
+        await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_comp_date)
+async def process_comp_date(message: Message, state: FSMContext):
+    """Обработать дату соревнования (текстовый ввод как альтернатива календарю)"""
+
+    date_text = message.text.strip()
+    user_id = message.from_user.id
+
+    # Парсим дату с учетом формата пользователя
+    comp_date = await parse_user_date_input(date_text, user_id)
+
+    if comp_date is None:
+        date_format_desc = await get_date_format_description(user_id)
+        await message.answer(
+            f"❌ Неверный формат даты.\n"
+            f"Используйте формат: {date_format_desc}\n"
+            f"Или выберите дату из календаря выше."
+        )
+        return
+
+    # Проверяем что дата в будущем
+    if comp_date < date.today():
+        await message.answer(
+            "❌ Дата соревнования должна быть в будущем.\n"
+            "Введите корректную дату или выберите из календаря:"
+        )
+        return
+
+    # Сохраняем дату
+    await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
+
+    formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
+
+    # Создаём клавиатуру с типами
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🏃 Бег", callback_data="comptype:running"))
+    builder.row(InlineKeyboardButton(text="🏊 Плавание", callback_data="comptype:swimming"))
+    builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="comptype:cycling"))
+    builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="comptype:triathlon"))
+    builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="comptype:trail"))
+
+    text = (
+        f"✅ Дата: <b>{formatted_date}</b>\n\n"
+        f"📝 <b>Шаг 4 из 6</b>\n\n"
         f"Выберите <b>вид спорта</b>:"
     )
 
@@ -137,14 +283,29 @@ async def process_comp_type(callback: CallbackQuery, state: FSMContext):
     # Сохраняем тип
     await state.update_data(comp_type=comp_type)
 
+    user_id = callback.from_user.id
+    distance_unit = await get_distance_unit_name(user_id)
+
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
-        f"📝 <b>Шаг 4 из 5</b>\n\n"
-        f"Введите <b>дистанцию</b>:\n"
-        f"<i>Например: 42.195 (для марафона)\n"
-        f"Или: 21.1 (для полумарафона)\n"
-        f"Или: 10 (для 10 км)</i>"
+        f"📝 <b>Шаг 5 из 6</b>\n\n"
+        f"Введите <b>дистанцию</b> в <b>{distance_unit}</b>:\n"
     )
+
+    if distance_unit == 'км':
+        text += (
+            f"<i>Например:\n"
+            f"• 42.195 (для марафона)\n"
+            f"• 21.1 (для полумарафона)\n"
+            f"• 10 (для 10 км)</i>"
+        )
+    else:
+        text += (
+            f"<i>Например:\n"
+            f"• 26.2 (для марафона)\n"
+            f"• 13.1 (для полумарафона)\n"
+            f"• 6.2 (для 10 км)</i>"
+        )
 
     await callback.message.edit_text(text, parse_mode="HTML")
     await state.set_state(CompetitionStates.waiting_for_comp_distance)
@@ -156,102 +317,68 @@ async def process_comp_distance(message: Message, state: FSMContext):
     """Обработать дистанцию соревнования"""
 
     distance_text = message.text.strip().replace(',', '.')
+    user_id = message.from_user.id
 
-    try:
-        distance = float(distance_text)
+    # Парсим дистанцию с учетом единиц пользователя
+    distance_km = await parse_user_distance_input(distance_text, user_id)
 
-        if distance <= 0 or distance > 500:
-            await message.answer(
-                "❌ Дистанция должна быть от 0.1 до 500 км.\n"
-                "Введите корректное значение:"
-            )
-            return
-
-    except ValueError:
+    if distance_km is None:
+        distance_unit = await get_distance_unit_name(user_id)
         await message.answer(
-            "❌ Неверный формат дистанции.\n"
-            "Введите число (например: 42.195 или 10):"
+            f"❌ Неверный формат дистанции.\n"
+            f"Введите число в {distance_unit} (например: 42.195 или 10):"
         )
         return
 
-    # Сохраняем дистанцию
-    await state.update_data(comp_distance=distance)
+    if distance_km <= 0 or distance_km > 500:
+        distance_unit = await get_distance_unit_name(user_id)
+        await message.answer(
+            f"❌ Дистанция должна быть от 0.1 до 500 км.\n"
+            f"Введите корректное значение в {distance_unit}:"
+        )
+        return
 
-    # Определяем название дистанции
-    if distance == 42.195 or distance == 42.2:
-        distance_name = "Марафон (42.195 км)"
-    elif distance == 21.1 or distance == 21.0975:
-        distance_name = "Полумарафон (21.1 км)"
-    elif distance == 10:
-        distance_name = "10 км"
-    elif distance == 5:
-        distance_name = "5 км"
-    else:
-        distance_name = f"{distance} км"
+    # Сохраняем дистанцию в км
+    await state.update_data(comp_distance=distance_km)
+
+    # Форматируем название дистанции
+    distance_name = await format_competition_distance(distance_km, user_id)
+
+    # Создаем клавиатуру с кнопкой "Пропустить"
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="comp:skip_target"))
 
     text = (
         f"✅ Дистанция: <b>{distance_name}</b>\n\n"
-        f"📝 <b>Шаг 5 из 5</b>\n\n"
+        f"📝 <b>Шаг 6 из 6</b>\n\n"
         f"Введите <b>целевое время</b>:\n"
         f"<i>Формат: ЧЧ:ММ:СС\n"
         f"Например: 03:30:00 (3 часа 30 минут)\n"
         f"Или: 00:45:00 (45 минут)</i>\n\n"
-        f"Или отправьте <b>0</b>, если не хотите устанавливать цель сейчас."
+        f"Или нажмите кнопку ниже, чтобы пропустить."
     )
 
-    await message.answer(text, parse_mode="HTML")
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_comp_target)
 
 
-@router.message(CompetitionStates.waiting_for_comp_target)
-async def process_comp_target_and_create(message: Message, state: FSMContext):
-    """Обработать целевое время и создать соревнование"""
-
-    target_text = message.text.strip()
-    target_time = None
-
-    if target_text != "0":
-        # Парсим время
-        try:
-            # Проверяем формат ЧЧ:ММ:СС
-            time_parts = target_text.split(':')
-            if len(time_parts) == 3:
-                hours, minutes, seconds = map(int, time_parts)
-                if 0 <= hours <= 24 and 0 <= minutes < 60 and 0 <= seconds < 60:
-                    target_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                else:
-                    raise ValueError
-            elif len(time_parts) == 2:
-                # Формат ММ:СС
-                minutes, seconds = map(int, time_parts)
-                if 0 <= minutes < 60 and 0 <= seconds < 60:
-                    target_time = f"00:{minutes:02d}:{seconds:02d}"
-                else:
-                    raise ValueError
-            else:
-                raise ValueError
-        except (ValueError, AttributeError):
-            await message.answer(
-                "❌ Неверный формат времени.\n"
-                "Используйте формат: ЧЧ:ММ:СС (например: 03:30:00)\n"
-                "Или отправьте 0, чтобы пропустить."
-            )
-            return
-
+async def create_competition_from_state(user_id: int, state: FSMContext, target_time: str = None, message_obj=None):
+    """Создать соревнование из сохраненных данных FSM"""
     # Получаем сохранённые данные
     data = await state.get_data()
     comp_name = data.get('comp_name')
+    comp_city = data.get('comp_city')
     comp_date = data.get('comp_date')
     comp_type = data.get('comp_type')
     comp_distance = data.get('comp_distance')
-
-    user_id = message.from_user.id
 
     # Создаём соревнование в БД
     try:
         competition_data = {
             'name': comp_name,
             'date': comp_date,
+            'city': comp_city,
+            'country': 'Россия',
             'type': comp_type,
             'distances': json.dumps([comp_distance]),
             'status': 'upcoming',
@@ -276,13 +403,17 @@ async def process_comp_target_and_create(message: Message, state: FSMContext):
         from competitions.reminder_scheduler import create_reminders_for_competition
         await create_reminders_for_competition(user_id, comp_id, comp_date)
 
-        # Форматируем сообщение об успехе
+        # Форматируем сообщение об успехе с учетом настроек пользователя
+        formatted_date = await format_competition_date(comp_date, user_id)
+        formatted_distance = await format_competition_distance(comp_distance, user_id)
+
         text = (
             "✅ <b>Соревнование создано!</b>\n\n"
             f"🏆 <b>{comp_name}</b>\n"
-            f"📅 Дата: {datetime.strptime(comp_date, '%Y-%m-%d').strftime('%d.%m.%Y')}\n"
+            f"🏙️ Город: {comp_city}\n"
+            f"📅 Дата: {formatted_date}\n"
             f"🏃 Вид: {comp_type}\n"
-            f"📏 Дистанция: {comp_distance} км\n"
+            f"📏 Дистанция: {formatted_distance}\n"
         )
 
         if target_time:
@@ -304,19 +435,71 @@ async def process_comp_target_and_create(message: Message, state: FSMContext):
         builder.row(InlineKeyboardButton(text="✅ Мои соревнования", callback_data="comp:my"))
         builder.row(InlineKeyboardButton(text="🔙 Главное меню", callback_data="comp:menu"))
 
-        await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        if message_obj:
+            if isinstance(message_obj, Message):
+                await message_obj.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+            else:  # CallbackQuery
+                await message_obj.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
         # Очищаем состояние
         await state.clear()
 
     except Exception as e:
         logger.error(f"Error creating custom competition: {e}")
-        await message.answer(
-            "❌ Произошла ошибка при создании соревнования.\n"
-            "Попробуйте ещё раз позже.",
-            parse_mode="HTML"
-        )
+        error_text = "❌ Произошла ошибка при создании соревнования.\nПопробуйте ещё раз позже."
+
+        if message_obj:
+            if isinstance(message_obj, Message):
+                await message_obj.answer(error_text, parse_mode="HTML")
+            else:
+                await message_obj.edit_text(error_text, parse_mode="HTML")
+
         await state.clear()
+
+
+@router.callback_query(F.data == "comp:skip_target", CompetitionStates.waiting_for_comp_target)
+async def skip_target_time(callback: CallbackQuery, state: FSMContext):
+    """Пропустить целевое время и создать соревнование"""
+    await create_competition_from_state(callback.from_user.id, state, None, callback.message)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_comp_target)
+async def process_comp_target_and_create(message: Message, state: FSMContext):
+    """Обработать целевое время и создать соревнование"""
+
+    target_text = message.text.strip()
+    target_time = None
+
+    # Парсим время
+    try:
+        # Проверяем формат ЧЧ:ММ:СС
+        time_parts = target_text.split(':')
+        if len(time_parts) == 3:
+            hours, minutes, seconds = map(int, time_parts)
+            if 0 <= hours <= 24 and 0 <= minutes < 60 and 0 <= seconds < 60:
+                target_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                raise ValueError
+        elif len(time_parts) == 2:
+            # Формат ММ:СС
+            minutes, seconds = map(int, time_parts)
+            if 0 <= minutes < 60 and 0 <= seconds < 60:
+                target_time = f"00:{minutes:02d}:{seconds:02d}"
+            else:
+                raise ValueError
+        else:
+            raise ValueError
+    except (ValueError, AttributeError):
+        await message.answer(
+            "❌ Неверный формат времени.\n"
+            "Используйте формат: ЧЧ:ММ:СС (например: 03:30:00)\n"
+            "Или нажмите кнопку 'Пропустить'."
+        )
+        return
+
+    # Создаем соревнование
+    await create_competition_from_state(message.from_user.id, state, target_time, message)
 
 
 # ========== СТАТИСТИКА СОРЕВНОВАНИЙ ==========

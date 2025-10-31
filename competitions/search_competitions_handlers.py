@@ -178,8 +178,9 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
     competitions = await search_competitions_by_city_and_month(city, period)
 
     if not competitions:
-        # Если не нашли в БД, пробуем загрузить из Russia Running API
-        from competitions.competitions_parser import load_competitions_from_api, add_competition
+        # Если не нашли в БД, пробуем загрузить из всех источников (Russia Running API + runc.run)
+        from competitions.competitions_parser import load_competitions_from_api
+        from competitions.competitions_queries import add_competition
 
         # Загружаем из API
         try:
@@ -200,15 +201,15 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
                 try:
                     await add_competition(comp_data)
                     added += 1
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to add competition {comp_data.get('name', 'unknown')}: {e}")
 
             if added > 0:
                 # Ищем снова
                 competitions = await search_competitions_by_city_and_month(city, period)
 
         except Exception as e:
-            logger.error(f"Error loading competitions from Russia Running API: {e}")
+            logger.error(f"Error loading competitions from parsers: {e}", exc_info=True)
 
     if not competitions:
         # Определяем период для отображения
@@ -227,7 +228,7 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
             f"Попробуйте:\n"
             f"• Выбрать другой месяц\n"
             f"• Выбрать другой город\n"
-            f"• Или создать своё соревнование вручную"
+            f"• Или найти соревнование вручную"
         )
 
         builder = InlineKeyboardBuilder()
@@ -238,7 +239,7 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
             InlineKeyboardButton(text="📅 Другой месяц", callback_data=f"comp:city:{city}")
         )
         builder.row(
-            InlineKeyboardButton(text="➕ Создать своё", callback_data="comp:create_custom")
+            InlineKeyboardButton(text="🔍 Найти вручную", callback_data="comp:create_custom")
         )
         builder.row(
             InlineKeyboardButton(text="◀️ Назад в меню", callback_data="comp:menu")

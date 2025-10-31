@@ -88,7 +88,7 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
             "• Лига героев\n"
             "• Фруктовые забеги\n"
             "• Timerman\n\n"
-            "Вы также можете создать своё соревнование вручную."
+            "Вы также можете найти соревнование вручную."
         )
         await callback.message.edit_text(
             text,
@@ -396,42 +396,25 @@ async def register_user_for_competition(callback: CallbackQuery, state: FSMConte
 # ========== МОИ СОРЕВНОВАНИЯ ==========
 
 @router.callback_query(F.data == "comp:my")
-async def show_my_competitions_menu(callback: CallbackQuery, state: FSMContext):
-    """Показать меню моих соревнований"""
-    text = (
-        "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
-        "Здесь вы можете посмотреть соревнования, на которые вы зарегистрированы, "
-        "и добавить результаты после участия."
-    )
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_my_competitions_menu(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "comp:my:upcoming")
-async def show_my_upcoming_competitions(callback: CallbackQuery, state: FSMContext):
-    """Показать предстоящие соревнования пользователя"""
+async def show_my_competitions(callback: CallbackQuery, state: FSMContext):
+    """Показать предстоящие соревнования пользователя (без деления)"""
     user_id = callback.from_user.id
 
     competitions = await get_user_competitions(user_id, status_filter='upcoming')
 
     if not competitions:
         text = (
-            "📅 <b>Предстоящие соревнования</b>\n\n"
+            "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
             "У вас пока нет запланированных соревнований.\n\n"
-            "Перейдите в раздел 'Предстоящие соревнования' чтобы зарегистрироваться на забег!"
+            "Перейдите в раздел 'Найти соревнования' чтобы зарегистрироваться на забег!"
         )
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         builder = InlineKeyboardBuilder()
         builder.row(
-            InlineKeyboardButton(text="📅 Найти соревнования", callback_data="comp:upcoming")
+            InlineKeyboardButton(text="🔍 Найти соревнования", callback_data="comp:search")
         )
         builder.row(
-            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my")
+            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
         )
 
         await callback.message.edit_text(
@@ -440,86 +423,24 @@ async def show_my_upcoming_competitions(callback: CallbackQuery, state: FSMConte
             parse_mode="HTML"
         )
     else:
-        text = "📅 <b>Мои предстоящие соревнования</b>\n\n"
+        text = "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
 
-        for i, comp in enumerate(competitions[:5], 1):
+        for i, comp in enumerate(competitions[:10], 1):
             time_until = format_time_until_competition(comp['date'])
             dist_str = format_competition_distance(comp['distance'])
 
-            target_time = comp.get('target_time', 'не установлено')
+            # Форматируем целевое время
+            target_time = comp.get('target_time')
+            if target_time is None or target_time == 'None' or target_time == '':
+                target_time_str = 'Нет цели'
+            else:
+                target_time_str = target_time
 
             text += (
                 f"{i}. <b>{comp['name']}</b>\n"
                 f"   📏 {dist_str}\n"
                 f"   📅 {comp['date']} ({time_until})\n"
-                f"   🎯 Цель: {target_time}\n\n"
-            )
-
-        from aiogram.utils.keyboard import InlineKeyboardBuilder
-        builder = InlineKeyboardBuilder()
-
-        for comp in competitions[:5]:
-            builder.row(
-                InlineKeyboardButton(
-                    text=f"{comp['name'][:40]}...",
-                    callback_data=f"comp:my_view:{comp['id']}"
-                )
-            )
-
-        builder.row(
-            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my")
-        )
-
-        await callback.message.edit_text(
-            text,
-            reply_markup=builder.as_markup(),
-            parse_mode="HTML"
-        )
-
-    await callback.answer()
-
-
-@router.callback_query(F.data == "comp:my:finished")
-async def show_my_finished_competitions(callback: CallbackQuery, state: FSMContext):
-    """Показать завершённые соревнования пользователя"""
-    user_id = callback.from_user.id
-
-    competitions = await get_user_competitions(user_id, status_filter='finished')
-
-    if not competitions:
-        text = (
-            "🏁 <b>Завершённые соревнования</b>\n\n"
-            "У вас пока нет завершённых соревнований."
-        )
-        from aiogram.utils.keyboard import InlineKeyboardBuilder
-        builder = InlineKeyboardBuilder()
-        builder.row(
-            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my")
-        )
-
-        await callback.message.edit_text(
-            text,
-            reply_markup=builder.as_markup(),
-            parse_mode="HTML"
-        )
-    else:
-        text = "🏁 <b>Мои завершённые соревнования</b>\n\n"
-
-        for i, comp in enumerate(competitions[:10], 1):
-            dist_str = format_competition_distance(comp['distance'])
-
-            # Проверяем есть ли результат
-            if comp.get('finish_time'):
-                result = f"⏱️ {comp['finish_time']}"
-                if comp.get('place_overall'):
-                    result += f" | 📊 {comp['place_overall']} место"
-            else:
-                result = "⚠️ Результат не добавлен"
-
-            text += (
-                f"{i}. <b>{comp['name']}</b>\n"
-                f"   📏 {dist_str} | 📅 {comp['date']}\n"
-                f"   {result}\n\n"
+                f"   🎯 Цель: {target_time_str}\n\n"
             )
 
         from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -528,13 +449,13 @@ async def show_my_finished_competitions(callback: CallbackQuery, state: FSMConte
         for comp in competitions[:10]:
             builder.row(
                 InlineKeyboardButton(
-                    text=f"{comp['name'][:40]}...",
-                    callback_data=f"comp:my_view_finished:{comp['id']}"
+                    text=f"{comp['name'][:40]}..." if len(comp['name']) > 40 else comp['name'],
+                    callback_data=f"comp:my_view:{comp['id']}:{comp['distance']}"
                 )
             )
 
         builder.row(
-            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my")
+            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
         )
 
         await callback.message.edit_text(
@@ -543,6 +464,98 @@ async def show_my_finished_competitions(callback: CallbackQuery, state: FSMConte
             parse_mode="HTML"
         )
 
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("comp:my_view:"))
+async def view_my_competition(callback: CallbackQuery, state: FSMContext):
+    """Просмотр деталей моего соревнования"""
+    user_id = callback.from_user.id
+    parts = callback.data.split(":")
+    competition_id = int(parts[2])
+    distance = float(parts[3])
+
+    # Получаем информацию о соревновании
+    competition = await get_competition(competition_id)
+
+    if not competition:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    # Получаем данные участия пользователя
+    from competitions.competitions_queries import get_user_competitions
+    user_comps = await get_user_competitions(user_id)
+
+    # Находим нужную регистрацию
+    registration = None
+    for comp in user_comps:
+        if comp['id'] == competition_id and comp.get('distance') == distance:
+            registration = comp
+            break
+
+    if not registration:
+        await callback.answer("❌ Регистрация не найдена", show_alert=True)
+        return
+
+    # Форматируем информацию
+    time_until = format_time_until_competition(competition['date'])
+    dist_str = format_competition_distance(distance)
+
+    # Форматируем целевое время
+    target_time = registration.get('target_time')
+    if target_time is None or target_time == 'None' or target_time == '':
+        target_time_str = 'Нет цели'
+    else:
+        target_time_str = target_time
+
+    text = (
+        f"🏃 <b>{competition['name']}</b>\n\n"
+        f"📍 Город: {competition.get('city', 'не указан')}\n"
+        f"📅 Дата: {competition['date']}\n"
+        f"⏰ До старта: {time_until}\n\n"
+        f"📏 Ваша дистанция: {dist_str}\n"
+        f"🎯 Целевое время: {target_time_str}\n\n"
+    )
+
+    if competition.get('description'):
+        text += f"ℹ️ {competition['description']}\n\n"
+
+    # Создаём клавиатуру
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+
+    # Кнопки действий
+    builder.row(
+        InlineKeyboardButton(
+            text="✏️ Изменить целевое время",
+            callback_data=f"comp:edit_target:{competition_id}:{distance}"
+        )
+    )
+
+    builder.row(
+        InlineKeyboardButton(
+            text="❌ Отменить участие",
+            callback_data=f"comp:cancel_registration:{competition_id}:{distance}"
+        )
+    )
+
+    if competition.get('official_url'):
+        builder.row(
+            InlineKeyboardButton(
+                text="🌐 Официальный сайт",
+                url=competition['official_url']
+            )
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my")
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
     await callback.answer()
 
 
@@ -576,11 +589,41 @@ async def show_my_results(callback: CallbackQuery, state: FSMContext):
                 text += f"   🏆 {record['competition_name']}\n"
             text += "\n"
 
+    # Получаем завершенные соревнования
+    finished_comps = await get_user_competitions(user_id, status_filter='finished')
+
+    if finished_comps:
+        text += "\n━━━━━━━━━━━━━━━━━━━\n\n"
+        text += "🏁 <b>ЗАВЕРШЕННЫЕ СОРЕВНОВАНИЯ</b>\n\n"
+
+        for i, comp in enumerate(finished_comps[:5], 1):
+            dist_str = format_competition_distance(comp['distance'])
+
+            text += f"{i}. <b>{comp['name']}</b>\n"
+            text += f"   📏 {dist_str}\n"
+            text += f"   📅 {comp['date']}\n"
+
+            if comp.get('finish_time'):
+                text += f"   ⏱️ Результат: {comp['finish_time']}\n"
+
+            if comp.get('place_overall'):
+                text += f"   🏆 Место: {comp['place_overall']}\n"
+
+            text += "\n"
+
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="🏁 Завершённые соревнования", callback_data="comp:my:finished")
-    )
+
+    # Добавляем кнопки для завершенных соревнований
+    if finished_comps:
+        for comp in finished_comps[:5]:
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"📊 {comp['name'][:35]}..." if len(comp['name']) > 35 else f"📊 {comp['name']}",
+                    callback_data=f"comp:view_result:{comp['id']}"
+                )
+            )
+
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
     )
@@ -593,24 +636,9 @@ async def show_my_results(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ========== ЗАГЛУШКИ ДЛЯ ОСТАЛЬНЫХ ФУНКЦИЙ ==========
-
-@router.callback_query(F.data == "comp:search")
-async def search_competitions(callback: CallbackQuery, state: FSMContext):
-    """Поиск соревнований (заглушка)"""
-    text = (
-        "🔍 <b>ПОИСК СОРЕВНОВАНИЙ</b>\n\n"
-        "Эта функция находится в разработке.\n"
-        "Скоро здесь можно будет искать соревнования по городу, дате и типу."
-    )
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
-    )
-    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
-    await callback.answer()
-
-
 # Импортируем InlineKeyboardButton для использования в коде
 from aiogram.types import InlineKeyboardButton
+
+# Примечание: обработчик comp:search находится в search_competitions_handlers.py
+# Примечание: обработчик comp:statistics находится в custom_competitions_handlers.py
+# Примечание: обработчик comp:create_custom находится в custom_competitions_handlers.py

@@ -103,10 +103,11 @@ async def get_upcoming_competitions(limit: int = 50, offset: int = 0) -> List[Di
         db.row_factory = aiosqlite.Row
         today = date.today().strftime('%Y-%m-%d')
 
+        # Только официальные соревнования (is_official = 1)
         async with db.execute(
             """
             SELECT * FROM competitions
-            WHERE date >= ? AND status IN ('upcoming', 'ongoing')
+            WHERE date >= ? AND status IN ('upcoming', 'ongoing') AND is_official = 1
             ORDER BY date ASC
             LIMIT ? OFFSET ?
             """,
@@ -152,7 +153,8 @@ async def search_competitions(
         db.row_factory = aiosqlite.Row
 
         # Строим динамический запрос
-        conditions = ["date >= date('now')"]
+        # Только официальные соревнования (is_official = 1)
+        conditions = ["date >= date('now')", "is_official = 1"]
         params = []
 
         if query:

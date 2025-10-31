@@ -30,11 +30,13 @@ async def search_competitions_by_city_and_month(
 
         if period == 'all':
             # Поиск по всем месяцам (начиная с текущей даты)
+            # Только официальные соревнования (is_official = 1)
             query = """
                 SELECT * FROM competitions
                 WHERE city = ?
                   AND date >= date('now')
                   AND status = 'upcoming'
+                  AND is_official = 1
                 ORDER BY date ASC
                 LIMIT 50
             """
@@ -53,12 +55,14 @@ async def search_competitions_by_city_and_month(
             else:
                 end_date = f"{year}-{int(month) + 1:02d}-01"
 
+            # Только официальные соревнования (is_official = 1)
             query = """
                 SELECT * FROM competitions
                 WHERE city = ?
                   AND date >= ?
                   AND date < ?
                   AND status = 'upcoming'
+                  AND is_official = 1
                 ORDER BY date ASC
                 LIMIT 50
             """
@@ -84,12 +88,14 @@ async def search_competitions_by_city(city: str, limit: int = 50) -> List[Dict[s
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
+        # Только официальные соревнования (is_official = 1)
         async with db.execute(
             """
             SELECT * FROM competitions
             WHERE city = ?
               AND date >= date('now')
               AND status = 'upcoming'
+              AND is_official = 1
             ORDER BY date ASC
             LIMIT ?
             """,
@@ -108,6 +114,7 @@ async def get_available_cities() -> List[str]:
     """
 
     async with aiosqlite.connect(DB_PATH) as db:
+        # Только официальные соревнования (is_official = 1)
         async with db.execute(
             """
             SELECT DISTINCT city
@@ -115,6 +122,7 @@ async def get_available_cities() -> List[str]:
             WHERE city IS NOT NULL
               AND date >= date('now')
               AND status = 'upcoming'
+              AND is_official = 1
             ORDER BY city
             """
         ) as cursor:
@@ -134,6 +142,7 @@ async def get_competitions_count_by_city(city: str) -> int:
     """
 
     async with aiosqlite.connect(DB_PATH) as db:
+        # Только официальные соревнования (is_official = 1)
         async with db.execute(
             """
             SELECT COUNT(*) as count
@@ -141,6 +150,7 @@ async def get_competitions_count_by_city(city: str) -> int:
             WHERE city = ?
               AND date >= date('now')
               AND status = 'upcoming'
+              AND is_official = 1
             """,
             (city,)
         ) as cursor:
