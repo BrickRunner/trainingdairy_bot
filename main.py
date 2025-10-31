@@ -16,11 +16,16 @@ from health.health_handlers import router as health_router
 from ratings.ratings_handlers import router as ratings_router
 from registration.registration_handlers import router as registration_router
 from competitions.competitions_handlers import router as competitions_router
+from competitions.custom_competitions_handlers import router as custom_competitions_router
+from competitions.search_competitions_handlers import router as search_competitions_router
 from coach.coach_handlers import router as coach_router
+from coach.coach_add_training_handlers import router as coach_add_training_router
+from coach.coach_competitions_handlers import router as coach_competitions_router
 from database.queries import init_db
 from notifications.notification_scheduler import start_notification_scheduler
 from utils.birthday_checker import schedule_birthday_check
 from ratings.rating_updater import schedule_rating_updates
+from competitions.reminder_scheduler import schedule_competition_reminders
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -52,7 +57,11 @@ async def main():
     dp.include_router(registration_router)  # Роутер регистрации
     dp.include_router(settings_router)  # settings_router содержит специфичные обработчики (cal_birth_)
     dp.include_router(competitions_router)  # Роутер соревнований
+    dp.include_router(custom_competitions_router)  # Роутер пользовательских соревнований
+    dp.include_router(search_competitions_router)  # Роутер поиска соревнований
     dp.include_router(coach_router)  # Роутер тренеров
+    dp.include_router(coach_add_training_router)  # Роутер добавления тренировок для учеников
+    dp.include_router(coach_competitions_router)  # Роутер предложения соревнований от тренера
     dp.include_router(health_router)
     dp.include_router(ratings_router)
     dp.include_router(router)  # Основной роутер (общие команды)
@@ -72,6 +81,10 @@ async def main():
     # Запуск планировщика обновления рейтингов
     asyncio.create_task(schedule_rating_updates())
     logger.info("Планировщик обновления рейтингов запущен")
+
+    # Запуск планировщика напоминаний о соревнованиях
+    asyncio.create_task(schedule_competition_reminders(bot))
+    logger.info("Планировщик напоминаний о соревнованиях запущен")
 
     # Запуск бота
     logger.info("Бот запущен!")

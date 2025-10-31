@@ -6,8 +6,10 @@ import aiosqlite
 import logging
 import secrets
 import string
+import os
 from typing import Optional, List, Dict, Any
-from database.queries import DB_PATH
+
+DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 logger = logging.getLogger(__name__)
 

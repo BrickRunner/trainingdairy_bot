@@ -32,7 +32,9 @@
       "Bash(del test_reminders.py)",
       "Bash(if not exist \"d:\\desktop\\coding\\trainingdairy_bot-1\\competitions\" mkdir \"d:\\desktop\\coding\\trainingdairy_bot-1\\competitions\")",
       "Bash(cmd /c \"if not exist d:\\desktop\\coding\\trainingdairy_bot-1\\competitions mkdir d:\\desktop\\coding\\trainingdairy_bot-1\\competitions\")",
-      "Bash(cmd /c \"if not exist d:\\desktop\\coding\\trainingdairy_bot-1\\coach mkdir d:\\desktop\\coding\\trainingdairy_bot-1\\coach\")"
+      "Bash(cmd /c \"if not exist d:\\desktop\\coding\\trainingdairy_bot-1\\coach mkdir d:\\desktop\\coding\\trainingdairy_bot-1\\coach\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && if exist bot_data.db del bot_data.db && if exist training_diary.db del training_diary.db && echo Removed extra databases\")",
+      "Bash(del \"d:\\desktop\\coding\\trainingdairy_bot-1\\check_db.py\")"
     ],
     "deny": [],
     "ask": []

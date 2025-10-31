@@ -9,11 +9,12 @@
 import asyncio
 import aiosqlite
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DB_PATH = "training_diary.db"
+DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
 async def migrate_database():
@@ -37,11 +38,11 @@ async def migrate_database():
                 logger.error(f"ERROR adding is_coach: {e}")
 
         try:
-            # Добавляем coach_link_code в user_settings
+            # Добавляем coach_link_code в user_settings (без UNIQUE, т.к. SQLite не поддерживает)
             logger.info("Adding coach_link_code column to user_settings...")
             await db.execute("""
                 ALTER TABLE user_settings
-                ADD COLUMN coach_link_code TEXT UNIQUE
+                ADD COLUMN coach_link_code TEXT
             """)
             logger.info("OK: coach_link_code column added")
         except Exception as e:

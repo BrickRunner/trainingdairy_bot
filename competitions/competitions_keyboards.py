@@ -19,7 +19,13 @@ def get_competitions_main_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="✅ Мои соревнования", callback_data="comp:my")
     )
     builder.row(
+        InlineKeyboardButton(text="➕ Создать своё соревнование", callback_data="comp:create_custom")
+    )
+    builder.row(
         InlineKeyboardButton(text="🏅 Мои результаты", callback_data="comp:my_results")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📊 Статистика", callback_data="comp:statistics")
     )
     builder.row(
         InlineKeyboardButton(text="🔍 Поиск соревнований", callback_data="comp:search")

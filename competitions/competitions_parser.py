@@ -1,503 +1,274 @@
 """
-Парсеры для загрузки реальных соревнований с сайтов
+Загрузка соревнований из Russia Running API
 """
 
 import aiohttp
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
-from bs4 import BeautifulSoup
-from typing import List, Dict, Any
-from competitions.competitions_queries import add_competition, get_competition
+from datetime import datetime
+from typing import List, Dict, Any, Optional
+from competitions.competitions_queries import add_competition
 
 logger = logging.getLogger(__name__)
 
 
-class CompetitionsParser:
-    """Базовый класс для парсинга соревнований"""
+class RussiaRunningAPI:
+    """
+    Клиент для работы с Russia Running API
+    """
+
+    # API endpoints
+    BASE_URL = "https://russiarunning.com/api"
+    EVENTS_URL = f"{BASE_URL}/events"
 
     def __init__(self):
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'TrainingDiaryBot/1.0',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
         }
 
-    async def fetch_page(self, url: str) -> str:
-        """Загрузить HTML страницы"""
+    async def fetch_events(
+        self,
+        city: Optional[str] = None,
+        year: Optional[int] = None,
+        month: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Загрузить соревнования из Russia Running API
+
+        Args:
+            city: Название города для фильтрации
+            year: Год для фильтрации
+            month: Месяц для фильтрации (1-12)
+
+        Returns:
+            Список соревнований
+        """
         try:
+            params = {}
+
+            if city:
+                params['city'] = city
+
+            if year:
+                params['year'] = year
+
+            if month:
+                params['month'] = month
+
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=self.headers, timeout=30) as response:
+                async with session.get(
+                    self.EVENTS_URL,
+                    headers=self.headers,
+                    params=params,
+                    timeout=30
+                ) as response:
+
                     if response.status == 200:
-                        return await response.text()
+                        data = await response.json()
+                        logger.info(f"Loaded {len(data)} events from Russia Running API")
+                        return data
                     else:
-                        logger.error(f"Failed to fetch {url}: {response.status}")
-                        return None
+                        logger.error(f"Russia Running API error: {response.status}")
+                        return []
+
         except Exception as e:
-            logger.error(f"Error fetching {url}: {e}")
-            return None
+            logger.error(f"Error fetching Russia Running API: {e}")
+            return []
 
-    async def parse(self) -> List[Dict[str, Any]]:
-        """Парсить соревнования (должен быть переопределён в подклассе)"""
-        raise NotImplementedError
+    def convert_to_competition_format(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Конвертировать событие из API в формат нашей БД
 
+        Args:
+            event: Событие из API
 
-class ProbegOrgParser(CompetitionsParser):
-    """
-    Парсер для probeg.org (Беговое сообщество)
-    Использует реальные данные известных предстоящих соревнований
-    """
+        Returns:
+            Словарь в формате competitions таблицы
+        """
+        # Парсим дистанции
+        distances = []
+        if 'distances' in event:
+            if isinstance(event['distances'], list):
+                distances = event['distances']
+            elif isinstance(event['distances'], str):
+                try:
+                    distances = json.loads(event['distances'])
+                except:
+                    # Если строка с числами через запятую
+                    distances = [float(d.strip()) for d in event['distances'].split(',')]
 
-    BASE_URL = "https://probeg.org"
+        # Определяем тип соревнования по дистанции
+        competition_type = 'забег'
+        if distances:
+            max_distance = max(distances)
+            if max_distance >= 42:
+                competition_type = 'марафон'
+            elif max_distance >= 21:
+                competition_type = 'полумарафон'
+            elif max_distance >= 10:
+                competition_type = 'забег'
 
-    async def parse(self) -> List[Dict[str, Any]]:
-        """Парсить соревнования с probeg.org"""
-        logger.info("Parsing competitions from probeg.org...")
+        return {
+            'name': event.get('name', 'Без названия'),
+            'date': event.get('date'),
+            'city': event.get('city', ''),
+            'country': event.get('country', 'Россия'),
+            'location': event.get('location', ''),
+            'distances': json.dumps(distances) if distances else json.dumps([]),
+            'type': event.get('type', competition_type),
+            'description': event.get('description', ''),
+            'official_url': event.get('url', event.get('official_url', '')),
+            'organizer': event.get('organizer', 'Russia Running'),
+            'registration_status': event.get('registration_status', 'open'),
+            'status': 'upcoming',
+            'is_official': 1,
+            'source_url': 'https://russiarunning.com'
+        }
 
-        competitions = []
-        today = datetime.now().date()
+    async def load_events_by_city(self, city: str) -> List[Dict[str, Any]]:
+        """
+        Загрузить соревнования для конкретного города
 
-        # Реальные предстоящие соревнования 2025-2026
-        # Основаны на регулярном календаре беговых событий в России
-        real_competitions = [
-            {
-                'name': 'Московский марафон 2026',
-                'date': '2026-09-20',  # Традиционно третье воскресенье сентября
-                'city': 'Москва',
-                'location': 'Лужники',
-                'distances': json.dumps([42.195, 21.1, 10, 5]),
-                'type': 'марафон',
-                'description': 'Крупнейший марафон в России. Старт и финиш в Лужниках. IAAF Gold Label Road Race.',
-                'official_url': 'https://moscowmarathon.org',
-                'organizer': 'Московский марафон',
-                'source_url': 'https://moscowmarathon.org'
-            },
-            {
-                'name': 'Зимний забег "Новый год"',
-                'date': '2025-12-28',
-                'city': 'Москва',
-                'location': 'Парк Горького',
-                'distances': json.dumps([10, 5, 3]),
-                'type': 'забег',
-                'description': 'Новогодний забег в парке. Праздничная атмосфера и подарки!',
-                'official_url': 'https://probeg.org',
-                'organizer': 'Беговое сообщество',
-                'source_url': 'https://probeg.org'
-            },
-            {
-                'name': 'ЗаБег.РФ Весенний 2026',
-                'date': '2026-05-17',
-                'city': 'Москва',
-                'location': 'Парк Горького',
-                'distances': json.dumps([21.1, 10, 5, 3]),
-                'type': 'полумарафон',
-                'description': 'Традиционный весенний полумарафон серии ЗаБег.РФ.',
-                'official_url': 'https://zabeg.org',
-                'organizer': 'ЗаБег.РФ',
-                'source_url': 'https://zabeg.org'
-            },
-            {
-                'name': 'Рождественский полумарафон',
-                'date': '2026-01-10',
-                'city': 'Москва',
-                'location': 'Коломенское',
-                'distances': json.dumps([21.1, 10, 5]),
-                'type': 'полумарафон',
-                'description': 'Зимний полумарафон в парке Коломенское.',
-                'official_url': 'https://probeg.org',
-                'organizer': 'Беговое сообщество',
-                'source_url': 'https://probeg.org'
-            }
-        ]
+        Args:
+            city: Название города
 
-        for comp_data in real_competitions:
-            # Проверяем что дата в будущем
-            comp_date = datetime.strptime(comp_data['date'], '%Y-%m-%d').date()
-            if comp_date >= today:
-                comp_data['is_official'] = 1
-                comp_data['registration_status'] = 'open'
-                comp_data['status'] = 'upcoming'
-                comp_data['country'] = 'Россия'
-                competitions.append(comp_data)
-
-        logger.info(f"Found {len(competitions)} competitions from probeg.org")
-        return competitions
-
-
-class RussiaRunningParser(CompetitionsParser):
-    """
-    Парсер для russiarunning.com
-    Использует реальные данные известных предстоящих соревнований
-    """
-
-    BASE_URL = "https://russiarunning.com"
-
-    async def parse(self) -> List[Dict[str, Any]]:
-        """Парсить соревнования с russiarunning.com"""
-        logger.info("Parsing competitions from russiarunning.com...")
+        Returns:
+            Список соревнований в формате БД
+        """
+        events = await self.fetch_events(city=city)
 
         competitions = []
         today = datetime.now().date()
 
-        # Реальные предстоящие соревнования Russia Running 2026
-        real_competitions = [
-            {
-                'name': 'Санкт-Петербургский марафон "Белые ночи" 2026',
-                'date': '2026-07-05',  # Традиционно первое воскресенье июля
-                'city': 'Санкт-Петербург',
-                'location': 'Дворцовая площадь',
-                'distances': json.dumps([42.195, 21.1, 10, 5]),
-                'type': 'марафон',
-                'description': 'Международный марафон в северной столице России. IAAF Silver Label Road Race.',
-                'official_url': 'https://spbmarathon.ru',
-                'organizer': 'Russia Running',
-                'source_url': 'https://spbmarathon.ru'
-            },
-            {
-                'name': 'Казанский марафон 2026',
-                'date': '2026-05-24',  # Традиционно конец мая
-                'city': 'Казань',
-                'location': 'Площадь Тысячелетия',
-                'distances': json.dumps([42.195, 21.1, 10, 3]),
-                'type': 'марафон',
-                'description': 'Один из крупнейших марафонов в Поволжье.',
-                'official_url': 'https://kazanmarathon.org',
-                'organizer': 'Russia Running',
-                'source_url': 'https://kazanmarathon.org'
-            },
-            {
-                'name': 'Новосибирский полумарафон',
-                'date': '2026-08-16',
-                'city': 'Новосибирск',
-                'location': 'Набережная',
-                'distances': json.dumps([21.1, 10, 5]),
-                'type': 'полумарафон',
-                'description': 'Летний полумарафон в столице Сибири.',
-                'official_url': 'https://nsk-run.ru',
-                'organizer': 'Russia Running',
-                'source_url': 'https://nsk-run.ru'
-            },
-            {
-                'name': 'Екатеринбургский марафон 2026',
-                'date': '2026-06-07',
-                'city': 'Екатеринбург',
-                'location': 'Центр города',
-                'distances': json.dumps([42.195, 21.1, 10, 5]),
-                'type': 'марафон',
-                'description': 'Марафон на границе Европы и Азии.',
-                'official_url': 'https://ekbmarathon.ru',
-                'organizer': 'Russia Running',
-                'source_url': 'https://ekbmarathon.ru'
-            }
-        ]
+        for event in events:
+            # Проверяем что есть дата
+            if not event.get('date'):
+                continue
 
-        for comp_data in real_competitions:
             # Проверяем что дата в будущем
-            comp_date = datetime.strptime(comp_data['date'], '%Y-%m-%d').date()
-            if comp_date >= today:
-                comp_data['is_official'] = 1
-                comp_data['registration_status'] = 'open'
-                comp_data['status'] = 'upcoming'
-                comp_data['country'] = 'Россия'
-                competitions.append(comp_data)
+            try:
+                event_date = datetime.strptime(event['date'], '%Y-%m-%d').date()
+                if event_date < today:
+                    continue
+            except:
+                logger.warning(f"Invalid date format for event: {event.get('name')}")
+                continue
 
-        logger.info(f"Found {len(competitions)} competitions from russiarunning.com")
+            # Конвертируем в формат БД
+            competition = self.convert_to_competition_format(event)
+            competitions.append(competition)
+
+        logger.info(f"Loaded {len(competitions)} competitions for {city}")
         return competitions
 
+    async def load_events_by_city_and_month(
+        self,
+        city: str,
+        year: int,
+        month: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Загрузить соревнования для города и месяца
 
-class TimermanParser(CompetitionsParser):
-    """
-    Парсер для timerman.info
-    Использует реальные данные известных трейловых забегов
-    """
+        Args:
+            city: Название города
+            year: Год
+            month: Месяц (1-12)
 
-    BASE_URL = "https://timerman.info"
-
-    async def parse(self) -> List[Dict[str, Any]]:
-        """Парсить соревнования с timerman.info"""
-        logger.info("Parsing competitions from timerman.info...")
+        Returns:
+            Список соревнований в формате БД
+        """
+        events = await self.fetch_events(city=city, year=year, month=month)
 
         competitions = []
-        today = datetime.now().date()
 
-        # Реальные предстоящие трейловые соревнования 2026
-        real_competitions = [
-            {
-                'name': 'Rosa Run 2026',
-                'date': '2026-08-23',  # Традиционно конец августа
-                'city': 'Сочи',
-                'location': 'Роза Хутор',
-                'distances': json.dumps([42, 21, 10, 5]),
-                'type': 'трейл',
-                'description': 'Горный забег на курорте Роза Хутор с живописными видами. Самый массовый трейл в России.',
-                'official_url': 'https://rosaski.com/rosa-run',
-                'organizer': 'Timerman',
-                'source_url': 'https://rosaski.com/rosa-run'
-            },
-            {
-                'name': 'Эльбрус Скайраннинг 2026',
-                'date': '2026-07-11',  # Традиционно июль
-                'city': 'Терскол',
-                'location': 'Приэльбрусье',
-                'distances': json.dumps([42, 25, 15]),
-                'type': 'трейл',
-                'description': 'Экстремальный горный забег в Приэльбрусье. Высота до 3800 метров.',
-                'official_url': 'https://elbrus-race.com',
-                'organizer': 'Timerman',
-                'source_url': 'https://elbrus-race.com'
-            },
-            {
-                'name': 'Конжак Trail',
-                'date': '2026-06-20',
-                'city': 'Домбай',
-                'location': 'Тебердинский заповедник',
-                'distances': json.dumps([50, 25, 12]),
-                'type': 'трейл',
-                'description': 'Трейл в горах Кавказа. Живописные виды на пик Конжак.',
-                'official_url': 'https://timerman.info/konzhak',
-                'organizer': 'Timerman',
-                'source_url': 'https://timerman.info'
-            },
-            {
-                'name': 'Алтай Ultra Trail',
-                'date': '2026-09-05',
-                'city': 'Белокуриха',
-                'location': 'Горный Алтай',
-                'distances': json.dumps([100, 50, 30, 15]),
-                'type': 'ультра',
-                'description': 'Ультрамарафон в горах Алтая. Самые экстремальные дистанции среди живописных пейзажей.',
-                'official_url': 'https://altai-ultra.com',
-                'organizer': 'Timerman',
-                'source_url': 'https://altai-ultra.com'
-            }
-        ]
+        for event in events:
+            if not event.get('date'):
+                continue
 
-        for comp_data in real_competitions:
-            # Проверяем что дата в будущем
-            comp_date = datetime.strptime(comp_data['date'], '%Y-%m-%d').date()
-            if comp_date >= today:
-                comp_data['is_official'] = 1
-                comp_data['registration_status'] = 'open'
-                comp_data['status'] = 'upcoming'
-                comp_data['country'] = 'Россия'
-                competitions.append(comp_data)
+            # Конвертируем в формат БД
+            competition = self.convert_to_competition_format(event)
+            competitions.append(competition)
 
-        logger.info(f"Found {len(competitions)} competitions from timerman.info")
+        logger.info(f"Loaded {len(competitions)} competitions for {city} {year}-{month:02d}")
         return competitions
 
 
-class LigaStarshevParser(CompetitionsParser):
+async def load_competitions_from_api(
+    city: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None
+) -> List[Dict[str, Any]]:
     """
-    Парсер для ligastarshev.ru (Лига героев)
-    Использует реальные данные известных соревнований с препятствиями
-    """
+    Загрузить соревнования из Russia Running API
 
-    BASE_URL = "https://ligastarshev.ru"
-
-    async def parse(self) -> List[Dict[str, Any]]:
-        """Парсить соревнования с ligastarshev.ru"""
-        logger.info("Parsing competitions from ligastarshev.ru...")
-
-        competitions = []
-        today = datetime.now().date()
-
-        # Реальные предстоящие соревнования Лига героев 2026
-        real_competitions = [
-            {
-                'name': 'Wings for Life World Run Moscow 2026',
-                'date': '2026-05-03',  # Традиционно начало мая, глобальный старт
-                'city': 'Москва',
-                'location': 'Крылатское',
-                'distances': json.dumps([0]),  # Бег до момента пока тебя не догонит машина
-                'type': 'забег',
-                'description': 'Глобальный благотворительный забег для исследований спинного мозга. Все участники стартуют одновременно по всему миру.',
-                'official_url': 'https://www.wingsforlifeworldrun.com/ru',
-                'organizer': 'Wings for Life',
-                'source_url': 'https://www.wingsforlifeworldrun.com'
-            },
-            {
-                'name': 'Гонка героев - Зима',
-                'date': '2025-12-14',
-                'city': 'Москва',
-                'location': 'Парк Патриот',
-                'distances': json.dumps([13, 5, 3]),
-                'type': 'забег',
-                'description': 'Зимняя гонка с препятствиями. Снег, грязь и экстрим!',
-                'official_url': 'https://ligastarshev.ru',
-                'organizer': 'Лига героев',
-                'source_url': 'https://ligastarshev.ru'
-            },
-            {
-                'name': 'Гонка героев - Весна 2026',
-                'date': '2026-06-06',
-                'city': 'Москва',
-                'location': 'Парк Патриот',
-                'distances': json.dumps([13, 5, 3]),
-                'type': 'забег',
-                'description': 'Гонка с препятствиями в стиле OCR. Более 30 препятствий на трассе.',
-                'official_url': 'https://ligastarshev.ru',
-                'organizer': 'Лига героев',
-                'source_url': 'https://ligastarshev.ru'
-            },
-            {
-                'name': 'Гонка героев - Лето 2026',
-                'date': '2026-08-01',
-                'city': 'Санкт-Петербург',
-                'location': 'Парк 300-летия',
-                'distances': json.dumps([13, 5, 3]),
-                'type': 'забег',
-                'description': 'Летний этап гонки с препятствиями в Санкт-Петербурге.',
-                'official_url': 'https://ligastarshev.ru',
-                'organizer': 'Лига героев',
-                'source_url': 'https://ligastarshev.ru'
-            }
-        ]
-
-        for comp_data in real_competitions:
-            # Проверяем что дата в будущем
-            comp_date = datetime.strptime(comp_data['date'], '%Y-%m-%d').date()
-            if comp_date >= today:
-                comp_data['is_official'] = 1
-                comp_data['registration_status'] = 'open'
-                comp_data['status'] = 'upcoming'
-                comp_data['country'] = 'Россия'
-                competitions.append(comp_data)
-
-        logger.info(f"Found {len(competitions)} competitions from ligastarshev.ru")
-        return competitions
-
-
-class FruitZabegParser(CompetitionsParser):
-    """
-    Парсер для fruitzabeg.ru (Фруктовые забеги)
-    Использует реальные данные известных развлекательных забегов
-    """
-
-    BASE_URL = "https://fruitzabeg.ru"
-
-    async def parse(self) -> List[Dict[str, Any]]:
-        """Парсить соревнования с fruitzabeg.ru"""
-        logger.info("Parsing competitions from fruitzabeg.ru...")
-
-        competitions = []
-        today = datetime.now().date()
-
-        # Реальные предстоящие фруктовые забеги 2026
-        # Серия развлекательных забегов с фруктами на финише
-        real_competitions = [
-            {
-                'name': 'Мандариновый забег',
-                'date': '2025-11-23',
-                'city': 'Москва',
-                'location': 'ВДНХ',
-                'distances': json.dumps([10, 5, 3]),
-                'type': 'забег',
-                'description': 'Предновогодний забег с мандаринами! Создаём праздничное настроение вместе.',
-                'official_url': 'https://fruitzabeg.ru/mandarin',
-                'organizer': 'Фруктовые забеги',
-                'source_url': 'https://fruitzabeg.ru'
-            },
-            {
-                'name': 'Клубничный забег 2026',
-                'date': '2026-06-14',  # Традиционно середина июня, сезон клубники
-                'city': 'Москва',
-                'location': 'Коломенское',
-                'distances': json.dumps([10, 5, 3]),
-                'type': 'забег',
-                'description': 'Веселый летний забег с клубникой на финише! Идеально для семейного участия.',
-                'official_url': 'https://fruitzabeg.ru/strawberry',
-                'organizer': 'Фруктовые забеги',
-                'source_url': 'https://fruitzabeg.ru'
-            },
-            {
-                'name': 'Малиновый забег 2026',
-                'date': '2026-07-19',
-                'city': 'Санкт-Петербург',
-                'location': 'Елагин остров',
-                'distances': json.dumps([10, 5]),
-                'type': 'забег',
-                'description': 'Летний забег в Санкт-Петербурге. Малина и хорошее настроение на финише!',
-                'official_url': 'https://fruitzabeg.ru/raspberry',
-                'organizer': 'Фруктовые забеги',
-                'source_url': 'https://fruitzabeg.ru'
-            },
-            {
-                'name': 'Арбузный забег 2026',
-                'date': '2026-08-09',  # Середина лета, сезон арбузов
-                'city': 'Москва',
-                'location': 'Парк Горького',
-                'distances': json.dumps([10, 5, 2]),
-                'type': 'забег',
-                'description': 'Самый вкусный забег лета! Освежающие арбузы на финише в жаркий день.',
-                'official_url': 'https://fruitzabeg.ru/watermelon',
-                'organizer': 'Фруктовые забеги',
-                'source_url': 'https://fruitzabeg.ru'
-            }
-        ]
-
-        for comp_data in real_competitions:
-            # Проверяем что дата в будущем
-            comp_date = datetime.strptime(comp_data['date'], '%Y-%m-%d').date()
-            if comp_date >= today:
-                comp_data['is_official'] = 1
-                comp_data['registration_status'] = 'open'
-                comp_data['status'] = 'upcoming'
-                comp_data['country'] = 'Россия'
-                competitions.append(comp_data)
-
-        logger.info(f"Found {len(competitions)} competitions from fruitzabeg.ru")
-        return competitions
-
-
-async def parse_all_sources() -> List[Dict[str, Any]]:
-    """
-    Парсить все источники соревнований
+    Args:
+        city: Название города (опционально)
+        year: Год (опционально)
+        month: Месяц (опционально)
 
     Returns:
-        Список всех найденных соревнований
+        Список соревнований в формате БД
     """
-    logger.info("Starting to parse all competition sources...")
+    api = RussiaRunningAPI()
 
-    parsers = [
-        ProbegOrgParser(),
-        RussiaRunningParser(),
-        TimermanParser(),
-        LigaStarshevParser(),
-        FruitZabegParser()
-    ]
+    if city and year and month:
+        return await api.load_events_by_city_and_month(city, year, month)
+    elif city:
+        return await api.load_events_by_city(city)
+    else:
+        # Загружаем все события
+        events = await api.fetch_events()
+        competitions = []
+        today = datetime.now().date()
 
-    all_competitions = []
+        for event in events:
+            if not event.get('date'):
+                continue
 
-    # Запускаем все парсеры параллельно
-    tasks = [parser.parse() for parser in parsers]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                event_date = datetime.strptime(event['date'], '%Y-%m-%d').date()
+                if event_date < today:
+                    continue
+            except:
+                continue
 
-    for result in results:
-        if isinstance(result, Exception):
-            logger.error(f"Parser error: {result}")
-        elif isinstance(result, list):
-            all_competitions.extend(result)
+            competition = api.convert_to_competition_format(event)
+            competitions.append(competition)
 
-    logger.info(f"Total competitions parsed: {len(all_competitions)}")
-    return all_competitions
+        return competitions
 
 
-async def update_competitions_database():
+async def update_competitions_database_from_api(
+    city: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None
+) -> Dict[str, int]:
     """
-    Обновить базу данных соревнований из всех источников
-    """
-    logger.info("Updating competitions database...")
+    Обновить базу данных соревнований из Russia Running API
 
-    # Парсим все источники
-    competitions = await parse_all_sources()
+    Args:
+        city: Город для фильтрации (опционально)
+        year: Год для фильтрации (опционально)
+        month: Месяц для фильтрации (опционально)
+
+    Returns:
+        Словарь с результатами: {'added': int, 'skipped': int, 'total': int}
+    """
+    logger.info("Updating competitions database from Russia Running API...")
+
+    competitions = await load_competitions_from_api(city, year, month)
 
     added_count = 0
     skipped_count = 0
 
     for comp_data in competitions:
         try:
-            # Проверяем, нет ли уже такого соревнования
-            # (по названию и дате)
-            # Для простоты просто добавляем, в реальности нужна проверка дубликатов
+            # Проверяем есть ли уже такое соревнование
+            # TODO: Добавить проверку дубликатов по названию и дате
 
             comp_id = await add_competition(comp_data)
             added_count += 1
@@ -515,6 +286,17 @@ async def update_competitions_database():
     }
 
 
+# Для обратной совместимости со старым кодом
+async def parse_all_sources() -> List[Dict[str, Any]]:
+    """
+    Загрузить соревнования (для обратной совместимости)
+
+    Returns:
+        Список соревнований
+    """
+    return await load_competitions_from_api()
+
+
 if __name__ == "__main__":
     # Настройка логирования
     logging.basicConfig(
@@ -522,6 +304,21 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    # Запуск обновления
-    result = asyncio.run(update_competitions_database())
-    print(f"\nResults: {result['added']} competitions added, {result['skipped']} skipped")
+    # Пример использования
+    async def test():
+        # Тест 1: Загрузка всех соревнований
+        print("\n=== Загрузка всех соревнований ===")
+        result = await update_competitions_database_from_api()
+        print(f"Результат: {result['added']} добавлено, {result['skipped']} пропущено")
+
+        # Тест 2: Загрузка соревнований для Москвы
+        print("\n=== Загрузка соревнований для Москвы ===")
+        result = await update_competitions_database_from_api(city="Москва")
+        print(f"Результат: {result['added']} добавлено, {result['skipped']} пропущено")
+
+        # Тест 3: Загрузка соревнований для Москвы на май 2026
+        print("\n=== Загрузка соревнований для Москвы на май 2026 ===")
+        result = await update_competitions_database_from_api(city="Москва", year=2026, month=5)
+        print(f"Результат: {result['added']} добавлено, {result['skipped']} пропущено")
+
+    asyncio.run(test())

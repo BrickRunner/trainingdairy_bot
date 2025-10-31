@@ -100,9 +100,11 @@ class CompetitionStates(StatesGroup):
     # Создание пользовательского соревнования
     waiting_for_comp_name = State()             # Название
     waiting_for_comp_date = State()             # Дата
-    waiting_for_comp_city = State()             # Город
-    waiting_for_comp_distances = State()        # Дистанции
-    waiting_for_comp_url = State()              # URL сайта
+    waiting_for_comp_type = State()             # Вид спорта (бег, плавание, вело, триатлон)
+    waiting_for_comp_distance = State()         # Дистанция
+    waiting_for_comp_target = State()           # Целевое время
+    waiting_for_comp_city = State()             # Город (опционально)
+    waiting_for_comp_url = State()              # URL сайта (опционально)
 
 
 class CoachStates(StatesGroup):
@@ -110,3 +112,22 @@ class CoachStates(StatesGroup):
 
     # Добавление тренера (со стороны ученика)
     waiting_for_coach_code = State()            # Ввод кода тренера
+
+    # Изменение псевдонима ученика
+    waiting_for_nickname = State()              # Ввод псевдонима
+
+    # Добавление комментария к тренировке
+    waiting_for_comment = State()               # Ввод комментария
+
+    # Добавление тренировки ученику (от тренера)
+    waiting_for_student_training_type = State()     # Выбор типа тренировки
+    waiting_for_student_training_date = State()     # Дата тренировки
+    waiting_for_student_training_time = State()     # Время начала
+    waiting_for_student_training_duration = State() # Продолжительность
+    waiting_for_student_training_distance = State() # Дистанция
+    waiting_for_student_training_exercises = State()# Упражнения (силовая)
+    waiting_for_student_training_intervals = State()# Интервалы
+    waiting_for_student_training_avg_pulse = State()# Средний пульс
+    waiting_for_student_training_max_pulse = State()# Максимальный пульс
+    waiting_for_student_training_comment = State()  # Комментарий тренера
+    waiting_for_student_training_fatigue = State()  # Уровень усилий
