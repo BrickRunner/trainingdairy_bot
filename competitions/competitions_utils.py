@@ -34,13 +34,17 @@ async def format_competition_distance(distance_km: float, user_id: int) -> str:
         user_id: ID пользователя
 
     Returns:
-        Отформатированная строка (например: "42.2 км" или "26.2 мили")
+        Отформатированная строка (например: "42.2 км", "800 м" или "26.2 мили", "880 ярдов")
     """
     distance_unit = await get_user_distance_unit(user_id)
 
     # Специальные названия дистанций
     if distance_unit == 'км':
-        if 42.0 <= distance_km <= 42.3:
+        # Для дистанций менее 1 км показываем в метрах
+        if distance_km < 1.0:
+            distance_meters = int(distance_km * 1000)
+            return f"{distance_meters} м"
+        elif 42.0 <= distance_km <= 42.3:
             return "Марафон (42.2 км)"
         elif 21.0 <= distance_km <= 21.2:
             return "Полумарафон (21.1 км)"
@@ -52,7 +56,11 @@ async def format_competition_distance(distance_km: float, user_id: int) -> str:
             return f"{distance_km:.1f} км"
     else:
         distance_miles = km_to_miles(distance_km)
-        if 42.0 <= distance_km <= 42.3:
+        # Для дистанций менее 1 мили показываем в ярдах
+        if distance_miles < 1.0:
+            distance_yards = int(distance_miles * 1760)
+            return f"{distance_yards} ярдов"
+        elif 42.0 <= distance_km <= 42.3:
             return f"Марафон ({distance_miles:.1f} миль)"
         elif 21.0 <= distance_km <= 21.2:
             return f"Полумарафон ({distance_miles:.1f} миль)"

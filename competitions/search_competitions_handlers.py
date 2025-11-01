@@ -204,9 +204,10 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
                 except Exception as e:
                     logger.warning(f"Failed to add competition {comp_data.get('name', 'unknown')}: {e}")
 
-            if added > 0:
-                # Ищем снова
-                competitions = await search_competitions_by_city_and_month(city, period)
+            logger.info(f"Added {added} new competitions out of {len(api_comps)} loaded")
+
+            # Ищем снова (даже если ничего не добавлено, соревнования могли быть добавлены ранее)
+            competitions = await search_competitions_by_city_and_month(city, period)
 
         except Exception as e:
             logger.error(f"Error loading competitions from parsers: {e}", exc_info=True)

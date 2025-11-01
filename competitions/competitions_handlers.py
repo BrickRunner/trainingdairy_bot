@@ -32,6 +32,7 @@ from competitions.competitions_queries import (
     get_user_personal_records
 )
 from bot.keyboards import get_main_menu_keyboard
+from utils.time_formatter import normalize_time
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -82,17 +83,25 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
         text = (
             "📅 <b>Предстоящие соревнования</b>\n\n"
             "К сожалению, в базе данных пока нет предстоящих соревнований.\n\n"
-            "💡 Соревнования будут автоматически загружены из источников:\n"
-            "• Беговое сообщество\n"
-            "• Russia Running\n"
-            "• Лига героев\n"
-            "• Фруктовые забеги\n"
-            "• Timerman\n\n"
-            "Вы также можете найти соревнование вручную."
+            "💡 Соревнования загружаются из Russia Running API.\n\n"
+            "Вы можете найти соревнование по городу и дате."
         )
+
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        builder = InlineKeyboardBuilder()
+        builder.row(
+            InlineKeyboardButton(text="🔍 Поиск по городу и дате", callback_data="comp:search")
+        )
+        builder.row(
+            InlineKeyboardButton(text="🔍 Найти вручную", callback_data="comp:create_custom")
+        )
+        builder.row(
+            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
+        )
+
         await callback.message.edit_text(
             text,
-            reply_markup=get_competitions_main_menu(),
+            reply_markup=builder.as_markup(),
             parse_mode="HTML"
         )
     else:
@@ -135,6 +144,9 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
                 )
             )
 
+        builder.row(
+            InlineKeyboardButton(text="🔍 Поиск по городу и дате", callback_data="comp:search")
+        )
         builder.row(
             InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
         )
@@ -425,9 +437,17 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext):
     else:
         text = "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
 
+        # Импортируем утилиты для форматирования с учетом настроек пользователя
+        from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+
         for i, comp in enumerate(competitions[:10], 1):
             time_until = format_time_until_competition(comp['date'])
-            dist_str = format_competition_distance(comp['distance'])
+
+            # Форматируем дистанцию с учетом единиц измерения пользователя
+            dist_str = await format_dist_with_units(comp['distance'], user_id)
+
+            # Форматируем дату с учетом настроек пользователя
+            date_str = await format_competition_date(comp['date'], user_id)
 
             # Форматируем целевое время
             target_time = comp.get('target_time')
@@ -439,7 +459,7 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext):
             text += (
                 f"{i}. <b>{comp['name']}</b>\n"
                 f"   📏 {dist_str}\n"
-                f"   📅 {comp['date']} ({time_until})\n"
+                f"   📅 {date_str} ({time_until})\n"
                 f"   🎯 Цель: {target_time_str}\n\n"
             )
 
@@ -497,9 +517,12 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Регистрация не найдена", show_alert=True)
         return
 
-    # Форматируем информацию
+    # Форматируем информацию с учетом настроек пользователя
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+
     time_until = format_time_until_competition(competition['date'])
-    dist_str = format_competition_distance(distance)
+    dist_str = await format_dist_with_units(distance, user_id)
+    date_str = await format_competition_date(competition['date'], user_id)
 
     # Форматируем целевое время
     target_time = registration.get('target_time')
@@ -511,7 +534,7 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
     text = (
         f"🏃 <b>{competition['name']}</b>\n\n"
         f"📍 Город: {competition.get('city', 'не указан')}\n"
-        f"📅 Дата: {competition['date']}\n"
+        f"📅 Дата: {date_str}\n"
         f"⏰ До старта: {time_until}\n\n"
         f"📏 Ваша дистанция: {dist_str}\n"
         f"🎯 Целевое время: {target_time_str}\n\n"
@@ -563,53 +586,75 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "comp:my_results")
 async def show_my_results(callback: CallbackQuery, state: FSMContext):
-    """Показать личные рекорды пользователя"""
+    """Показать личные рекорды и статистику пользователя"""
     user_id = callback.from_user.id
 
+    # Получаем статистику
+    from competitions.statistics_queries import get_user_competition_stats
+    stats = await get_user_competition_stats(user_id)
+
+    # Получаем личные рекорды
     records = await get_user_personal_records(user_id)
 
-    if not records:
+    # Получаем завершенные соревнования
+    finished_comps = await get_user_competitions(user_id, status_filter='finished')
+
+    if not records and not finished_comps:
         text = (
             "🏅 <b>МОИ РЕЗУЛЬТАТЫ</b>\n\n"
             "У вас пока нет личных рекордов.\n\n"
             "Добавьте результаты своих соревнований, чтобы отслеживать прогресс!"
         )
     else:
-        text = "🏅 <b>ЛИЧНЫЕ РЕКОРДЫ</b>\n\n"
+        text = "🏅 <b>МОИ РЕЗУЛЬТАТЫ</b>\n\n"
 
-        # Сортируем по дистанции
-        sorted_records = sorted(records.items(), key=lambda x: x[0])
+        # Добавляем краткую статистику
+        if stats and stats['total_competitions'] > 0:
+            text += "📊 <b>СТАТИСТИКА</b>\n"
+            text += f"Соревнований: {stats['total_completed']}"
 
-        for distance, record in sorted_records:
-            dist_name = format_competition_distance(distance)
-            text += f"🏃 <b>{dist_name}</b>\n"
-            text += f"   ⏱️ {record['best_time']}\n"
-            text += f"   📅 {record['date']}\n"
-            if record.get('competition_name'):
-                text += f"   🏆 {record['competition_name']}\n"
-            text += "\n"
+            if stats.get('total_distance_km', 0) > 0:
+                text += f" • Дистанция: {stats['total_distance_km']:.1f} км"
+            text += "\n\n"
 
-    # Получаем завершенные соревнования
-    finished_comps = await get_user_competitions(user_id, status_filter='finished')
+        # Личные рекорды
+        if records:
+            text += "🏆 <b>ЛИЧНЫЕ РЕКОРДЫ</b>\n\n"
 
-    if finished_comps:
-        text += "\n━━━━━━━━━━━━━━━━━━━\n\n"
-        text += "🏁 <b>ЗАВЕРШЕННЫЕ СОРЕВНОВАНИЯ</b>\n\n"
+            # Сортируем по дистанции
+            sorted_records = sorted(records.items(), key=lambda x: x[0])
 
-        for i, comp in enumerate(finished_comps[:5], 1):
-            dist_str = format_competition_distance(comp['distance'])
-
-            text += f"{i}. <b>{comp['name']}</b>\n"
-            text += f"   📏 {dist_str}\n"
-            text += f"   📅 {comp['date']}\n"
-
-            if comp.get('finish_time'):
-                text += f"   ⏱️ Результат: {comp['finish_time']}\n"
-
-            if comp.get('place_overall'):
-                text += f"   🏆 Место: {comp['place_overall']}\n"
+            for distance, record in sorted_records:
+                dist_name = format_competition_distance(distance)
+                text += f"🏃 <b>{dist_name}</b>: {record['best_time']}"
+                if record.get('competition_name'):
+                    comp_name_short = record['competition_name'][:20] + "..." if len(record['competition_name']) > 20 else record['competition_name']
+                    text += f" ({comp_name_short})"
+                text += "\n"
 
             text += "\n"
+
+        # Завершенные соревнования
+        if finished_comps:
+            text += "🏁 <b>ЗАВЕРШЕННЫЕ СОРЕВНОВАНИЯ</b>\n\n"
+
+            for i, comp in enumerate(finished_comps[:5], 1):
+                dist_str = format_competition_distance(comp['distance'])
+
+                text += f"{i}. <b>{comp['name']}</b>\n"
+                text += f"   📏 {dist_str} • 📅 {comp['date']}\n"
+
+                if comp.get('finish_time'):
+                    normalized_time = normalize_time(comp['finish_time'])
+                    result_line = f"   ⏱️ {normalized_time}"
+                    if comp.get('place_overall'):
+                        result_line += f" • 🏆 {comp['place_overall']} место"
+                    text += result_line + "\n"
+
+                text += "\n"
+
+            if len(finished_comps) > 5:
+                text += f"<i>... и ещё {len(finished_comps) - 5} соревнований</i>\n"
 
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
@@ -624,6 +669,10 @@ async def show_my_results(callback: CallbackQuery, state: FSMContext):
                 )
             )
 
+    # Кнопка добавления прошедшего соревнования
+    builder.row(
+        InlineKeyboardButton(text="➕ Добавить прошедшее соревнование", callback_data="comp:add_past")
+    )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
     )
@@ -634,6 +683,192 @@ async def show_my_results(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML"
     )
     await callback.answer()
+
+
+# ========== ДОБАВЛЕНИЕ РЕЗУЛЬТАТА ==========
+
+@router.callback_query(F.data.startswith("comp:add_result:"))
+async def start_add_result(callback: CallbackQuery, state: FSMContext):
+    """Начать процесс добавления результата"""
+    competition_id = int(callback.data.split(":")[-1])
+    user_id = callback.message.chat.id
+
+    # Получаем информацию о соревновании
+    comp = await get_competition(competition_id)
+    if not comp:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    # Сохраняем ID соревнования в состоянии
+    await state.update_data(result_competition_id=competition_id)
+
+    # Запрашиваем время
+    text = (
+        f"🏆 <b>{comp['name']}</b>\n\n"
+        "Введите ваше финишное время в формате ЧЧ:ММ:СС или ММ:СС\n"
+        "Например: 1:23:45 или 42:30"
+    )
+
+    await callback.message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(CompetitionStates.waiting_for_finish_time)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_finish_time)
+async def process_finish_time(message: Message, state: FSMContext):
+    """Обработать финишное время"""
+    from utils.time_formatter import validate_time_format
+
+    if message.text == "❌ Отмена":
+        await message.answer(
+            "❌ Добавление результата отменено",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await state.clear()
+        return
+
+    time_text = message.text.strip()
+
+    # Валидация формата
+    if not validate_time_format(time_text):
+        await message.answer(
+            "❌ Некорректный формат времени. Используйте формат ЧЧ:ММ:СС или ММ:СС\n"
+            "Например: 1:23:45 или 42:30"
+        )
+        return
+
+    # Нормализуем и сохраняем время
+    normalized_time = normalize_time(time_text)
+    await state.update_data(result_finish_time=normalized_time)
+
+    # Запрашиваем место в общем зачёте
+    await message.answer(
+        "Введите ваше место в общем зачёте (число)\n"
+        "Или нажмите \"Пропустить\" если не хотите указывать",
+        reply_markup=get_result_input_keyboard()
+    )
+    await state.set_state(CompetitionStates.waiting_for_place_overall)
+
+
+@router.message(CompetitionStates.waiting_for_place_overall)
+async def process_place_overall(message: Message, state: FSMContext):
+    """Обработать место в общем зачёте"""
+
+    if message.text == "❌ Отмена":
+        await message.answer(
+            "❌ Добавление результата отменено",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await state.clear()
+        return
+
+    if message.text == "⏭️ Пропустить":
+        await state.update_data(result_place_overall=None)
+    else:
+        try:
+            place = int(message.text.strip())
+            if place <= 0:
+                await message.answer("❌ Место должно быть положительным числом")
+                return
+            await state.update_data(result_place_overall=place)
+        except ValueError:
+            await message.answer(
+                "❌ Некорректное значение. Введите число или нажмите \"Пропустить\""
+            )
+            return
+
+    # Запрашиваем место в категории
+    await message.answer(
+        "Введите ваше место в возрастной категории (число)\n"
+        "Или нажмите \"Пропустить\" если не хотите указывать",
+        reply_markup=get_result_input_keyboard()
+    )
+    await state.set_state(CompetitionStates.waiting_for_place_age)
+
+
+@router.message(CompetitionStates.waiting_for_place_age)
+async def process_place_age_category(message: Message, state: FSMContext):
+    """Обработать место в возрастной категории"""
+
+    if message.text == "❌ Отмена":
+        await message.answer(
+            "❌ Добавление результата отменено",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await state.clear()
+        return
+
+    if message.text == "⏭️ Пропустить":
+        await state.update_data(result_place_age=None)
+    else:
+        try:
+            place = int(message.text.strip())
+            if place <= 0:
+                await message.answer("❌ Место должно быть положительным числом")
+                return
+            await state.update_data(result_place_age=place)
+        except ValueError:
+            await message.answer(
+                "❌ Некорректное значение. Введите число или нажмите \"Пропустить\""
+            )
+            return
+
+    # Сохраняем результат
+    data = await state.get_data()
+    user_id = message.from_user.id
+    competition_id = data['result_competition_id']
+
+    # Получаем дистанцию из регистрации
+    from competitions.competitions_queries import get_user_competition_registration
+    registration = await get_user_competition_registration(user_id, competition_id)
+    if not registration:
+        await message.answer(
+            "❌ Не найдена регистрация на это соревнование",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await state.clear()
+        return
+
+    distance = registration['distance']
+
+    # Добавляем результат
+    success = await add_competition_result(
+        user_id=user_id,
+        competition_id=competition_id,
+        distance=distance,
+        finish_time=data['result_finish_time'],
+        place_overall=data.get('result_place_overall'),
+        place_age_category=data.get('result_place_age')
+    )
+
+    if success:
+        comp = await get_competition(competition_id)
+        text = (
+            "✅ <b>РЕЗУЛЬТАТ ДОБАВЛЕН!</b>\n\n"
+            f"🏆 <b>{comp['name']}</b>\n"
+            f"⏱️ Время: {data['result_finish_time']}\n"
+        )
+        if data.get('result_place_overall'):
+            text += f"🏆 Место общее: {data['result_place_overall']}\n"
+        if data.get('result_place_age'):
+            text += f"🏆 Место в категории: {data['result_place_age']}\n"
+
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ Ошибка при добавлении результата",
+            reply_markup=get_main_menu_keyboard()
+        )
+
+    await state.clear()
 
 
 # Импортируем InlineKeyboardButton для использования в коде

@@ -7,6 +7,7 @@ import os
 import json
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
+from utils.time_formatter import normalize_time
 
 # Путь к базе данных
 DB_PATH = os.getenv('DB_PATH', 'bot_data.db')
@@ -421,6 +422,9 @@ async def add_competition_result(
     Returns:
         True если добавление прошло успешно
     """
+    # Нормализуем время перед сохранением
+    normalized_time = normalize_time(finish_time)
+
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             """
@@ -436,7 +440,7 @@ async def add_competition_result(
             WHERE user_id = ? AND competition_id = ? AND distance = ?
             """,
             (
-                finish_time, place_overall, place_age_category, age_category,
+                normalized_time, place_overall, place_age_category, age_category,
                 result_comment, result_photo, user_id, competition_id, distance
             )
         )
@@ -444,7 +448,7 @@ async def add_competition_result(
 
         # Проверяем и обновляем личный рекорд
         if cursor.rowcount > 0:
-            await update_personal_record(user_id, distance, finish_time, competition_id)
+            await update_personal_record(user_id, distance, normalized_time, competition_id)
 
         return cursor.rowcount > 0
 
@@ -466,6 +470,30 @@ async def get_competition_participants_count(competition_id: int) -> int:
         ) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else 0
+
+
+async def get_user_competition_registration(user_id: int, competition_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Получить регистрацию пользователя на соревнование
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования
+
+    Returns:
+        Словарь с данными регистрации или None
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT * FROM competition_participants
+            WHERE user_id = ? AND competition_id = ?
+            """,
+            (user_id, competition_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
 
 
 # ========== ЛИЧНЫЕ РЕКОРДЫ ==========

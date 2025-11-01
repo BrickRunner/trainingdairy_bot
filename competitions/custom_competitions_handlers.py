@@ -32,6 +32,7 @@ from competitions.competitions_utils import (
     get_distance_unit_name,
     determine_competition_type
 )
+from utils.time_formatter import normalize_time, validate_time_format
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -529,25 +530,29 @@ async def show_competition_statistics(callback: CallbackQuery):
         if stats['total_marathons'] > 0:
             text += f"🏃 <b>Марафоны (42.2 км):</b> {stats['total_marathons']}\n"
             if stats.get('best_marathon_time'):
-                text += f"   ⏱️ Лучшее время: {stats['best_marathon_time']}\n"
+                normalized_time = normalize_time(stats['best_marathon_time'])
+                text += f"   ⏱️ Лучшее время: {normalized_time}\n"
             text += "\n"
 
         if stats['total_half_marathons'] > 0:
             text += f"🏃 <b>Полумарафоны (21.1 км):</b> {stats['total_half_marathons']}\n"
             if stats.get('best_half_marathon_time'):
-                text += f"   ⏱️ Лучшее время: {stats['best_half_marathon_time']}\n"
+                normalized_time = normalize_time(stats['best_half_marathon_time'])
+                text += f"   ⏱️ Лучшее время: {normalized_time}\n"
             text += "\n"
 
         if stats['total_10k'] > 0:
             text += f"🏃 <b>10 км:</b> {stats['total_10k']}\n"
             if stats.get('best_10k_time'):
-                text += f"   ⏱️ Лучшее время: {stats['best_10k_time']}\n"
+                normalized_time = normalize_time(stats['best_10k_time'])
+                text += f"   ⏱️ Лучшее время: {normalized_time}\n"
             text += "\n"
 
         if stats['total_5k'] > 0:
             text += f"🏃 <b>5 км:</b> {stats['total_5k']}\n"
             if stats.get('best_5k_time'):
-                text += f"   ⏱️ Лучшее время: {stats['best_5k_time']}\n"
+                normalized_time = normalize_time(stats['best_5k_time'])
+                text += f"   ⏱️ Лучшее время: {normalized_time}\n"
             text += "\n"
 
         if stats.get('total_distance_km', 0) > 0:
@@ -559,3 +564,334 @@ async def show_competition_statistics(callback: CallbackQuery):
 
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
+
+
+# ========== ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ ==========
+
+@router.callback_query(F.data == "comp:add_past")
+async def start_add_past_competition(callback: CallbackQuery, state: FSMContext):
+    """Начать добавление прошедшего соревнования"""
+
+    text = (
+        "🏁 <b>ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ</b>\n\n"
+        "Вы можете добавить соревнование, в котором уже участвовали.\n\n"
+        "📝 <b>Шаг 1 из 6</b>\n\n"
+        "Введите <b>название</b> соревнования:\n"
+        "<i>Например: Московский марафон 2024</i>"
+    )
+
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await state.set_state(CompetitionStates.waiting_for_past_comp_name)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_past_comp_name)
+async def process_past_comp_name(message: Message, state: FSMContext):
+    """Обработать название прошедшего соревнования"""
+
+    comp_name = message.text.strip()
+
+    if not comp_name or len(comp_name) < 3:
+        await message.answer(
+            "❌ Название слишком короткое. Введите название минимум из 3 символов."
+        )
+        return
+
+    # Сохраняем название
+    await state.update_data(comp_name=comp_name, is_past_competition=True)
+
+    text = (
+        f"✅ Название: <b>{comp_name}</b>\n\n"
+        f"📝 <b>Шаг 2 из 6</b>\n\n"
+        f"Введите <b>город</b>, где проходило соревнование:\n"
+        f"<i>Например: Москва, Санкт-Петербург, Казань</i>"
+    )
+
+    await message.answer(text, parse_mode="HTML")
+    await state.set_state(CompetitionStates.waiting_for_past_comp_city)
+
+
+@router.message(CompetitionStates.waiting_for_past_comp_city)
+async def process_past_comp_city(message: Message, state: FSMContext):
+    """Обработать город прошедшего соревнования"""
+
+    comp_city = message.text.strip()
+
+    if not comp_city or len(comp_city) < 2:
+        await message.answer(
+            "❌ Название города слишком короткое. Введите корректное название города."
+        )
+        return
+
+    # Сохраняем город
+    await state.update_data(comp_city=comp_city)
+
+    # Показываем календарь для выбора даты (без ограничения на прошлые даты)
+    calendar = CalendarKeyboard.create_calendar(
+        calendar_format=1,
+        current_date=datetime.now(),
+        callback_prefix="cal_past_comp"
+    )
+
+    text = (
+        f"✅ Город: <b>{comp_city}</b>\n\n"
+        f"📝 <b>Шаг 3 из 6</b>\n\n"
+        f"Выберите <b>дату</b> соревнования из календаря:"
+    )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=calendar)
+    await state.set_state(CompetitionStates.waiting_for_past_comp_date)
+
+
+# Обработчики календаря для выбора даты прошедшего соревнования
+@router.callback_query(F.data.startswith("cal_past_comp_1_select_"), CompetitionStates.waiting_for_past_comp_date)
+async def handle_past_comp_calendar_day_select(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора дня в календаре для прошедшего соревнования"""
+
+    parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_past_comp_", "cal_"))
+    selected_date = parsed.get("date")
+
+    if not selected_date:
+        await callback.answer("❌ Ошибка выбора даты", show_alert=True)
+        return
+
+    comp_date = selected_date.date()
+
+    # Для прошедших соревнований не проверяем, что дата в будущем
+    # Но проверяем, что дата не слишком далеко в прошлом (например, не более 10 лет)
+    years_ago = (date.today() - comp_date).days // 365
+    if years_ago > 10:
+        await callback.answer("❌ Дата не может быть более 10 лет назад!", show_alert=True)
+        return
+
+    # Проверяем, что дата не в будущем
+    if comp_date > date.today():
+        await callback.answer("❌ Для прошедших соревнований дата должна быть в прошлом!", show_alert=True)
+        return
+
+    # Сохраняем дату
+    await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
+
+    user_id = callback.from_user.id
+    formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
+
+    # Создаём клавиатуру с типами
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🏃 Бег", callback_data="pastcomptype:running"))
+    builder.row(InlineKeyboardButton(text="🏊 Плавание", callback_data="pastcomptype:swimming"))
+    builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="pastcomptype:cycling"))
+    builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="pastcomptype:triathlon"))
+    builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="pastcomptype:trail"))
+
+    text = (
+        f"✅ Дата: <b>{formatted_date}</b>\n\n"
+        f"📝 <b>Шаг 4 из 6</b>\n\n"
+        f"Выберите <b>вид спорта</b>:"
+    )
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await state.set_state(CompetitionStates.waiting_for_past_comp_type)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cal_past_comp_"), CompetitionStates.waiting_for_past_comp_date)
+async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: FSMContext):
+    """Обработка навигации по календарю для прошедшего соревнования"""
+
+    parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_past_comp_", "cal_"))
+
+    # Получаем текущую дату из callback или используем текущую
+    current_date = parsed.get("date")
+    if not current_date:
+        current_date = datetime.now()
+
+    action = parsed.get("action", "")
+    cal_format = parsed.get("format", 1)
+
+    # Обрабатываем навигацию (аналогично обычному календарю)
+    if action == "less":
+        if cal_format == 1:
+            current_date = current_date.replace(day=1)
+            if current_date.month == 1:
+                current_date = current_date.replace(year=current_date.year - 1, month=12)
+            else:
+                current_date = current_date.replace(month=current_date.month - 1)
+        elif cal_format == 2:
+            current_date = current_date.replace(year=current_date.year - 1)
+    elif action == "more":
+        if cal_format == 1:
+            current_date = current_date.replace(day=1)
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1)
+        elif cal_format == 2:
+            current_date = current_date.replace(year=current_date.year + 1)
+    elif action == "select_month":
+        cal_format = 2
+    elif action == "select_year":
+        cal_format = 3
+
+    # Создаём обновлённый календарь
+    calendar = CalendarKeyboard.create_calendar(
+        calendar_format=cal_format,
+        current_date=current_date,
+        callback_prefix="cal_past_comp"
+    )
+
+    await callback.message.edit_reply_markup(reply_markup=calendar)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pastcomptype:"))
+async def process_past_comp_type(callback: CallbackQuery, state: FSMContext):
+    """Обработать тип прошедшего соревнования"""
+
+    comp_type_map = {
+        "running": "бег",
+        "swimming": "плавание",
+        "cycling": "велоспорт",
+        "triathlon": "триатлон",
+        "trail": "трейл"
+    }
+
+    comp_type_key = callback.data.split(":")[1]
+    comp_type = comp_type_map.get(comp_type_key, "забег")
+
+    await state.update_data(comp_type=comp_type)
+
+    user_id = callback.from_user.id
+    distance_unit = await get_distance_unit_name(user_id)
+
+    text = (
+        f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
+        f"📝 <b>Шаг 5 из 6</b>\n\n"
+        f"Введите <b>дистанцию</b> в {distance_unit}:\n"
+        f"<i>Например: 42.195, 21.1, 10, 5</i>"
+    )
+
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await state.set_state(CompetitionStates.waiting_for_past_comp_distance)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_past_comp_distance)
+async def process_past_comp_distance(message: Message, state: FSMContext):
+    """Обработать дистанцию прошедшего соревнования"""
+
+    user_id = message.from_user.id
+    distance_km = await parse_user_distance_input(message.text, user_id)
+
+    if not distance_km or distance_km <= 0:
+        await message.answer(
+            "❌ Некорректная дистанция. Введите положительное число."
+        )
+        return
+
+    await state.update_data(comp_distance=distance_km)
+
+    # Для прошедших соревнований сразу запрашиваем результат
+    text = (
+        f"✅ Дистанция: <b>{await format_competition_distance(distance_km, user_id)}</b>\n\n"
+        f"📝 <b>Шаг 6 из 6</b>\n\n"
+        f"Введите <b>ваше время</b> (формат: ЧЧ:ММ:СС или ММ:СС):\n"
+        f"<i>Например: 01:45:30 или 45:30</i>\n\n"
+        f"<i>Можете пропустить, если не помните результат</i>"
+    )
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_comp_result"))
+
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await state.set_state(CompetitionStates.waiting_for_past_comp_result)
+
+
+@router.callback_query(F.data == "skip_past_comp_result")
+async def skip_past_comp_result(callback: CallbackQuery, state: FSMContext):
+    """Пропустить ввод результата"""
+    await finalize_past_competition(callback, state, has_result=False)
+
+
+@router.message(CompetitionStates.waiting_for_past_comp_result)
+async def process_past_comp_result(message: Message, state: FSMContext):
+    """Обработать результат прошедшего соревнования"""
+
+    time_text = message.text.strip()
+
+    # Валидация формата времени
+    if not validate_time_format(time_text):
+        await message.answer(
+            "❌ Некорректный формат времени. Используйте формат ЧЧ:ММ:СС или ММ:СС"
+        )
+        return
+
+    # Нормализуем время перед сохранением
+    normalized_time = normalize_time(time_text)
+    await state.update_data(finish_time=normalized_time)
+
+    # Создаём заглушку для callback
+    from types import SimpleNamespace
+    fake_callback = SimpleNamespace(
+        message=message,
+        answer=lambda *args, **kwargs: None
+    )
+
+    await finalize_past_competition(fake_callback, state, has_result=True)
+
+
+async def finalize_past_competition(callback, state: FSMContext, has_result: bool):
+    """Завершить добавление прошедшего соревнования"""
+
+    data = await state.get_data()
+
+    # Создаём соревнование в БД
+    comp_data = {
+        'name': data['comp_name'],
+        'date': data['comp_date'],
+        'city': data['comp_city'],
+        'country': 'Россия',
+        'type': data['comp_type'],
+        'distances': json.dumps([data['comp_distance']]),
+        'status': 'finished',  # Важно: статус "finished" для прошедших соревнований
+        'is_official': 0,  # Пользовательское соревнование
+        'organizer': 'Добавлено пользователем',
+        'description': 'Прошедшее соревнование, добавленное вручную'
+    }
+
+    try:
+        comp_id = await add_competition(comp_data)
+
+        # Регистрируем пользователя на это соревнование
+        user_id = callback.message.chat.id if hasattr(callback.message, 'chat') else callback.message.from_user.id
+        await register_for_competition(user_id, comp_id, data['comp_distance'])
+
+        # Если есть результат, добавляем его
+        if has_result and 'finish_time' in data:
+            await add_competition_result(user_id, comp_id, data['comp_distance'], data['finish_time'])
+
+        text = (
+            "✅ <b>ПРОШЕДШЕЕ СОРЕВНОВАНИЕ ДОБАВЛЕНО!</b>\n\n"
+            f"🏆 <b>{data['comp_name']}</b>\n"
+            f"📍 {data['comp_city']}\n"
+            f"📅 {data['comp_date']}\n"
+            f"📏 {data['comp_distance']} км\n"
+        )
+
+        if has_result:
+            text += f"⏱️ Результат: {data['finish_time']}\n"
+
+        text += "\n Соревнование добавлено в ваши результаты!"
+
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="🏅 Мои результаты", callback_data="comp:my_results"))
+        builder.row(InlineKeyboardButton(text="◀️ Главное меню", callback_data="comp:menu"))
+
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+    except Exception as e:
+        logger.error(f"Error adding past competition: {e}")
+        await callback.message.answer(
+            "❌ Ошибка при добавлении соревнования. Попробуйте снова."
+        )
+
+    await state.clear()

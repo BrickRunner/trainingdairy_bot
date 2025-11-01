@@ -104,100 +104,220 @@ class RussiaRunningAPI:
         today = datetime.now().date()
 
         test_competitions = [
+            # Ноябрь 2025
             {
-                'name': 'Московский марафон',
-                'date': (today + timedelta(days=90)).strftime('%Y-%m-%d'),
+                'name': 'Осенний забег Москва',
+                'date': (today + timedelta(days=2)).strftime('%Y-%m-%d'),
                 'city': 'Москва',
-                'location': 'Лужники',
-                'distances': [42.195, 21.1, 10, 5],
-                'type': 'марафон',
-                'description': 'Крупнейший марафон в России',
-                'url': 'https://moscowmarathon.org',
-                'organizer': 'Московский марафон',
+                'location': 'Парк Сокольники',
+                'distances': [10, 5],
+                'type': 'забег',
+                'description': 'Осенний городской забег',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
             {
-                'name': 'ЗаБег.РФ - Санкт-Петербург',
-                'date': (today + timedelta(days=60)).strftime('%Y-%m-%d'),
+                'name': 'Забег выходного дня СПб',
+                'date': (today + timedelta(days=3)).strftime('%Y-%m-%d'),
                 'city': 'Санкт-Петербург',
-                'location': 'Дворцовая площадь',
+                'location': 'Елагин остров',
+                'distances': [5, 10],
+                'type': 'забег',
+                'description': 'Воскресный забег в парке',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Декабрь 2025
+            {
+                'name': 'Зимний забег Москва',
+                'date': (today + timedelta(days=32)).strftime('%Y-%m-%d'),
+                'city': 'Москва',
+                'location': 'Парк Горького',
                 'distances': [10, 5, 3],
                 'type': 'забег',
-                'description': 'Массовый забег по центру Петербурга',
-                'url': 'https://zabeg.org',
-                'organizer': 'ЗаБег.РФ',
+                'description': 'Зимний городской забег',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
+            # Январь 2026
             {
-                'name': 'Rosa Run - Горный трейл',
-                'date': (today + timedelta(days=120)).strftime('%Y-%m-%d'),
-                'city': 'Сочи',
-                'location': 'Роза Хутор',
-                'distances': [25, 10],
-                'type': 'трейл',
-                'description': 'Горный трейл в горах Красной Поляны',
-                'url': 'https://rosarun.com',
-                'organizer': 'Rosa Run',
-                'registration_status': 'open'
-            },
-            {
-                'name': 'Забег "Белые ночи"',
-                'date': (today + timedelta(days=180)).strftime('%Y-%m-%d'),
-                'city': 'Санкт-Петербург',
-                'location': 'Набережная Невы',
+                'name': 'Новогодний полумарафон',
+                'date': (today + timedelta(days=62)).strftime('%Y-%m-%d'),
+                'city': 'Москва',
+                'location': 'Лужники',
                 'distances': [21.1, 10],
                 'type': 'полумарафон',
-                'description': 'Полумарафон в период белых ночей',
-                'url': 'https://whitenights.run',
-                'organizer': 'Белые ночи',
+                'description': 'Новогодний полумарафон',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
+            # Февраль 2026
             {
-                'name': 'Казанский марафон',
-                'date': (today + timedelta(days=75)).strftime('%Y-%m-%d'),
+                'name': 'Зимний марафон Казань',
+                'date': (today + timedelta(days=90)).strftime('%Y-%m-%d'),
                 'city': 'Казань',
                 'location': 'Кремль',
                 'distances': [42.195, 21.1, 10],
                 'type': 'марафон',
-                'description': 'Марафон по историческому центру Казани',
-                'url': 'https://kazanmarathon.org',
-                'organizer': 'Казанский марафон',
+                'description': 'Зимний марафон по центру Казани',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Март 2026
+            {
+                'name': 'Весенний забег Новосибирск',
+                'date': (today + timedelta(days=120)).strftime('%Y-%m-%d'),
+                'city': 'Новосибирск',
+                'location': 'Центр города',
+                'distances': [10, 5],
+                'type': 'забег',
+                'description': 'Весенний забег в Сибири',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Апрель 2026
+            {
+                'name': 'Весенний полумарафон СПб',
+                'date': (today + timedelta(days=150)).strftime('%Y-%m-%d'),
+                'city': 'Санкт-Петербург',
+                'location': 'Дворцовая площадь',
+                'distances': [21.1, 10, 5],
+                'type': 'полумарафон',
+                'description': 'Весенний полумарафон по центру Петербурга',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Май 2026
+            {
+                'name': 'Майский марафон Москва',
+                'date': (today + timedelta(days=180)).strftime('%Y-%m-%d'),
+                'city': 'Москва',
+                'location': 'Лужники',
+                'distances': [42.195, 21.1, 10, 5],
+                'type': 'марафон',
+                'description': 'Крупнейший весенний марафон',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
             {
                 'name': 'Уральский трейл',
-                'date': (today + timedelta(days=100)).strftime('%Y-%m-%d'),
+                'date': (today + timedelta(days=185)).strftime('%Y-%m-%d'),
                 'city': 'Екатеринбург',
                 'location': 'Уральские горы',
                 'distances': [50, 25, 10],
                 'type': 'трейл',
                 'description': 'Трейл по живописным Уральским горам',
-                'url': 'https://uraltrail.ru',
-                'organizer': 'Уральский трейл',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Июнь 2026
+            {
+                'name': 'Летний забег Сочи',
+                'date': (today + timedelta(days=210)).strftime('%Y-%m-%d'),
+                'city': 'Сочи',
+                'location': 'Набережная',
+                'distances': [10, 5],
+                'type': 'забег',
+                'description': 'Летний забег на море',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            {
+                'name': 'Белые ночи полумарафон',
+                'date': (today + timedelta(days=215)).strftime('%Y-%m-%d'),
+                'city': 'Санкт-Петербург',
+                'location': 'Набережная Невы',
+                'distances': [21.1, 10],
+                'type': 'полумарафон',
+                'description': 'Полумарафон в период белых ночей',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Июль 2026
+            {
+                'name': 'Летний марафон Москва',
+                'date': (today + timedelta(days=240)).strftime('%Y-%m-%d'),
+                'city': 'Москва',
+                'location': 'Центр города',
+                'distances': [42.195, 21.1, 10],
+                'type': 'марафон',
+                'description': 'Летний марафон по Москве',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Август 2026
+            {
+                'name': 'Августовский забег Казань',
+                'date': (today + timedelta(days=270)).strftime('%Y-%m-%d'),
+                'city': 'Казань',
+                'location': 'Парк Тысячелетия',
+                'distances': [10, 5, 3],
+                'type': 'забег',
+                'description': 'Летний забег в Казани',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Сентябрь 2026
+            {
+                'name': 'Московский осенний марафон',
+                'date': (today + timedelta(days=300)).strftime('%Y-%m-%d'),
+                'city': 'Москва',
+                'location': 'Лужники',
+                'distances': [42.195, 21.1, 10, 5],
+                'type': 'марафон',
+                'description': 'Главный осенний марафон России',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
             {
                 'name': 'Сибирский марафон',
-                'date': (today + timedelta(days=85)).strftime('%Y-%m-%d'),
+                'date': (today + timedelta(days=305)).strftime('%Y-%m-%d'),
                 'city': 'Новосибирск',
                 'location': 'Центр города',
                 'distances': [42.195, 21.1, 10, 5],
                 'type': 'марафон',
                 'description': 'Международный марафон в Сибири',
-                'url': 'https://sibmarathon.ru',
-                'organizer': 'Сибирский марафон',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
+                'registration_status': 'open'
+            },
+            # Октябрь 2026
+            {
+                'name': 'Осенний трейл Роза Хутор',
+                'date': (today + timedelta(days=330)).strftime('%Y-%m-%d'),
+                'city': 'Сочи',
+                'location': 'Роза Хутор',
+                'distances': [25, 10],
+                'type': 'трейл',
+                'description': 'Горный трейл в Красной Поляне',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
             {
-                'name': 'ЗаБег.РФ - Москва',
-                'date': (today + timedelta(days=45)).strftime('%Y-%m-%d'),
-                'city': 'Москва',
-                'location': 'Парк Горького',
+                'name': 'Забег по Питеру',
+                'date': (today + timedelta(days=335)).strftime('%Y-%m-%d'),
+                'city': 'Санкт-Петербург',
+                'location': 'Центр города',
                 'distances': [10, 5, 3],
                 'type': 'забег',
-                'description': 'Массовый городской забег',
-                'url': 'https://zabeg.org',
-                'organizer': 'ЗаБег.РФ',
+                'description': 'Осенний забег по Петербургу',
+                'url': 'https://russiarunning.com',
+                'organizer': 'Russia Running',
                 'registration_status': 'open'
             }
         ]
@@ -787,7 +907,7 @@ async def load_competitions_from_api(
     month: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
-    Загрузить соревнования из всех источников (Russia Running API, runc.run, reg.place)
+    Загрузить соревнования из Russia Running API
 
     Args:
         city: Название города (опционально)
@@ -799,7 +919,7 @@ async def load_competitions_from_api(
     """
     all_competitions = []
 
-    # Источник 1: Russia Running API
+    # Russia Running API (единственный источник)
     try:
         api = RussiaRunningAPI()
 
@@ -833,51 +953,9 @@ async def load_competitions_from_api(
     except Exception as e:
         logger.error(f"Failed to load from Russia Running API: {e}")
 
-    # Источник 2: runc.run
-    try:
-        runc_parser = RunCRunParser()
+    logger.info(f"Total competitions loaded: {len(all_competitions)}")
 
-        if city and year and month:
-            runc_comps = await runc_parser.load_by_city_and_month(city, year, month)
-        elif city:
-            runc_comps = await runc_parser.load_by_city(city)
-        else:
-            runc_comps = await runc_parser.fetch_competitions()
-
-        all_competitions.extend(runc_comps)
-        logger.info(f"Loaded {len(runc_comps)} competitions from runc.run")
-
-    except Exception as e:
-        logger.error(f"Failed to load from runc.run: {e}")
-
-    # Источник 3: reg.place
-    try:
-        regplace_parser = RegPlaceParser()
-
-        if city and year and month:
-            regplace_comps = await regplace_parser.load_by_city_and_month(city, year, month)
-        elif city:
-            regplace_comps = await regplace_parser.load_by_city(city)
-        else:
-            regplace_comps = await regplace_parser.fetch_competitions()
-
-        all_competitions.extend(regplace_comps)
-        logger.info(f"Loaded {len(regplace_comps)} competitions from reg.place")
-
-    except Exception as e:
-        logger.error(f"Failed to load from reg.place: {e}")
-
-    # Убираем дубликаты по названию и дате
-    unique_competitions = {}
-    for comp in all_competitions:
-        key = (comp['name'].lower(), comp['date'])
-        if key not in unique_competitions:
-            unique_competitions[key] = comp
-
-    final_list = list(unique_competitions.values())
-    logger.info(f"Total unique competitions loaded: {len(final_list)}")
-
-    return final_list
+    return all_competitions
 
 
 async def update_competitions_database_from_api(

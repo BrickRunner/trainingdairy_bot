@@ -6,6 +6,7 @@ import aiosqlite
 import os
 from typing import Optional, Dict, Any
 from datetime import datetime
+from utils.time_formatter import normalize_time
 
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
@@ -136,29 +137,33 @@ async def update_user_competition_stats(user_id: int):
                 # Марафон
                 total_marathons += 1
                 if finish_time:
-                    if best_marathon is None or time_to_seconds(finish_time) < time_to_seconds(best_marathon):
-                        best_marathon = finish_time
+                    normalized_time = normalize_time(finish_time)
+                    if best_marathon is None or time_to_seconds(normalized_time) < time_to_seconds(best_marathon):
+                        best_marathon = normalized_time
 
             elif 21.0 <= distance <= 21.2:
                 # Полумарафон
                 total_half_marathons += 1
                 if finish_time:
-                    if best_half_marathon is None or time_to_seconds(finish_time) < time_to_seconds(best_half_marathon):
-                        best_half_marathon = finish_time
+                    normalized_time = normalize_time(finish_time)
+                    if best_half_marathon is None or time_to_seconds(normalized_time) < time_to_seconds(best_half_marathon):
+                        best_half_marathon = normalized_time
 
             elif 9.5 <= distance <= 10.5:
                 # 10 км
                 total_10k += 1
                 if finish_time:
-                    if best_10k is None or time_to_seconds(finish_time) < time_to_seconds(best_10k):
-                        best_10k = finish_time
+                    normalized_time = normalize_time(finish_time)
+                    if best_10k is None or time_to_seconds(normalized_time) < time_to_seconds(best_10k):
+                        best_10k = normalized_time
 
             elif 4.5 <= distance <= 5.5:
                 # 5 км
                 total_5k += 1
                 if finish_time:
-                    if best_5k is None or time_to_seconds(finish_time) < time_to_seconds(best_5k):
-                        best_5k = finish_time
+                    normalized_time = normalize_time(finish_time)
+                    if best_5k is None or time_to_seconds(normalized_time) < time_to_seconds(best_5k):
+                        best_5k = normalized_time
 
         # Получаем общее количество соревнований (включая предстоящие)
         async with db.execute(

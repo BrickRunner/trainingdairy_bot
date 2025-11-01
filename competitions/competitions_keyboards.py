@@ -25,12 +25,6 @@ def get_competitions_main_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🏅 Мои результаты", callback_data="comp:my_results")
     )
     builder.row(
-        InlineKeyboardButton(text="📊 Статистика", callback_data="comp:statistics")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🔍 Поиск соревнований", callback_data="comp:search")
-    )
-    builder.row(
         InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
 
@@ -316,7 +310,7 @@ def get_result_input_keyboard() -> ReplyKeyboardMarkup:
 
 def format_competition_distance(distance: float) -> str:
     """
-    Форматировать дистанцию для отображения
+    Форматировать дистанцию для отображения (без учета настроек пользователя)
 
     Args:
         distance: Дистанция в км
@@ -324,7 +318,11 @@ def format_competition_distance(distance: float) -> str:
     Returns:
         Отформатированная строка
     """
-    if distance == 42.195:
+    # Для дистанций менее 1 км показываем в метрах
+    if distance < 1.0:
+        distance_meters = int(distance * 1000)
+        return f"{distance_meters} м"
+    elif distance == 42.195:
         return "Марафон (42.195 км)"
     elif distance == 21.1:
         return "Полумарафон (21.1 км)"

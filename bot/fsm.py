@@ -106,6 +106,14 @@ class CompetitionStates(StatesGroup):
     waiting_for_comp_city = State()             # Город (опционально)
     waiting_for_comp_url = State()              # URL сайта (опционально)
 
+    # Добавление прошедшего соревнования
+    waiting_for_past_comp_name = State()        # Название
+    waiting_for_past_comp_city = State()        # Город
+    waiting_for_past_comp_date = State()        # Дата (в прошлом)
+    waiting_for_past_comp_type = State()        # Вид спорта
+    waiting_for_past_comp_distance = State()    # Дистанция
+    waiting_for_past_comp_result = State()      # Результат (время)
+
 
 class CoachStates(StatesGroup):
     """Состояния для работы с тренерским разделом"""
