@@ -90,6 +90,7 @@ class CompetitionStates(StatesGroup):
     waiting_for_finish_time = State()           # Финишное время
     waiting_for_place_overall = State()         # Место в общем зачёте
     waiting_for_place_age = State()             # Место в возрастной категории
+    waiting_for_heart_rate = State()            # Средний пульс
     waiting_for_result_comment = State()        # Комментарий к результату
     waiting_for_result_photo = State()          # Фото финишера
 

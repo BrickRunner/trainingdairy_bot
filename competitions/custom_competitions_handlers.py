@@ -727,6 +727,12 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
                 current_date = current_date.replace(month=current_date.month + 1)
         elif cal_format == 2:
             current_date = current_date.replace(year=current_date.year + 1)
+    elif action == "change":
+        # Переключаем формат календаря
+        if cal_format == 1:
+            cal_format = 2  # С дней на месяцы
+        elif cal_format == 2:
+            cal_format = 3  # С месяцев на годы
     elif action == "select_month":
         cal_format = 2
     elif action == "select_year":
@@ -867,7 +873,12 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
 
         # Если есть результат, добавляем его
         if has_result and 'finish_time' in data:
-            await add_competition_result(user_id, comp_id, data['comp_distance'], data['finish_time'])
+            await add_competition_result(
+                user_id=user_id,
+                competition_id=comp_id,
+                distance=data['comp_distance'],
+                finish_time=data['finish_time']
+            )
 
         text = (
             "✅ <b>ПРОШЕДШЕЕ СОРЕВНОВАНИЕ ДОБАВЛЕНО!</b>\n\n"

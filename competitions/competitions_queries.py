@@ -337,7 +337,7 @@ async def get_user_competitions(
             f"""
             SELECT c.*, cp.distance, cp.target_time, cp.finish_time,
                    cp.place_overall, cp.place_age_category, cp.age_category,
-                   cp.result_comment, cp.result_photo, cp.status as participant_status,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.status as participant_status,
                    cp.registered_at, cp.result_added_at
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
@@ -345,6 +345,64 @@ async def get_user_competitions(
             ORDER BY c.date DESC
             """,
             (user_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            competitions = []
+            for row in rows:
+                comp = dict(row)
+                if comp.get('distances'):
+                    try:
+                        comp['distances'] = json.loads(comp['distances'])
+                    except:
+                        pass
+                competitions.append(comp)
+            return competitions
+
+
+async def get_user_competitions_by_period(
+    user_id: int,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
+    """
+    Получить завершенные соревнования пользователя за период
+
+    Args:
+        user_id: ID пользователя
+        date_from: Начало периода (опционально)
+        date_to: Конец периода (опционально, по умолчанию сейчас)
+
+    Returns:
+        Список соревнований с данными участия
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        conditions = ["cp.user_id = ?", "c.date < date('now')"]
+        params = [user_id]
+
+        if date_from:
+            conditions.append("c.date >= ?")
+            params.append(date_from.strftime('%Y-%m-%d'))
+
+        if date_to:
+            conditions.append("c.date <= ?")
+            params.append(date_to.strftime('%Y-%m-%d'))
+
+        where_clause = " AND ".join(conditions)
+
+        async with db.execute(
+            f"""
+            SELECT c.*, cp.distance, cp.target_time, cp.finish_time,
+                   cp.place_overall, cp.place_age_category, cp.age_category,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.status as participant_status,
+                   cp.registered_at, cp.result_added_at
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE {where_clause}
+            ORDER BY c.date DESC
+            """,
+            tuple(params)
         ) as cursor:
             rows = await cursor.fetchall()
             competitions = []
@@ -402,6 +460,7 @@ async def add_competition_result(
     place_overall: int = None,
     place_age_category: int = None,
     age_category: str = None,
+    heart_rate: int = None,
     result_comment: str = None,
     result_photo: str = None
 ) -> bool:
@@ -416,6 +475,7 @@ async def add_competition_result(
         place_overall: Место в общем зачёте
         place_age_category: Место в возрастной категории
         age_category: Возрастная категория
+        heart_rate: Средний пульс
         result_comment: Комментарий
         result_photo: Путь к фото
 
@@ -433,6 +493,7 @@ async def add_competition_result(
                 place_overall = ?,
                 place_age_category = ?,
                 age_category = ?,
+                heart_rate = ?,
                 result_comment = ?,
                 result_photo = ?,
                 status = 'finished',
@@ -441,7 +502,7 @@ async def add_competition_result(
             """,
             (
                 normalized_time, place_overall, place_age_category, age_category,
-                result_comment, result_photo, user_id, competition_id, distance
+                heart_rate, result_comment, result_photo, user_id, competition_id, distance
             )
         )
         await db.commit()
