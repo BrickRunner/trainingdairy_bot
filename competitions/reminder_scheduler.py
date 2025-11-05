@@ -104,7 +104,7 @@ async def get_pending_reminders(today: Optional[date] = None) -> list:
             JOIN competitions c ON r.competition_id = c.id
             LEFT JOIN competition_participants cp ON
                 r.competition_id = cp.competition_id AND
-                r.user_id = cp.participant_id
+                r.user_id = cp.user_id
             WHERE r.scheduled_date <= ? AND r.sent = 0
             ORDER BY r.scheduled_date, r.user_id
             """,
@@ -256,9 +256,9 @@ async def schedule_competition_reminders(bot):
 
     while True:
         try:
-            # Проверяем время - отправляем напоминания в 16:20
+            # Проверяем время - отправляем напоминания в 21:00
             now = datetime.now()
-            if now.hour == 16 and 20 <= now.minute < 25:
+            if now.hour == 21 and 7 <= now.minute < 10:
                 await send_competition_reminders(bot)
 
             # Ждём 5 минут перед следующей проверкой

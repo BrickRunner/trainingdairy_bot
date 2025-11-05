@@ -369,6 +369,10 @@ async def register_user_for_competition(callback: CallbackQuery, state: FSMConte
     try:
         await register_for_competition(user_id, competition_id, distance)
 
+        # Создаём напоминания о соревновании
+        from competitions.reminder_scheduler import create_reminders_for_competition
+        await create_reminders_for_competition(user_id, competition_id, comp['date'])
+
         text = (
             f"✅ <b>Вы успешно зарегистрированы!</b>\n\n"
             f"🏃 Соревнование: {comp['name']}\n"
@@ -672,10 +676,19 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     period_name = "Всё время"
 
     if period == "month":
-        date_from = datetime.now() - timedelta(days=30)
+        # Месяц - с 1-го числа текущего месяца
+        now = datetime.now()
+        date_from = datetime(now.year, now.month, 1)
         period_name = "За месяц"
     elif period == "3months":
-        date_from = datetime.now() - timedelta(days=90)
+        # 3 месяца - с 1-го числа 3 месяца назад
+        now = datetime.now()
+        month = now.month - 2  # -2 потому что текущий месяц + 2 назад = 3 месяца
+        year = now.year
+        if month <= 0:
+            month += 12
+            year -= 1
+        date_from = datetime(year, month, 1)
         period_name = "За 3 месяца"
 
     # Получаем завершенные соревнования с учетом периода
@@ -698,11 +711,19 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
         if finished_comps:
             text += f"🏁 <b>ЗАВЕРШЕННЫЕ СОРЕВНОВАНИЯ</b> ({len(finished_comps)})\n\n"
 
+            # Получаем формат даты пользователя
+            from utils.date_formatter import get_user_date_format, DateFormatter
+            user_date_format = await get_user_date_format(user_id)
+
             for i, comp in enumerate(finished_comps, 1):
                 dist_str = format_competition_distance(comp['distance'])
 
+                # Форматируем дату согласно настройкам пользователя
+                formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
+
                 text += f"{i}. <b>{comp['name']}</b>\n"
-                text += f"   📏 {dist_str} • 📅 {comp['date']}\n"
+                text += f"   📏 {dist_str} • 📅 {formatted_date}\n"
+                text += f"   🆔 ID: {comp['id']}\n"
 
                 if comp.get('finish_time'):
                     normalized_time = normalize_time(comp['finish_time'])
@@ -734,6 +755,13 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     builder.row(
         InlineKeyboardButton(text="➕ Добавить прошедшее соревнование", callback_data="comp:add_past")
     )
+
+    # Если есть результаты, добавляем кнопку удаления
+    if finished_comps:
+        builder.row(
+            InlineKeyboardButton(text="🗑️ Удалить результат", callback_data="comp:delete_result_menu")
+        )
+
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results")
     )
@@ -766,6 +794,10 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
     else:
         text = "🏆 <b>ЛИЧНЫЕ РЕКОРДЫ</b>\n\n"
 
+        # Получаем формат даты пользователя
+        from utils.date_formatter import get_user_date_format, DateFormatter
+        user_date_format = await get_user_date_format(user_id)
+
         # Сортируем по дистанции
         sorted_records = sorted(records.items(), key=lambda x: x[0])
 
@@ -781,7 +813,9 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
 
             if record.get('competition_name'):
                 comp_name_short = record['competition_name'][:30] + "..." if len(record['competition_name']) > 30 else record['competition_name']
-                text += f"\n   📅 {record['date']}"
+                # Форматируем дату согласно настройкам пользователя
+                formatted_date = DateFormatter.format_date(record['date'], user_date_format)
+                text += f"\n   📅 {formatted_date}"
                 text += f"\n   🏆 {comp_name_short}"
             text += "\n\n"
 
@@ -797,6 +831,119 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML"
     )
     await callback.answer()
+
+
+# ========== УДАЛЕНИЕ РЕЗУЛЬТАТА ==========
+
+@router.callback_query(F.data == "comp:delete_result_menu")
+async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
+    """Показать меню для выбора результата для удаления"""
+    user_id = callback.from_user.id
+
+    # Получаем завершенные соревнования
+    from competitions.competitions_queries import get_user_competitions
+    finished_comps = await get_user_competitions(user_id, status_filter='finished')
+
+    if not finished_comps:
+        await callback.answer("❌ Нет результатов для удаления", show_alert=True)
+        return
+
+    text = (
+        "🗑️ <b>УДАЛЕНИЕ РЕЗУЛЬТАТА</b>\n\n"
+        "Выберите соревнование, результат которого хотите удалить:\n\n"
+    )
+
+    # Получаем формат даты пользователя
+    from utils.date_formatter import get_user_date_format, DateFormatter
+    user_date_format = await get_user_date_format(user_id)
+
+    for i, comp in enumerate(finished_comps[:10], 1):  # Показываем максимум 10
+        dist_str = format_competition_distance(comp['distance'])
+        formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
+        text += f"{i}. {comp['name']} - {dist_str} ({formatted_date})\n"
+
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+
+    # Кнопки для удаления
+    for comp in finished_comps[:10]:
+        button_text = f"🗑️ {comp['name'][:25]}..."if len(comp['name']) > 25 else f"🗑️ {comp['name']}"
+        builder.row(
+            InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"comp:delete_result:{comp['id']}"
+            )
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results:all")
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("comp:delete_result:"))
+async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
+    """Подтверждение удаления результата"""
+    competition_id = int(callback.data.split(":")[-1])
+    user_id = callback.from_user.id
+
+    # Получаем информацию о соревновании
+    comp = await get_competition(competition_id)
+    if not comp:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    text = (
+        "⚠️ <b>ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ</b>\n\n"
+        f"Вы действительно хотите удалить результат соревнования:\n\n"
+        f"🏆 <b>{comp['name']}</b>\n"
+        f"📅 {comp['date']}\n\n"
+        "❗️ Это действие нельзя отменить!"
+    )
+
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"comp:delete_confirmed:{competition_id}"),
+        InlineKeyboardButton(text="❌ Отмена", callback_data="comp:delete_result_menu")
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("comp:delete_confirmed:"))
+async def delete_result_confirmed(callback: CallbackQuery, state: FSMContext):
+    """Удалить результат после подтверждения"""
+    competition_id = int(callback.data.split(":")[-1])
+    user_id = callback.from_user.id
+
+    try:
+        # Удаляем результат (очищаем поля времени и места)
+        from competitions.competitions_queries import delete_competition_result
+        success = await delete_competition_result(user_id, competition_id)
+
+        if success:
+            await callback.answer("✅ Результат удалён", show_alert=True)
+            # Возвращаемся к списку результатов
+            await show_my_results_period(callback, state)
+        else:
+            await callback.answer("❌ Ошибка при удалении", show_alert=True)
+
+    except Exception as e:
+        logger.error(f"Error deleting result: {e}")
+        await callback.answer("❌ Произошла ошибка", show_alert=True)
 
 
 # ========== ДОБАВЛЕНИЕ РЕЗУЛЬТАТА ==========

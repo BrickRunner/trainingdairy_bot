@@ -43,7 +43,12 @@
       "Bash(\"venv/Scripts/python.exe\" migrations/migrate_competitions_enhanced.py)",
       "Bash(\"venv/Scripts/python.exe\":*)",
       "Bash(git config:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(\"venv/Scripts/python.exe\" database/migrations/add_training_reminders_fields.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile notifications/notification_scheduler.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/reminder_scheduler.py)",
+      "Bash(\"venv/Scripts/python.exe\" test_reminders_debug.py)",
+      "Bash(\"venv/Scripts/python.exe\" check_participants.py)"
     ],
     "deny": [],
     "ask": []

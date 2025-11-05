@@ -514,6 +514,38 @@ async def add_competition_result(
         return cursor.rowcount > 0
 
 
+async def delete_competition_result(user_id: int, competition_id: int) -> bool:
+    """
+    Удалить результат соревнования (очистить поля результата)
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования
+
+    Returns:
+        True если удаление успешно
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            UPDATE competition_participants
+            SET finish_time = NULL,
+                place_overall = NULL,
+                place_age_category = NULL,
+                age_category = NULL,
+                heart_rate = NULL,
+                result_comment = NULL,
+                result_photo = NULL,
+                status = 'registered',
+                result_added_at = NULL
+            WHERE user_id = ? AND competition_id = ?
+            """,
+            (user_id, competition_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
 async def get_competition_participants_count(competition_id: int) -> int:
     """
     Получить количество участников соревнования из бота
