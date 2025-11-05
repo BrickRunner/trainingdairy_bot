@@ -25,6 +25,9 @@ def get_competitions_main_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🏅 Мои результаты", callback_data="comp:my_results")
     )
     builder.row(
+        InlineKeyboardButton(text="🏆 Личные рекорды", callback_data="comp:personal_records")
+    )
+    builder.row(
         InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
 

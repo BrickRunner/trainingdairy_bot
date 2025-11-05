@@ -256,9 +256,9 @@ async def schedule_competition_reminders(bot):
 
     while True:
         try:
-            # Проверяем время - отправляем напоминания в 9:00
+            # Проверяем время - отправляем напоминания в 16:20
             now = datetime.now()
-            if now.hour == 9 and now.minute < 5:
+            if now.hour == 16 and 20 <= now.minute < 25:
                 await send_competition_reminders(bot)
 
             # Ждём 5 минут перед следующей проверкой

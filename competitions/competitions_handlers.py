@@ -620,8 +620,32 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "comp:my_results")
 async def show_my_results(callback: CallbackQuery, state: FSMContext):
-    """Показать личные рекорды и статистику пользователя"""
-    await show_my_results_with_period(callback, state, period="all")
+    """Показать меню выбора периода для просмотра результатов"""
+    text = (
+        "🏅 <b>МОИ РЕЗУЛЬТАТЫ</b>\n\n"
+        "Выберите период для просмотра:\n"
+    )
+
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(text="📅 Всё время", callback_data="comp:my_results:all")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 За месяц", callback_data="comp:my_results:month"),
+        InlineKeyboardButton(text="📅 За 3 месяца", callback_data="comp:my_results:3months")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("comp:my_results:"))
@@ -633,13 +657,12 @@ async def show_my_results_period(callback: CallbackQuery, state: FSMContext):
 
 async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext, period: str = "all"):
     """
-    Показать личные рекорды и статистику за выбранный период
+    Показать завершенные соревнования за выбранный период
 
     Args:
-        period: "all", "year", "6months", "3months", "month", "YYYY" (конкретный год)
+        period: "all", "3months", "month"
     """
     user_id = callback.from_user.id
-    from competitions.statistics_queries import get_user_competition_stats
     from competitions.competitions_queries import get_user_competitions_by_period
     from utils.time_formatter import calculate_pace
     from datetime import datetime, timedelta
@@ -654,78 +677,24 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     elif period == "3months":
         date_from = datetime.now() - timedelta(days=90)
         period_name = "За 3 месяца"
-    elif period == "6months":
-        date_from = datetime.now() - timedelta(days=180)
-        period_name = "За 6 месяцев"
-    elif period == "year":
-        date_from = datetime.now() - timedelta(days=365)
-        period_name = "За год"
-    elif period.isdigit() and len(period) == 4:
-        year = int(period)
-        date_from = datetime(year, 1, 1)
-        date_to = datetime(year, 12, 31)
-        period_name = f"{period} год"
-    else:
-        date_to = None
-
-    # Получаем статистику
-    stats = await get_user_competition_stats(user_id)
-
-    # Получаем личные рекорды
-    records = await get_user_personal_records(user_id)
 
     # Получаем завершенные соревнования с учетом периода
     if period == "all":
         from competitions.competitions_queries import get_user_competitions
         finished_comps = await get_user_competitions(user_id, status_filter='finished')
-    elif period.isdigit() and len(period) == 4:
-        finished_comps = await get_user_competitions_by_period(user_id, date_from, date_to)
     else:
         finished_comps = await get_user_competitions_by_period(user_id, date_from)
 
-    if not records and not finished_comps:
+    if not finished_comps:
         text = (
             "🏅 <b>МОИ РЕЗУЛЬТАТЫ</b>\n\n"
-            "У вас пока нет личных рекордов.\n\n"
+            "У вас пока нет завершенных соревнований.\n\n"
             "Добавьте результаты своих соревнований, чтобы отслеживать прогресс!"
         )
     else:
         text = f"🏅 <b>МОИ РЕЗУЛЬТАТЫ - {period_name}</b>\n\n"
 
-        # Добавляем краткую статистику
-        if stats and stats['total_competitions'] > 0:
-            text += "📊 <b>СТАТИСТИКА</b>\n"
-            text += f"Соревнований: {stats['total_completed']}"
-
-            if stats.get('total_distance_km', 0) > 0:
-                text += f" • Дистанция: {stats['total_distance_km']:.1f} км"
-            text += "\n\n"
-
-        # Личные рекорды
-        if records and period == "all":
-            text += "🏆 <b>ЛИЧНЫЕ РЕКОРДЫ</b>\n\n"
-
-            # Сортируем по дистанции
-            sorted_records = sorted(records.items(), key=lambda x: x[0])
-
-            for distance, record in sorted_records:
-                dist_name = format_competition_distance(distance)
-                normalized_time = normalize_time(record['best_time'])
-                text += f"🏃 <b>{dist_name}</b>: {normalized_time}"
-
-                # Добавляем темп
-                pace = calculate_pace(record['best_time'], distance)
-                if pace:
-                    text += f" • {pace}/км"
-
-                if record.get('competition_name'):
-                    comp_name_short = record['competition_name'][:20] + "..." if len(record['competition_name']) > 20 else record['competition_name']
-                    text += f"\n   ({comp_name_short})"
-                text += "\n"
-
-            text += "\n"
-
-        # Завершенные соревнования - ПОКАЗЫВАЕМ ВСЕ
+        # Завершенные соревнования
         if finished_comps:
             text += f"🏁 <b>ЗАВЕРШЕННЫЕ СОРЕВНОВАНИЯ</b> ({len(finished_comps)})\n\n"
 
@@ -761,56 +730,63 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
-    # Кнопки фильтров по периодам
-    builder.row(
-        InlineKeyboardButton(text="📅 Все", callback_data="comp:my_results:all"),
-        InlineKeyboardButton(text="📅 Месяц", callback_data="comp:my_results:month")
-    )
-    builder.row(
-        InlineKeyboardButton(text="📅 3 месяца", callback_data="comp:my_results:3months"),
-        InlineKeyboardButton(text="📅 6 месяцев", callback_data="comp:my_results:6months")
-    )
-    builder.row(
-        InlineKeyboardButton(text="📅 Год", callback_data="comp:my_results:year")
-    )
-
-    # Получаем уникальные годы из завершенных соревнований
-    if period == "all":
-        all_comps = await get_user_competitions(user_id, status_filter='finished')
-    else:
-        from competitions.competitions_queries import get_user_competitions
-        all_comps = await get_user_competitions(user_id, status_filter='finished')
-
-    years = set()
-    for comp in all_comps:
-        if comp.get('date'):
-            try:
-                year = comp['date'][:4]
-                if year.isdigit():
-                    years.add(year)
-            except:
-                pass
-
-    # Добавляем кнопки по годам
-    if years:
-        sorted_years = sorted(years, reverse=True)
-        year_buttons = []
-        for year in sorted_years[:4]:  # Максимум 4 года
-            year_buttons.append(
-                InlineKeyboardButton(text=f"📅 {year}", callback_data=f"comp:my_results:{year}")
-            )
-
-        if len(year_buttons) >= 2:
-            builder.row(*year_buttons[:2])
-            if len(year_buttons) > 2:
-                builder.row(*year_buttons[2:])
-        elif year_buttons:
-            builder.row(*year_buttons)
-
     # Кнопка добавления прошедшего соревнования
     builder.row(
         InlineKeyboardButton(text="➕ Добавить прошедшее соревнование", callback_data="comp:add_past")
     )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results")
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+# ========== ЛИЧНЫЕ РЕКОРДЫ ==========
+
+@router.callback_query(F.data == "comp:personal_records")
+async def show_personal_records(callback: CallbackQuery, state: FSMContext):
+    """Показать личные рекорды пользователя"""
+    user_id = callback.from_user.id
+    from utils.time_formatter import calculate_pace
+
+    # Получаем личные рекорды
+    records = await get_user_personal_records(user_id)
+
+    if not records:
+        text = (
+            "🏆 <b>ЛИЧНЫЕ РЕКОРДЫ</b>\n\n"
+            "У вас пока нет личных рекордов.\n\n"
+            "Добавьте результаты своих соревнований, чтобы установить рекорды!"
+        )
+    else:
+        text = "🏆 <b>ЛИЧНЫЕ РЕКОРДЫ</b>\n\n"
+
+        # Сортируем по дистанции
+        sorted_records = sorted(records.items(), key=lambda x: x[0])
+
+        for distance, record in sorted_records:
+            dist_name = format_competition_distance(distance)
+            normalized_time = normalize_time(record['best_time'])
+            text += f"🏃 <b>{dist_name}</b>: {normalized_time}"
+
+            # Добавляем темп
+            pace = calculate_pace(record['best_time'], distance)
+            if pace:
+                text += f" • {pace}/км"
+
+            if record.get('competition_name'):
+                comp_name_short = record['competition_name'][:30] + "..." if len(record['competition_name']) > 30 else record['competition_name']
+                text += f"\n   📅 {record['date']}"
+                text += f"\n   🏆 {comp_name_short}"
+            text += "\n\n"
+
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
     )
@@ -843,12 +819,13 @@ async def start_add_result(callback: CallbackQuery, state: FSMContext):
     # Запрашиваем время
     text = (
         f"🏆 <b>{comp['name']}</b>\n\n"
-        "Введите ваше финишное время в формате ЧЧ:ММ:СС или ММ:СС\n"
+        "Введите ваше финишное время в формате ЧЧ:ММ:СС или ММ:СС или Ч:М:С\n"
         "Можно указать сотые: ЧЧ:ММ:СС.сс\n\n"
         "Примеры:\n"
         "• 1:23:45.50\n"
         "• 42:30.25\n"
-        "• 1:23:45"
+        "• 1:23:45\n"
+        "• 2:0:0"
     )
 
     await callback.message.answer(
@@ -879,8 +856,8 @@ async def process_finish_time(message: Message, state: FSMContext):
     if not validate_time_format(time_text):
         await message.answer(
             "❌ Некорректный формат времени.\n"
-            "Используйте формат ЧЧ:ММ:СС.сс или ММ:СС.сс\n\n"
-            "Примеры: 1:23:45.50 или 42:30.25 или 1:23:45"
+            "Используйте формат ЧЧ:ММ:СС.сс или ММ:СС.сс или Ч:М:С\n\n"
+            "Примеры: 1:23:45.50 или 42:30.25 или 1:23:45 или 2:0:0"
         )
         return
 

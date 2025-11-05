@@ -114,6 +114,9 @@ class CompetitionStates(StatesGroup):
     waiting_for_past_comp_type = State()        # Вид спорта
     waiting_for_past_comp_distance = State()    # Дистанция
     waiting_for_past_comp_result = State()      # Результат (время)
+    waiting_for_past_comp_place_overall = State()  # Место в общем зачёте
+    waiting_for_past_comp_place_age = State()      # Место в возрастной категории
+    waiting_for_past_comp_heart_rate = State()     # Средний пульс
 
 
 class CoachStates(StatesGroup):

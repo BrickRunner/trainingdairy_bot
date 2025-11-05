@@ -610,11 +610,11 @@ async def process_sleep_duration(message: Message, state: FSMContext):
     try:
         text = message.text.strip()
 
-        # Проверяем формат ЧЧ:ММ
+        # Проверяем формат ЧЧ:ММ или Ч:М
         if ':' in text:
             parts = text.split(':')
             if len(parts) != 2:
-                await message.answer("❌ Неверный формат. Используйте ЧЧ:ММ (например: 7:30)")
+                await message.answer("❌ Неверный формат. Используйте ЧЧ:ММ или Ч:М (например: 7:30 или 7:0)")
                 return
 
             hours = int(parts[0])

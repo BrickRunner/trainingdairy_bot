@@ -10,7 +10,7 @@ def normalize_time(time_str: str) -> str:
     Нормализовать формат времени, убирая ведущие нули из часов
 
     Args:
-        time_str: Время в формате HH:MM:SS.ss или MM:SS.ss или H:MM:SS
+        time_str: Время в формате HH:MM:SS.ss или MM:SS.ss или H:M:S и т.д.
 
     Returns:
         Нормализованное время без ведущих нулей в часах
@@ -18,6 +18,7 @@ def normalize_time(time_str: str) -> str:
         - "00:40:30" -> "40:30"
         - "00:40:30.50" -> "40:30.50"
         - "01:23:45" -> "1:23:45"
+        - "2:0:0" -> "2:00:00"
         - "10:15:30" -> "10:15:30"
         - "45:30" -> "45:30" (без изменений)
     """
@@ -26,46 +27,73 @@ def normalize_time(time_str: str) -> str:
 
     time_str = time_str.strip()
 
-    # Проверяем формат HH:MM:SS.ss (с сотыми)
-    match = re.match(r'^(\d{1,2}):(\d{2}):(\d{2})\.(\d{1,2})$', time_str)
+    # Проверяем формат HH:MM:SS.ss (с сотыми) - теперь разрешаем 1-2 цифры везде
+    match = re.match(r'^(\d{1,2}):(\d{1,2}):(\d{1,2})\.(\d{1,2})$', time_str)
     if match:
         hours, minutes, seconds, hundredths = match.groups()
         hours_int = int(hours)
         minutes_int = int(minutes)
+        seconds_int = int(seconds)
 
         # Нормализуем сотые до 2 цифр
         hundredths = hundredths.ljust(2, '0')[:2]
 
+        # Форматируем минуты и секунды с ведущими нулями
+        minutes_str = f"{minutes_int:02d}"
+        seconds_str = f"{seconds_int:02d}"
+
         # Если часы = 0, возвращаем MM:SS.ss без ведущих нулей в минутах
         if hours_int == 0:
-            return f"{minutes_int}:{seconds}.{hundredths}"
+            return f"{minutes_int}:{seconds_str}.{hundredths}"
 
         # Убираем ведущий ноль из часов
-        return f"{hours_int}:{minutes}:{seconds}.{hundredths}"
+        return f"{hours_int}:{minutes_str}:{seconds_str}.{hundredths}"
 
-    # Проверяем формат HH:MM:SS (без сотых)
-    match = re.match(r'^(\d{1,2}):(\d{2}):(\d{2})$', time_str)
+    # Проверяем формат HH:MM:SS (без сотых) - теперь разрешаем 1-2 цифры везде
+    match = re.match(r'^(\d{1,2}):(\d{1,2}):(\d{1,2})$', time_str)
     if match:
         hours, minutes, seconds = match.groups()
         hours_int = int(hours)
         minutes_int = int(minutes)
+        seconds_int = int(seconds)
+
+        # Форматируем минуты и секунды с ведущими нулями
+        minutes_str = f"{minutes_int:02d}"
+        seconds_str = f"{seconds_int:02d}"
 
         # Если часы = 0, возвращаем MM:SS без ведущих нулей в минутах
         if hours_int == 0:
-            return f"{minutes_int}:{seconds}"
+            return f"{minutes_int}:{seconds_str}"
 
         # Убираем ведущий ноль из часов, оставляем минуты и секунды с ведущими нулями
-        return f"{hours_int}:{minutes}:{seconds}"
+        return f"{hours_int}:{minutes_str}:{seconds_str}"
 
-    # Проверяем формат MM:SS.ss (с сотыми)
-    match = re.match(r'^(\d{1,2}):(\d{2})\.(\d{1,2})$', time_str)
+    # Проверяем формат MM:SS.ss (с сотыми) - разрешаем 1-2 цифры
+    match = re.match(r'^(\d{1,2}):(\d{1,2})\.(\d{1,2})$', time_str)
     if match:
-        return time_str
+        minutes, seconds, hundredths = match.groups()
+        minutes_int = int(minutes)
+        seconds_int = int(seconds)
 
-    # Проверяем формат MM:SS (оставляем без изменений)
-    match = re.match(r'^(\d{1,2}):(\d{2})$', time_str)
+        # Нормализуем сотые до 2 цифр
+        hundredths = hundredths.ljust(2, '0')[:2]
+
+        # Форматируем секунды с ведущими нулями
+        seconds_str = f"{seconds_int:02d}"
+
+        return f"{minutes_int}:{seconds_str}.{hundredths}"
+
+    # Проверяем формат MM:SS - разрешаем 1-2 цифры
+    match = re.match(r'^(\d{1,2}):(\d{1,2})$', time_str)
     if match:
-        return time_str
+        minutes, seconds = match.groups()
+        minutes_int = int(minutes)
+        seconds_int = int(seconds)
+
+        # Форматируем секунды с ведущими нулями
+        seconds_str = f"{seconds_int:02d}"
+
+        return f"{minutes_int}:{seconds_str}"
 
     # Если формат не распознан, возвращаем как есть
     return time_str
@@ -84,8 +112,9 @@ def validate_time_format(time_str: str) -> bool:
     if not time_str or not isinstance(time_str, str):
         return False
 
-    # Допустимые форматы: HH:MM:SS.ss, HH:MM:SS, MM:SS.ss, MM:SS
-    return bool(re.match(r'^\d{1,2}:\d{2}(:\d{2})?(\.\d{1,2})?$', time_str.strip()))
+    # Допустимые форматы: HH:MM:SS.ss, HH:MM:SS, MM:SS.ss, MM:SS, H:M:S, M:S и т.д.
+    # Теперь разрешаем любое количество цифр в минутах и секундах
+    return bool(re.match(r'^\d{1,2}:\d{1,2}(:\d{1,2})?(\.\d{1,2})?$', time_str.strip()))
 
 
 def parse_time_to_seconds(time_str: str) -> Optional[float]:

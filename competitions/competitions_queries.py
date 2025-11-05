@@ -577,6 +577,8 @@ async def update_personal_record(
     Returns:
         True если рекорд был обновлён
     """
+    from utils.time_formatter import parse_time_to_seconds
+
     async with aiosqlite.connect(DB_PATH) as db:
         # Получаем текущий рекорд
         async with db.execute(
@@ -585,11 +587,22 @@ async def update_personal_record(
         ) as cursor:
             row = await cursor.fetchone()
 
+        # Преобразуем новое время в секунды для корректного сравнения
+        new_time_seconds = parse_time_to_seconds(time)
+        if new_time_seconds is None:
+            return False
+
         # Сравниваем времена
         if row:
             current_best = row[0]
-            # Простое сравнение строк времени работает для формата HH:MM:SS
-            if time < current_best:
+            # Преобразуем текущий лучший результат в секунды
+            current_best_seconds = parse_time_to_seconds(current_best)
+            if current_best_seconds is None:
+                # Если текущий рекорд поврежден, заменяем его
+                current_best_seconds = float('inf')
+
+            # Сравниваем по секундам - меньше секунд = лучше время
+            if new_time_seconds < current_best_seconds:
                 # Обновляем рекорд
                 await db.execute(
                     """

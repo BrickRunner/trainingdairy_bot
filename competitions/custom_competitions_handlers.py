@@ -353,9 +353,9 @@ async def process_comp_distance(message: Message, state: FSMContext):
         f"✅ Дистанция: <b>{distance_name}</b>\n\n"
         f"📝 <b>Шаг 6 из 6</b>\n\n"
         f"Введите <b>целевое время</b>:\n"
-        f"<i>Формат: ЧЧ:ММ:СС\n"
-        f"Например: 03:30:00 (3 часа 30 минут)\n"
-        f"Или: 00:45:00 (45 минут)</i>\n\n"
+        f"<i>Формат: ЧЧ:ММ:СС или Ч:М:С\n"
+        f"Например: 03:30:00 или 3:30:0 (3 часа 30 минут)\n"
+        f"Или: 00:45:00 или 0:45:0 (45 минут)</i>\n\n"
         f"Или нажмите кнопку ниже, чтобы пропустить."
     )
 
@@ -575,7 +575,7 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
     text = (
         "🏁 <b>ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ</b>\n\n"
         "Вы можете добавить соревнование, в котором уже участвовали.\n\n"
-        "📝 <b>Шаг 1 из 6</b>\n\n"
+        "📝 <b>Шаг 1 из 9</b>\n\n"
         "Введите <b>название</b> соревнования:\n"
         "<i>Например: Московский марафон 2024</i>"
     )
@@ -602,7 +602,7 @@ async def process_past_comp_name(message: Message, state: FSMContext):
 
     text = (
         f"✅ Название: <b>{comp_name}</b>\n\n"
-        f"📝 <b>Шаг 2 из 6</b>\n\n"
+        f"📝 <b>Шаг 2 из 9</b>\n\n"
         f"Введите <b>город</b>, где проходило соревнование:\n"
         f"<i>Например: Москва, Санкт-Петербург, Казань</i>"
     )
@@ -633,10 +633,15 @@ async def process_past_comp_city(message: Message, state: FSMContext):
         callback_prefix="cal_past_comp"
     )
 
+    user_id = message.from_user.id
+    date_format_desc = await get_date_format_description(user_id)
+
     text = (
         f"✅ Город: <b>{comp_city}</b>\n\n"
-        f"📝 <b>Шаг 3 из 6</b>\n\n"
-        f"Выберите <b>дату</b> соревнования из календаря:"
+        f"📝 <b>Шаг 3 из 9</b>\n\n"
+        f"Выберите <b>дату</b> соревнования из календаря\n"
+        f"или введите вручную в формате: <b>{date_format_desc}</b>\n\n"
+        f"<i>Например: {datetime.now().strftime('%d.%m.%Y')}</i>"
     )
 
     await message.answer(text, parse_mode="HTML", reply_markup=calendar)
@@ -685,7 +690,7 @@ async def handle_past_comp_calendar_day_select(callback: CallbackQuery, state: F
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
-        f"📝 <b>Шаг 4 из 6</b>\n\n"
+        f"📝 <b>Шаг 4 из 9</b>\n\n"
         f"Выберите <b>вид спорта</b>:"
     )
 
@@ -749,6 +754,65 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
     await callback.answer()
 
 
+@router.message(CompetitionStates.waiting_for_past_comp_date)
+async def process_past_comp_date_text(message: Message, state: FSMContext):
+    """Обработать дату прошедшего соревнования (текстовый ввод)"""
+
+    date_text = message.text.strip()
+    user_id = message.from_user.id
+
+    # Парсим дату с учетом формата пользователя
+    comp_date = await parse_user_date_input(date_text, user_id)
+
+    if comp_date is None:
+        date_format_desc = await get_date_format_description(user_id)
+        await message.answer(
+            f"❌ Неверный формат даты.\n"
+            f"Используйте формат: {date_format_desc}\n"
+            f"Или выберите дату из календаря выше."
+        )
+        return
+
+    # Проверяем что дата не в будущем
+    if comp_date > date.today():
+        await message.answer(
+            "❌ Для прошедших соревнований дата должна быть в прошлом или сегодня.\n"
+            "Введите корректную дату или выберите из календаря:"
+        )
+        return
+
+    # Проверяем, что дата не более 10 лет назад
+    years_ago = (date.today() - comp_date).days // 365
+    if years_ago > 10:
+        await message.answer(
+            "❌ Дата не может быть более 10 лет назад.\n"
+            "Введите корректную дату:"
+        )
+        return
+
+    # Сохраняем дату
+    await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
+
+    formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
+
+    # Создаём клавиатуру с типами
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🏃 Бег", callback_data="pastcomptype:running"))
+    builder.row(InlineKeyboardButton(text="🏊 Плавание", callback_data="pastcomptype:swimming"))
+    builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="pastcomptype:cycling"))
+    builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="pastcomptype:triathlon"))
+    builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="pastcomptype:trail"))
+
+    text = (
+        f"✅ Дата: <b>{formatted_date}</b>\n\n"
+        f"📝 <b>Шаг 4 из 9</b>\n\n"
+        f"Выберите <b>вид спорта</b>:"
+    )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await state.set_state(CompetitionStates.waiting_for_past_comp_type)
+
+
 @router.callback_query(F.data.startswith("pastcomptype:"))
 async def process_past_comp_type(callback: CallbackQuery, state: FSMContext):
     """Обработать тип прошедшего соревнования"""
@@ -771,7 +835,7 @@ async def process_past_comp_type(callback: CallbackQuery, state: FSMContext):
 
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
-        f"📝 <b>Шаг 5 из 6</b>\n\n"
+        f"📝 <b>Шаг 5 из 9</b>\n\n"
         f"Введите <b>дистанцию</b> в {distance_unit}:\n"
         f"<i>Например: 42.195, 21.1, 10, 5</i>"
     )
@@ -796,44 +860,174 @@ async def process_past_comp_distance(message: Message, state: FSMContext):
 
     await state.update_data(comp_distance=distance_km)
 
-    # Для прошедших соревнований сразу запрашиваем результат
+    # Для прошедших соревнований запрашиваем результат
     text = (
         f"✅ Дистанция: <b>{await format_competition_distance(distance_km, user_id)}</b>\n\n"
-        f"📝 <b>Шаг 6 из 6</b>\n\n"
-        f"Введите <b>ваше время</b> (формат: ЧЧ:ММ:СС или ММ:СС):\n"
-        f"<i>Например: 01:45:30 или 45:30</i>\n\n"
-        f"<i>Можете пропустить, если не помните результат</i>"
+        f"📝 <b>Шаг 6 из 9: Финишное время</b>\n\n"
+        f"Введите <b>ваше финишное время</b>:\n"
+        f"Формат: ЧЧ:ММ:СС или ММ:СС или Ч:М:С (можно с сотыми: ЧЧ:ММ:СС.сс)\n\n"
+        f"<i>Примеры:\n"
+        f"• 1:23:45.50\n"
+        f"• 42:30.25\n"
+        f"• 1:23:45\n"
+        f"• 2:0:0</i>\n\n"
+        f"Или нажмите \"Пропустить\", если не добавляете результат"
     )
 
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_comp_result"))
+    builder.row(InlineKeyboardButton(text="⏭️ Пропустить результат", callback_data="skip_past_comp_all_result"))
 
     await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_past_comp_result)
 
 
-@router.callback_query(F.data == "skip_past_comp_result")
-async def skip_past_comp_result(callback: CallbackQuery, state: FSMContext):
-    """Пропустить ввод результата"""
+@router.callback_query(F.data == "skip_past_comp_all_result")
+async def skip_past_comp_all_result(callback: CallbackQuery, state: FSMContext):
+    """Пропустить ввод результата полностью"""
     await finalize_past_competition(callback, state, has_result=False)
+    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_past_comp_result)
-async def process_past_comp_result(message: Message, state: FSMContext):
-    """Обработать результат прошедшего соревнования"""
+async def process_past_comp_result_time(message: Message, state: FSMContext):
+    """Обработать время прошедшего соревнования"""
 
     time_text = message.text.strip()
 
     # Валидация формата времени
     if not validate_time_format(time_text):
         await message.answer(
-            "❌ Некорректный формат времени. Используйте формат ЧЧ:ММ:СС или ММ:СС"
+            "❌ Некорректный формат времени. Используйте формат ЧЧ:ММ:СС.сс или ММ:СС.сс или Ч:М:С\n"
+            "Примеры: 1:23:45.50 или 42:30.25 или 2:0:0"
         )
         return
 
     # Нормализуем время перед сохранением
     normalized_time = normalize_time(time_text)
     await state.update_data(finish_time=normalized_time)
+
+    # Запрашиваем место в общем зачёте
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_place_overall"))
+
+    text = (
+        f"✅ Время: <b>{normalized_time}</b>\n\n"
+        f"📝 <b>Шаг 7 из 9: Место в общем зачёте</b>\n\n"
+        f"Введите ваше <b>место в общем зачёте</b> (число):\n"
+        f"Или нажмите \"Пропустить\", если не помните"
+    )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await state.set_state(CompetitionStates.waiting_for_past_comp_place_overall)
+
+
+@router.callback_query(F.data == "skip_past_place_overall")
+async def skip_past_place_overall(callback: CallbackQuery, state: FSMContext):
+    """Пропустить место в общем зачёте"""
+    await state.update_data(place_overall=None)
+    await ask_past_comp_place_age(callback.message, state)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_past_comp_place_overall)
+async def process_past_comp_place_overall(message: Message, state: FSMContext):
+    """Обработать место в общем зачёте"""
+
+    try:
+        place = int(message.text.strip())
+        if place <= 0:
+            await message.answer("❌ Место должно быть положительным числом")
+            return
+        await state.update_data(place_overall=place)
+    except ValueError:
+        await message.answer(
+            "❌ Некорректное значение. Введите число или нажмите \"Пропустить\""
+        )
+        return
+
+    await ask_past_comp_place_age(message, state)
+
+
+async def ask_past_comp_place_age(message, state: FSMContext):
+    """Запросить место в возрастной категории"""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_place_age"))
+
+    text = (
+        "📝 <b>Шаг 8 из 9: Место в возрастной категории</b>\n\n"
+        "Введите ваше <b>место в возрастной категории</b> (число):\n"
+        "Или нажмите \"Пропустить\", если не помните"
+    )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await state.set_state(CompetitionStates.waiting_for_past_comp_place_age)
+
+
+@router.callback_query(F.data == "skip_past_place_age")
+async def skip_past_place_age(callback: CallbackQuery, state: FSMContext):
+    """Пропустить место в категории"""
+    await state.update_data(place_age=None)
+    await ask_past_comp_heart_rate(callback.message, state)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_past_comp_place_age)
+async def process_past_comp_place_age(message: Message, state: FSMContext):
+    """Обработать место в возрастной категории"""
+
+    try:
+        place = int(message.text.strip())
+        if place <= 0:
+            await message.answer("❌ Место должно быть положительным числом")
+            return
+        await state.update_data(place_age=place)
+    except ValueError:
+        await message.answer(
+            "❌ Некорректное значение. Введите число или нажмите \"Пропустить\""
+        )
+        return
+
+    await ask_past_comp_heart_rate(message, state)
+
+
+async def ask_past_comp_heart_rate(message, state: FSMContext):
+    """Запросить средний пульс"""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_heart_rate"))
+
+    text = (
+        "📝 <b>Шаг 9 из 9: Средний пульс</b>\n\n"
+        "Введите ваш <b>средний пульс</b> за соревнование (уд/мин):\n"
+        "Или нажмите \"Пропустить\", если не помните"
+    )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await state.set_state(CompetitionStates.waiting_for_past_comp_heart_rate)
+
+
+@router.callback_query(F.data == "skip_past_heart_rate")
+async def skip_past_heart_rate(callback: CallbackQuery, state: FSMContext):
+    """Пропустить пульс и завершить"""
+    await state.update_data(heart_rate=None)
+    await finalize_past_competition(callback, state, has_result=True)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_past_comp_heart_rate)
+async def process_past_comp_heart_rate(message: Message, state: FSMContext):
+    """Обработать средний пульс и завершить"""
+
+    try:
+        hr = int(message.text.strip())
+        if hr <= 0 or hr > 250:
+            await message.answer("❌ Пульс должен быть в диапазоне 1-250 уд/мин")
+            return
+        await state.update_data(heart_rate=hr)
+    except ValueError:
+        await message.answer(
+            "❌ Некорректное значение. Введите число или нажмите \"Пропустить\""
+        )
+        return
 
     # Создаём заглушку для callback
     from types import SimpleNamespace
@@ -877,7 +1071,10 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 user_id=user_id,
                 competition_id=comp_id,
                 distance=data['comp_distance'],
-                finish_time=data['finish_time']
+                finish_time=data['finish_time'],
+                place_overall=data.get('place_overall'),
+                place_age_category=data.get('place_age'),
+                heart_rate=data.get('heart_rate')
             )
 
         text = (
@@ -889,9 +1086,15 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         )
 
         if has_result:
-            text += f"⏱️ Результат: {data['finish_time']}\n"
+            text += f"⏱️ Время: {data['finish_time']}\n"
+            if data.get('place_overall'):
+                text += f"🏆 Место общее: {data['place_overall']}\n"
+            if data.get('place_age'):
+                text += f"🏅 Место в категории: {data['place_age']}\n"
+            if data.get('heart_rate'):
+                text += f"❤️ Средний пульс: {data['heart_rate']} уд/мин\n"
 
-        text += "\n Соревнование добавлено в ваши результаты!"
+        text += "\n✅ Соревнование добавлено в ваши результаты!"
 
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="🏅 Мои результаты", callback_data="comp:my_results"))
