@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+DB_PATH = os.getenv('DB_PATH', 'bot_data.db')
 
 
 def migrate():

@@ -6,7 +6,7 @@ import aiosqlite
 import os
 from datetime import datetime, date, timedelta
 
-DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+DB_PATH = os.getenv('DB_PATH', 'bot_data.db')
 
 
 async def check_reminders():
@@ -151,19 +151,19 @@ async def check_reminders():
         now = datetime.now()
         print(f"   Текущее время: {now.strftime('%H:%M:%S')}")
         print(f"   Текущая дата: {now.strftime('%Y-%m-%d')}")
-        print(f"   Планировщик запускается: 21:07-21:10")
+        print(f"   Планировщик запускается: в 10:20-10:25")
 
-        if now.hour == 21 and 7 <= now.minute < 10:
+        if now.hour == 10 and 20 <= now.minute < 25:
             print("   [!!!] SEYCHAS VREMYA OTPRAVKI NAPOMINANIY!")
-        else:
-            if now.hour < 21:
-                time_until = 21 - now.hour
-                print(f"   Do vremeni otpravki ostalos ~{time_until} chasov")
-            elif now.hour == 21 and now.minute < 7:
-                mins_until = 7 - now.minute
+        elif now.hour < 10 or (now.hour == 10 and now.minute < 20):
+            if now.hour == 10:
+                mins_until = 20 - now.minute
                 print(f"   Do vremeni otpravki ostalos {mins_until} minut")
             else:
-                print("   Vremya otpravki uzhe proshlo, sleduyuschaya otpravka zavtra v 21:07")
+                hours_until = 10 - now.hour
+                print(f"   Do vremeni otpravki ostalos ~{hours_until} chasov")
+        else:
+            print("   Vremya otpravki uzhe proshlo, sleduyuschaya otpravka zavtra v 10:20")
 
 
 if __name__ == "__main__":

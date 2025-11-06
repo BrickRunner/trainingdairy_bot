@@ -44,6 +44,9 @@ router = Router()
 async def start_create_custom_competition(callback: CallbackQuery, state: FSMContext):
     """Начать добавление соревнования вручную"""
 
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+
     text = (
         "🔍 <b>ДОБАВЛЕНИЕ СОРЕВНОВАНИЯ ВРУЧНУЮ</b>\n\n"
         "Вы можете добавить соревнование, в котором планируете участвовать.\n\n"
@@ -52,7 +55,7 @@ async def start_create_custom_competition(callback: CallbackQuery, state: FSMCon
         "<i>Например: Московский марафон 2026</i>"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_comp_name)
     await callback.answer()
 
@@ -72,20 +75,51 @@ async def process_comp_name(message: Message, state: FSMContext):
     # Сохраняем название
     await state.update_data(comp_name=comp_name)
 
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🏙️ Москва", callback_data="comp:city:Москва"))
+    builder.row(InlineKeyboardButton(text="🏙️ Санкт-Петербург", callback_data="comp:city:Санкт-Петербург"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+
     text = (
         f"✅ Название: <b>{comp_name}</b>\n\n"
         f"📝 <b>Шаг 2 из 6</b>\n\n"
-        f"Введите <b>город</b>, где будет проходить соревнование:\n"
-        f"<i>Например: Москва, Санкт-Петербург, Казань</i>"
+        f"Выберите <b>город</b> или введите свой вариант:\n"
+        f"<i>Например: Казань, Екатеринбург, Нижний Новгород</i>"
     )
 
-    await message.answer(text, parse_mode="HTML")
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_comp_city)
+
+
+@router.callback_query(F.data.startswith("comp:city:"), CompetitionStates.waiting_for_comp_city)
+async def process_comp_city_button(callback: CallbackQuery, state: FSMContext):
+    """Обработать выбор города из кнопок"""
+    comp_city = callback.data.split(":", 2)[2]
+
+    # Сохраняем город
+    await state.update_data(comp_city=comp_city)
+
+    # Показываем календарь для выбора даты
+    calendar = CalendarKeyboard.create_calendar(
+        calendar_format=1,
+        current_date=datetime.now(),
+        callback_prefix="cal_comp"
+    )
+
+    text = (
+        f"✅ Город: <b>{comp_city}</b>\n\n"
+        f"📝 <b>Шаг 3 из 6</b>\n\n"
+        f"Выберите <b>дату</b> соревнования из календаря:"
+    )
+
+    await callback.message.answer(text, parse_mode="HTML", reply_markup=calendar)
+    await state.set_state(CompetitionStates.waiting_for_comp_date)
+    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_comp_city)
 async def process_comp_city(message: Message, state: FSMContext):
-    """Обработать город соревнования"""
+    """Обработать город соревнования (текстовый ввод)"""
 
     comp_city = message.text.strip()
 
@@ -147,6 +181,7 @@ async def handle_comp_calendar_day_select(callback: CallbackQuery, state: FSMCon
     builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="comptype:cycling"))
     builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="comptype:triathlon"))
     builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="comptype:trail"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -255,6 +290,7 @@ async def process_comp_date(message: Message, state: FSMContext):
     builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="comptype:cycling"))
     builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="comptype:triathlon"))
     builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="comptype:trail"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -287,6 +323,9 @@ async def process_comp_type(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     distance_unit = await get_distance_unit_name(user_id)
 
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
         f"📝 <b>Шаг 5 из 6</b>\n\n"
@@ -308,7 +347,7 @@ async def process_comp_type(callback: CallbackQuery, state: FSMContext):
             f"• 6.2 (для 10 км)</i>"
         )
 
-    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_comp_distance)
     await callback.answer()
 
@@ -348,6 +387,7 @@ async def process_comp_distance(message: Message, state: FSMContext):
     # Создаем клавиатуру с кнопкой "Пропустить"
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="comp:skip_target"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         f"✅ Дистанция: <b>{distance_name}</b>\n\n"
@@ -456,6 +496,15 @@ async def create_competition_from_state(user_id: int, state: FSMContext, target_
                 await message_obj.edit_text(error_text, parse_mode="HTML")
 
         await state.clear()
+
+
+@router.callback_query(F.data == "comp:cancel_creation")
+async def cancel_competition_creation(callback: CallbackQuery, state: FSMContext):
+    """Отменить создание соревнования"""
+    await state.clear()
+
+    from competitions.competitions_handlers import show_competitions_menu
+    await show_competitions_menu(callback, state)
 
 
 @router.callback_query(F.data == "comp:skip_target", CompetitionStates.waiting_for_comp_target)
@@ -570,7 +619,65 @@ async def show_competition_statistics(callback: CallbackQuery):
 
 @router.callback_query(F.data == "comp:add_past")
 async def start_add_past_competition(callback: CallbackQuery, state: FSMContext):
-    """Начать добавление прошедшего соревнования"""
+    """Начать добавление прошедшего соревнования - сначала показываем соревнования без результатов"""
+    from competitions.competitions_queries import get_user_competitions
+    from competitions.competitions_utils import format_competition_date, format_competition_distance
+
+    user_id = callback.from_user.id
+
+    # Получаем завершенные соревнования пользователя
+    all_comps = await get_user_competitions(user_id, status_filter='finished')
+
+    # Фильтруем только те, где нет результата
+    comps_without_results = [comp for comp in all_comps if not comp.get('finish_time')]
+
+    if comps_without_results:
+        # Показываем список соревнований без результатов
+        text = (
+            "🏁 <b>ДОБАВЛЕНИЕ РЕЗУЛЬТАТА</b>\n\n"
+            "У вас есть соревнования без результатов:\n\n"
+        )
+
+        builder = InlineKeyboardBuilder()
+
+        for i, comp in enumerate(comps_without_results[:10], 1):  # Макс 10 соревнований
+            formatted_date = await format_competition_date(comp['date'], user_id)
+            dist_str = await format_competition_distance(comp['distance'], user_id)
+
+            # Короткое название для кнопки
+            short_name = comp['name'][:30] + "..." if len(comp['name']) > 30 else comp['name']
+            button_text = f"{short_name} • {dist_str}"
+
+            text += f"{i}. <b>{comp['name']}</b>\n   📏 {dist_str} • 📅 {formatted_date}\n\n"
+
+            builder.row(
+                InlineKeyboardButton(
+                    text=button_text,
+                    callback_data=f"comp:add_result:{comp['id']}"
+                )
+            )
+
+        # Кнопка для создания нового соревнования
+        builder.row(
+            InlineKeyboardButton(text="➕ Добавить новое соревнование", callback_data="comp:add_past_manual")
+        )
+        builder.row(
+            InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results")
+        )
+
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await callback.answer()
+    else:
+        # Если нет соревнований без результатов, сразу переходим к ручному вводу
+        await start_add_past_competition_manual(callback, state)
+
+
+@router.callback_query(F.data == "comp:add_past_manual")
+async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMContext):
+    """Начать ручное добавление прошедшего соревнования"""
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         "🏁 <b>ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ</b>\n\n"
@@ -580,7 +687,7 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
         "<i>Например: Московский марафон 2024</i>"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_past_comp_name)
     await callback.answer()
 
@@ -600,20 +707,56 @@ async def process_past_comp_name(message: Message, state: FSMContext):
     # Сохраняем название
     await state.update_data(comp_name=comp_name, is_past_competition=True)
 
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🏙️ Москва", callback_data="comp:past_city:Москва"))
+    builder.row(InlineKeyboardButton(text="🏙️ Санкт-Петербург", callback_data="comp:past_city:Санкт-Петербург"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+
     text = (
         f"✅ Название: <b>{comp_name}</b>\n\n"
         f"📝 <b>Шаг 2 из 9</b>\n\n"
-        f"Введите <b>город</b>, где проходило соревнование:\n"
-        f"<i>Например: Москва, Санкт-Петербург, Казань</i>"
+        f"Выберите <b>город</b> или введите свой вариант:\n"
+        f"<i>Например: Казань, Екатеринбург, Нижний Новгород</i>"
     )
 
-    await message.answer(text, parse_mode="HTML")
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_past_comp_city)
+
+
+@router.callback_query(F.data.startswith("comp:past_city:"), CompetitionStates.waiting_for_past_comp_city)
+async def process_past_comp_city_button(callback: CallbackQuery, state: FSMContext):
+    """Обработать выбор города из кнопок для прошедшего соревнования"""
+    comp_city = callback.data.split(":", 2)[2]
+
+    # Сохраняем город
+    await state.update_data(comp_city=comp_city)
+
+    # Показываем календарь для выбора даты (без ограничения на прошлые даты)
+    calendar = CalendarKeyboard.create_calendar(
+        calendar_format=1,
+        current_date=datetime.now(),
+        callback_prefix="cal_past_comp"
+    )
+
+    user_id = callback.from_user.id
+    date_format_desc = await get_date_format_description(user_id)
+
+    text = (
+        f"✅ Город: <b>{comp_city}</b>\n\n"
+        f"📝 <b>Шаг 3 из 9</b>\n\n"
+        f"Выберите <b>дату</b> соревнования из календаря\n"
+        f"или введите вручную в формате: <b>{date_format_desc}</b>\n\n"
+        f"<i>Например: {datetime.now().strftime('%d.%m.%Y')}</i>"
+    )
+
+    await callback.message.answer(text, parse_mode="HTML", reply_markup=calendar)
+    await state.set_state(CompetitionStates.waiting_for_past_comp_date)
+    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_past_comp_city)
 async def process_past_comp_city(message: Message, state: FSMContext):
-    """Обработать город прошедшего соревнования"""
+    """Обработать город прошедшего соревнования (текстовый ввод)"""
 
     comp_city = message.text.strip()
 
@@ -687,6 +830,7 @@ async def handle_past_comp_calendar_day_select(callback: CallbackQuery, state: F
     builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="pastcomptype:cycling"))
     builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="pastcomptype:triathlon"))
     builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="pastcomptype:trail"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -802,6 +946,7 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
     builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="pastcomptype:cycling"))
     builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="pastcomptype:triathlon"))
     builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="pastcomptype:trail"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -833,6 +978,9 @@ async def process_past_comp_type(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     distance_unit = await get_distance_unit_name(user_id)
 
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
         f"📝 <b>Шаг 5 из 9</b>\n\n"
@@ -840,7 +988,7 @@ async def process_past_comp_type(callback: CallbackQuery, state: FSMContext):
         f"<i>Например: 42.195, 21.1, 10, 5</i>"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_past_comp_distance)
     await callback.answer()
 
@@ -876,6 +1024,7 @@ async def process_past_comp_distance(message: Message, state: FSMContext):
 
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⏭️ Пропустить результат", callback_data="skip_past_comp_all_result"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await state.set_state(CompetitionStates.waiting_for_past_comp_result)
@@ -909,6 +1058,7 @@ async def process_past_comp_result_time(message: Message, state: FSMContext):
     # Запрашиваем место в общем зачёте
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_place_overall"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         f"✅ Время: <b>{normalized_time}</b>\n\n"
@@ -952,6 +1102,7 @@ async def ask_past_comp_place_age(message, state: FSMContext):
     """Запросить место в возрастной категории"""
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_place_age"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         "📝 <b>Шаг 8 из 9: Место в возрастной категории</b>\n\n"
@@ -994,6 +1145,7 @@ async def ask_past_comp_heart_rate(message, state: FSMContext):
     """Запросить средний пульс"""
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_heart_rate"))
+    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
 
     text = (
         "📝 <b>Шаг 9 из 9: Средний пульс</b>\n\n"

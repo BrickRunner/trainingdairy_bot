@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any, List
 from utils.time_formatter import normalize_time
 
 # Путь к базе данных
-DB_PATH = os.getenv('DB_PATH', 'bot_data.db')
+DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
 # ========== CRUD ДЛЯ СОРЕВНОВАНИЙ ==========
@@ -305,6 +305,57 @@ async def unregister_from_competition(
                 """,
                 (user_id, competition_id)
             )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+# Alias for clearer API
+async def unregister_from_competition_with_distance(
+    user_id: int,
+    competition_id: int,
+    distance: float
+) -> bool:
+    """
+    Отменить регистрацию на соревнование с указанной дистанцией
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования
+        distance: Дистанция
+
+    Returns:
+        True если удаление прошло успешно
+    """
+    return await unregister_from_competition(user_id, competition_id, distance)
+
+
+async def update_target_time(
+    user_id: int,
+    competition_id: int,
+    distance: float,
+    target_time: str
+) -> bool:
+    """
+    Обновить целевое время для регистрации на соревнование
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования
+        distance: Дистанция
+        target_time: Новое целевое время
+
+    Returns:
+        True если обновление прошло успешно
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            UPDATE competition_participants
+            SET target_time = ?
+            WHERE user_id = ? AND competition_id = ? AND distance = ?
+            """,
+            (target_time, user_id, competition_id, distance)
+        )
         await db.commit()
         return cursor.rowcount > 0
 

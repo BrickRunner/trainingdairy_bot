@@ -355,7 +355,7 @@ def format_time_until_competition(competition_date: str) -> str:
         elif delta == 0:
             return "Сегодня!"
         elif delta == 1:
-            return "Завтра!"
+            return "1 день"
         elif delta < 7:
             return f"Через {delta} дней"
         elif delta < 30:

@@ -620,6 +620,171 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("comp:edit_target:"))
+async def edit_target_time(callback: CallbackQuery, state: FSMContext):
+    """Начать изменение целевого времени"""
+    parts = callback.data.split(":")
+    competition_id = int(parts[2])
+    distance = float(parts[3])
+
+    # Получаем информацию о соревновании
+    competition = await get_competition(competition_id)
+
+    if not competition:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    # Сохраняем данные в состоянии
+    await state.update_data(
+        edit_target_comp_id=competition_id,
+        edit_target_distance=distance
+    )
+
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+    dist_str = await format_dist_with_units(distance, callback.from_user.id)
+
+    text = (
+        f"🏃 <b>{competition['name']}</b>\n"
+        f"📏 Дистанция: {dist_str}\n\n"
+        f"Введите новое целевое время в формате ЧЧ:ММ:СС или ММ:СС:\n\n"
+        f"<i>Например:\n"
+        f"• 03:30:00 (3 часа 30 минут)\n"
+        f"• 45:00 (45 минут)\n"
+        f"• 1:30:15 (1 час 30 минут 15 секунд)</i>"
+    )
+
+    await callback.message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(CompetitionStates.waiting_for_target_time_edit)
+    await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_target_time_edit)
+async def process_target_time_edit(message: Message, state: FSMContext):
+    """Обработать новое целевое время"""
+    from utils.time_formatter import validate_time_format
+
+    if message.text == "❌ Отмена":
+        await message.answer(
+            "❌ Изменение целевого времени отменено",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await state.clear()
+        return
+
+    time_text = message.text.strip()
+
+    # Валидация формата
+    if not validate_time_format(time_text):
+        await message.answer(
+            "❌ Некорректный формат времени.\n"
+            "Используйте формат ЧЧ:ММ:СС или ММ:СС\n\n"
+            "Примеры: 03:30:00 или 45:00 или 1:30:15"
+        )
+        return
+
+    # Нормализуем время
+    normalized_time = normalize_time(time_text)
+
+    # Получаем данные из состояния
+    data = await state.get_data()
+    competition_id = data.get('edit_target_comp_id')
+    distance = data.get('edit_target_distance')
+    user_id = message.from_user.id
+
+    # Обновляем целевое время
+    from competitions.competitions_queries import update_target_time
+    success = await update_target_time(user_id, competition_id, distance, normalized_time)
+
+    if success:
+        await message.answer(
+            f"✅ Целевое время обновлено: {normalized_time}",
+            reply_markup=get_main_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ Ошибка при обновлении целевого времени",
+            reply_markup=get_main_menu_keyboard()
+        )
+
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("comp:cancel_registration:"))
+async def cancel_registration(callback: CallbackQuery, state: FSMContext):
+    """Отменить регистрацию на соревнование"""
+    parts = callback.data.split(":")
+    competition_id = int(parts[2])
+    distance = float(parts[3])
+    user_id = callback.from_user.id
+
+    # Получаем информацию о соревновании
+    competition = await get_competition(competition_id)
+
+    if not competition:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+    dist_str = await format_dist_with_units(distance, user_id)
+
+    # Показываем подтверждение
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="✅ Да, отменить",
+            callback_data=f"comp:cancel_registration_confirm:{competition_id}:{distance}"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="❌ Нет, вернуться",
+            callback_data=f"comp:my_view:{competition_id}:{distance}"
+        )
+    )
+
+    text = (
+        f"⚠️ <b>ПОДТВЕРЖДЕНИЕ</b>\n\n"
+        f"Вы действительно хотите отменить участие в соревновании?\n\n"
+        f"🏆 <b>{competition['name']}</b>\n"
+        f"📏 Дистанция: {dist_str}\n\n"
+        f"<i>Вы сможете зарегистрироваться снова позже.</i>"
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("comp:cancel_registration_confirm:"))
+async def confirm_cancel_registration(callback: CallbackQuery, state: FSMContext):
+    """Подтвердить отмену регистрации"""
+    parts = callback.data.split(":")
+    competition_id = int(parts[2])
+    distance = float(parts[3])
+    user_id = callback.from_user.id
+
+    # Отменяем регистрацию
+    from competitions.competitions_queries import unregister_from_competition_with_distance
+    success = await unregister_from_competition_with_distance(user_id, competition_id, distance)
+
+    if success:
+        await callback.answer("✅ Регистрация отменена", show_alert=True)
+
+        # Возвращаемся к списку соревнований
+        from competitions.competitions_handlers import show_my_competitions
+        await show_my_competitions(callback, state)
+    else:
+        await callback.answer("❌ Ошибка при отмене регистрации", show_alert=True)
+
+
 # ========== МОИ РЕЗУЛЬТАТЫ ==========
 
 @router.callback_query(F.data == "comp:my_results")
@@ -722,8 +887,8 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                 formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
 
                 text += f"{i}. <b>{comp['name']}</b>\n"
-                text += f"   📏 {dist_str} • 📅 {formatted_date}\n"
-                text += f"   🆔 ID: {comp['id']}\n"
+                text += f"   📏 {dist_str}\n"
+                text += f"   📅 {formatted_date}\n"
 
                 if comp.get('finish_time'):
                     normalized_time = normalize_time(comp['finish_time'])
@@ -850,24 +1015,25 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
 
     text = (
         "🗑️ <b>УДАЛЕНИЕ РЕЗУЛЬТАТА</b>\n\n"
-        "Выберите соревнование, результат которого хотите удалить:\n\n"
+        "Выберите соревнование для удаления результата:\n\n"
     )
 
     # Получаем формат даты пользователя
     from utils.date_formatter import get_user_date_format, DateFormatter
     user_date_format = await get_user_date_format(user_id)
 
-    for i, comp in enumerate(finished_comps[:10], 1):  # Показываем максимум 10
-        dist_str = format_competition_distance(comp['distance'])
-        formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
-        text += f"{i}. {comp['name']} - {dist_str} ({formatted_date})\n"
-
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
-    # Кнопки для удаления
+    # Кнопки для удаления - показываем название и дату
     for comp in finished_comps[:10]:
-        button_text = f"🗑️ {comp['name'][:25]}..."if len(comp['name']) > 25 else f"🗑️ {comp['name']}"
+        dist_str = format_competition_distance(comp['distance'])
+        formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
+
+        # Формируем короткое название для кнопки
+        short_name = comp['name'][:20] + "..." if len(comp['name']) > 20 else comp['name']
+        button_text = f"{short_name} • {dist_str}"
+
         builder.row(
             InlineKeyboardButton(
                 text=button_text,
@@ -899,20 +1065,36 @@ async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
+    # Получаем информацию об участнике
+    from competitions.competitions_queries import get_user_competitions
+    user_comps = await get_user_competitions(user_id, status_filter='finished')
+    user_comp = next((c for c in user_comps if c['id'] == competition_id), None)
+
+    if not user_comp:
+        await callback.answer("❌ Результат не найден", show_alert=True)
+        return
+
     text = (
         "⚠️ <b>ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ</b>\n\n"
-        f"Вы действительно хотите удалить результат соревнования:\n\n"
+        f"Вы действительно хотите удалить результат?\n\n"
         f"🏆 <b>{comp['name']}</b>\n"
-        f"📅 {comp['date']}\n\n"
-        "❗️ Это действие нельзя отменить!"
+        f"📅 {comp['date']}\n"
+        f"📏 {format_competition_distance(user_comp['distance'])}\n"
     )
+
+    if user_comp.get('finish_time'):
+        text += f"⏱️ Время: {normalize_time(user_comp['finish_time'])}\n"
+
+    text += "\n❗️ <i>Результат будет удалён, но регистрация сохранится</i>"
 
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
     builder.row(
-        InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"comp:delete_confirmed:{competition_id}"),
-        InlineKeyboardButton(text="❌ Отмена", callback_data="comp:delete_result_menu")
+        InlineKeyboardButton(text="🗑️ Удалить результат", callback_data=f"comp:delete_confirmed:{competition_id}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Отмена", callback_data="comp:delete_result_menu")
     )
 
     await callback.message.edit_text(
