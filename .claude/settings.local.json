@@ -64,7 +64,8 @@
       "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/reminder_scheduler.py competitions/competitions_queries.py competitions/competitions_handlers.py)",
       "Bash(\"venv/Scripts/python.exe\" populate_personal_records.py)",
       "Bash(\"venv/Scripts/python.exe\" -m py_compile bot/fsm.py competitions/competitions_handlers.py competitions/competitions_queries.py)",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_keyboards.py)"
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_keyboards.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/custom_competitions_handlers.py registration/registration_keyboards.py)"
     ],
     "deny": [],
     "ask": []

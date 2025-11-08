@@ -11,9 +11,9 @@ import logging
 import json
 from datetime import datetime, timedelta, date
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, KeyboardButton
 from aiogram.fsm.context import FSMContext
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from bot.fsm import CompetitionStates
 from bot.calendar_keyboard import CalendarKeyboard
@@ -44,9 +44,6 @@ router = Router()
 async def start_create_custom_competition(callback: CallbackQuery, state: FSMContext):
     """Начать добавление соревнования вручную"""
 
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
-
     text = (
         "🔍 <b>ДОБАВЛЕНИЕ СОРЕВНОВАНИЯ ВРУЧНУЮ</b>\n\n"
         "Вы можете добавить соревнование, в котором планируете участвовать.\n\n"
@@ -55,7 +52,11 @@ async def start_create_custom_competition(callback: CallbackQuery, state: FSMCon
         "<i>Например: Московский марафон 2026</i>"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
+
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_comp_name)
     await callback.answer()
 
@@ -66,6 +67,22 @@ async def process_comp_name(message: Message, state: FSMContext):
 
     comp_name = message.text.strip()
 
+    # Проверка на отмену
+    if comp_name == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
     if not comp_name or len(comp_name) < 3:
         await message.answer(
             "❌ Название слишком короткое. Введите название минимум из 3 символов."
@@ -75,10 +92,13 @@ async def process_comp_name(message: Message, state: FSMContext):
     # Сохраняем название
     await state.update_data(comp_name=comp_name)
 
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🏙️ Москва", callback_data="comp:city:Москва"))
-    builder.row(InlineKeyboardButton(text="🏙️ Санкт-Петербург", callback_data="comp:city:Санкт-Петербург"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    from aiogram.utils.keyboard import ReplyKeyboardBuilder
+
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text="Москва"))
+    builder.row(KeyboardButton(text="Санкт-Петербург"))
+    builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Название: <b>{comp_name}</b>\n\n"
@@ -87,41 +107,36 @@ async def process_comp_name(message: Message, state: FSMContext):
         f"<i>Например: Казань, Екатеринбург, Нижний Новгород</i>"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_comp_city)
-
-
-@router.callback_query(F.data.startswith("comp:city:"), CompetitionStates.waiting_for_comp_city)
-async def process_comp_city_button(callback: CallbackQuery, state: FSMContext):
-    """Обработать выбор города из кнопок"""
-    comp_city = callback.data.split(":", 2)[2]
-
-    # Сохраняем город
-    await state.update_data(comp_city=comp_city)
-
-    # Показываем календарь для выбора даты
-    calendar = CalendarKeyboard.create_calendar(
-        calendar_format=1,
-        current_date=datetime.now(),
-        callback_prefix="cal_comp"
-    )
-
-    text = (
-        f"✅ Город: <b>{comp_city}</b>\n\n"
-        f"📝 <b>Шаг 3 из 6</b>\n\n"
-        f"Выберите <b>дату</b> соревнования из календаря:"
-    )
-
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=calendar)
-    await state.set_state(CompetitionStates.waiting_for_comp_date)
-    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_comp_city)
 async def process_comp_city(message: Message, state: FSMContext):
-    """Обработать город соревнования (текстовый ввод)"""
+    """Обработать город соревнования"""
+    from aiogram.types import ReplyKeyboardRemove
 
     comp_city = message.text.strip()
+
+    # Проверка на отмену
+    if comp_city == "❌ Отменить":
+        await state.clear()
+        from competitions.competitions_handlers import show_competitions_menu
+        await message.answer(
+            "Отменено",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        # Нужно создать callback-подобный объект для show_competitions_menu
+        from types import SimpleNamespace
+        fake_callback = SimpleNamespace(
+            message=message,
+            from_user=message.from_user,
+            answer=lambda *args, **kwargs: None
+        )
+        from aiogram.fsm.context import FSMContext as FSM
+        temp_state = await state.get_state()
+        await show_competitions_menu(fake_callback, state)
+        return
 
     if not comp_city or len(comp_city) < 2:
         await message.answer(
@@ -136,8 +151,14 @@ async def process_comp_city(message: Message, state: FSMContext):
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
-        callback_prefix="cal_comp"
+        callback_prefix="cal_comp",
+        show_cancel=False
     )
+
+    # Создаём reply-клавиатуру с кнопкой отмены
+    from aiogram.utils.keyboard import ReplyKeyboardBuilder
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Город: <b>{comp_city}</b>\n\n"
@@ -146,6 +167,7 @@ async def process_comp_city(message: Message, state: FSMContext):
     )
 
     await message.answer(text, parse_mode="HTML", reply_markup=calendar)
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_comp_date)
 
 
@@ -175,13 +197,13 @@ async def handle_comp_calendar_day_select(callback: CallbackQuery, state: FSMCon
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
     # Создаём клавиатуру с типами
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🏃 Бег", callback_data="comptype:running"))
-    builder.row(InlineKeyboardButton(text="🏊 Плавание", callback_data="comptype:swimming"))
-    builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="comptype:cycling"))
-    builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="comptype:triathlon"))
-    builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="comptype:trail"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="🏃 Бег"))
+    reply_builder.row(KeyboardButton(text="🏊 Плавание"))
+    reply_builder.row(KeyboardButton(text="🚴 Велоспорт"))
+    reply_builder.row(KeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон"))
+    reply_builder.row(KeyboardButton(text="⛰️ Трейл"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -189,7 +211,8 @@ async def handle_comp_calendar_day_select(callback: CallbackQuery, state: FSMCon
         f"Выберите <b>вид спорта</b>:"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_comp_type)
     await callback.answer()
 
@@ -240,7 +263,8 @@ async def handle_comp_calendar_navigation(callback: CallbackQuery, state: FSMCon
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=cal_format,
         current_date=current_date,
-        callback_prefix="cal_comp"
+        callback_prefix="cal_comp",
+        show_cancel=False
     )
 
     try:
@@ -254,8 +278,27 @@ async def handle_comp_calendar_navigation(callback: CallbackQuery, state: FSMCon
 @router.message(CompetitionStates.waiting_for_comp_date)
 async def process_comp_date(message: Message, state: FSMContext):
     """Обработать дату соревнования (текстовый ввод как альтернатива календарю)"""
+    from aiogram.types import ReplyKeyboardRemove
 
     date_text = message.text.strip()
+
+    # Проверка на отмену
+    if date_text == "❌ Отменить":
+        await state.clear()
+        from competitions.competitions_handlers import show_competitions_menu
+        await message.answer(
+            "Отменено",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        from types import SimpleNamespace
+        fake_callback = SimpleNamespace(
+            message=message,
+            from_user=message.from_user,
+            answer=lambda *args, **kwargs: None
+        )
+        await show_competitions_menu(fake_callback, state)
+        return
+
     user_id = message.from_user.id
 
     # Парсим дату с учетом формата пользователя
@@ -284,13 +327,13 @@ async def process_comp_date(message: Message, state: FSMContext):
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
     # Создаём клавиатуру с типами
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🏃 Бег", callback_data="comptype:running"))
-    builder.row(InlineKeyboardButton(text="🏊 Плавание", callback_data="comptype:swimming"))
-    builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="comptype:cycling"))
-    builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="comptype:triathlon"))
-    builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="comptype:trail"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="🏃 Бег"))
+    reply_builder.row(KeyboardButton(text="🏊 Плавание"))
+    reply_builder.row(KeyboardButton(text="🚴 Велоспорт"))
+    reply_builder.row(KeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон"))
+    reply_builder.row(KeyboardButton(text="⛰️ Трейл"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -298,33 +341,55 @@ async def process_comp_date(message: Message, state: FSMContext):
         f"Выберите <b>вид спорта</b>:"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_comp_type)
 
 
-@router.callback_query(F.data.startswith("comptype:"), CompetitionStates.waiting_for_comp_type)
-async def process_comp_type(callback: CallbackQuery, state: FSMContext):
+@router.message(CompetitionStates.waiting_for_comp_type)
+async def process_comp_type(message: Message, state: FSMContext):
     """Обработать тип соревнования"""
 
+    comp_type_text = message.text.strip()
+
+    # Проверка на отмену
+    if comp_type_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
     comp_type_map = {
-        "running": "бег",
-        "swimming": "плавание",
-        "cycling": "велоспорт",
-        "triathlon": "триатлон",
-        "trail": "трейл"
+        "🏃 Бег": "бег",
+        "🏊 Плавание": "плавание",
+        "🚴 Велоспорт": "велоспорт",
+        "🏊‍♂️🚴‍♂️🏃 Триатлон": "триатлон",
+        "⛰️ Трейл": "трейл"
     }
 
-    comp_type_key = callback.data.split(":")[1]
-    comp_type = comp_type_map.get(comp_type_key, "бег")
+    comp_type = comp_type_map.get(comp_type_text)
+
+    if not comp_type:
+        await message.answer("❌ Неверный вид спорта. Выберите из предложенных вариантов.")
+        return
 
     # Сохраняем тип
     await state.update_data(comp_type=comp_type)
 
-    user_id = callback.from_user.id
+    user_id = message.from_user.id
     distance_unit = await get_distance_unit_name(user_id)
 
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
@@ -347,16 +412,34 @@ async def process_comp_type(callback: CallbackQuery, state: FSMContext):
             f"• 6.2 (для 10 км)</i>"
         )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_comp_distance)
-    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_comp_distance)
 async def process_comp_distance(message: Message, state: FSMContext):
     """Обработать дистанцию соревнования"""
 
-    distance_text = message.text.strip().replace(',', '.')
+    distance_text = message.text.strip()
+
+    # Проверка на отмену
+    if distance_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
+    distance_text = distance_text.replace(',', '.')
     user_id = message.from_user.id
 
     # Парсим дистанцию с учетом единиц пользователя
@@ -384,10 +467,10 @@ async def process_comp_distance(message: Message, state: FSMContext):
     # Форматируем название дистанции
     distance_name = await format_competition_distance(distance_km, user_id)
 
-    # Создаем клавиатуру с кнопкой "Пропустить"
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="comp:skip_target"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    # Создаем клавиатуру с кнопками "Пропустить" и "Отменить"
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="⏭️ Пропустить"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Дистанция: <b>{distance_name}</b>\n\n"
@@ -395,11 +478,11 @@ async def process_comp_distance(message: Message, state: FSMContext):
         f"Введите <b>целевое время</b>:\n"
         f"<i>Формат: ЧЧ:ММ:СС или Ч:М:С\n"
         f"Например: 03:30:00 или 3:30:0 (3 часа 30 минут)\n"
-        f"Или: 00:45:00 или 0:45:0 (45 минут)</i>\n\n"
-        f"Или нажмите кнопку ниже, чтобы пропустить."
+        f"Или: 00:45:00 или 0:45:0 (45 минут)</i>"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_comp_target)
 
 
@@ -507,18 +590,33 @@ async def cancel_competition_creation(callback: CallbackQuery, state: FSMContext
     await show_competitions_menu(callback, state)
 
 
-@router.callback_query(F.data == "comp:skip_target", CompetitionStates.waiting_for_comp_target)
-async def skip_target_time(callback: CallbackQuery, state: FSMContext):
-    """Пропустить целевое время и создать соревнование"""
-    await create_competition_from_state(callback.from_user.id, state, None, callback.message)
-    await callback.answer()
-
-
 @router.message(CompetitionStates.waiting_for_comp_target)
 async def process_comp_target_and_create(message: Message, state: FSMContext):
     """Обработать целевое время и создать соревнование"""
 
     target_text = message.text.strip()
+
+    # Проверка на отмену
+    if target_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
+    # Проверка на пропуск
+    if target_text == "⏭️ Пропустить":
+        await create_competition_from_state(message.from_user.id, state, None, message)
+        return
+
     target_time = None
 
     # Парсим время
@@ -676,9 +774,6 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
 async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMContext):
     """Начать ручное добавление прошедшего соревнования"""
 
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
-
     text = (
         "🏁 <b>ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ</b>\n\n"
         "Вы можете добавить соревнование, в котором уже участвовали.\n\n"
@@ -687,7 +782,11 @@ async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMC
         "<i>Например: Московский марафон 2024</i>"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
+
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_name)
     await callback.answer()
 
@@ -698,6 +797,22 @@ async def process_past_comp_name(message: Message, state: FSMContext):
 
     comp_name = message.text.strip()
 
+    # Проверка на отмену
+    if comp_name == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
     if not comp_name or len(comp_name) < 3:
         await message.answer(
             "❌ Название слишком короткое. Введите название минимум из 3 символов."
@@ -707,10 +822,13 @@ async def process_past_comp_name(message: Message, state: FSMContext):
     # Сохраняем название
     await state.update_data(comp_name=comp_name, is_past_competition=True)
 
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🏙️ Москва", callback_data="comp:past_city:Москва"))
-    builder.row(InlineKeyboardButton(text="🏙️ Санкт-Петербург", callback_data="comp:past_city:Санкт-Петербург"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    from aiogram.types import KeyboardButton
+    from aiogram.utils.keyboard import ReplyKeyboardBuilder
+
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text="Москва"))
+    builder.row(KeyboardButton(text="Санкт-Петербург"))
+    builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Название: <b>{comp_name}</b>\n\n"
@@ -719,46 +837,33 @@ async def process_past_comp_name(message: Message, state: FSMContext):
         f"<i>Например: Казань, Екатеринбург, Нижний Новгород</i>"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_city)
-
-
-@router.callback_query(F.data.startswith("comp:past_city:"), CompetitionStates.waiting_for_past_comp_city)
-async def process_past_comp_city_button(callback: CallbackQuery, state: FSMContext):
-    """Обработать выбор города из кнопок для прошедшего соревнования"""
-    comp_city = callback.data.split(":", 2)[2]
-
-    # Сохраняем город
-    await state.update_data(comp_city=comp_city)
-
-    # Показываем календарь для выбора даты (без ограничения на прошлые даты)
-    calendar = CalendarKeyboard.create_calendar(
-        calendar_format=1,
-        current_date=datetime.now(),
-        callback_prefix="cal_past_comp"
-    )
-
-    user_id = callback.from_user.id
-    date_format_desc = await get_date_format_description(user_id)
-
-    text = (
-        f"✅ Город: <b>{comp_city}</b>\n\n"
-        f"📝 <b>Шаг 3 из 9</b>\n\n"
-        f"Выберите <b>дату</b> соревнования из календаря\n"
-        f"или введите вручную в формате: <b>{date_format_desc}</b>\n\n"
-        f"<i>Например: {datetime.now().strftime('%d.%m.%Y')}</i>"
-    )
-
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=calendar)
-    await state.set_state(CompetitionStates.waiting_for_past_comp_date)
-    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_past_comp_city)
 async def process_past_comp_city(message: Message, state: FSMContext):
-    """Обработать город прошедшего соревнования (текстовый ввод)"""
+    """Обработать город прошедшего соревнования"""
+    from aiogram.types import ReplyKeyboardRemove
 
     comp_city = message.text.strip()
+
+    # Проверка на отмену
+    if comp_city == "❌ Отменить":
+        await state.clear()
+        from competitions.competitions_handlers import show_competitions_menu
+        await message.answer(
+            "Отменено",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        from types import SimpleNamespace
+        fake_callback = SimpleNamespace(
+            message=message,
+            from_user=message.from_user,
+            answer=lambda *args, **kwargs: None
+        )
+        await show_competitions_menu(fake_callback, state)
+        return
 
     if not comp_city or len(comp_city) < 2:
         await message.answer(
@@ -773,8 +878,14 @@ async def process_past_comp_city(message: Message, state: FSMContext):
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
-        callback_prefix="cal_past_comp"
+        callback_prefix="cal_past_comp",
+        show_cancel=False
     )
+
+    # Создаём reply-клавиатуру с кнопкой отмены
+    from aiogram.utils.keyboard import ReplyKeyboardBuilder
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     user_id = message.from_user.id
     date_format_desc = await get_date_format_description(user_id)
@@ -788,6 +899,7 @@ async def process_past_comp_city(message: Message, state: FSMContext):
     )
 
     await message.answer(text, parse_mode="HTML", reply_markup=calendar)
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_date)
 
 
@@ -824,13 +936,13 @@ async def handle_past_comp_calendar_day_select(callback: CallbackQuery, state: F
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
     # Создаём клавиатуру с типами
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🏃 Бег", callback_data="pastcomptype:running"))
-    builder.row(InlineKeyboardButton(text="🏊 Плавание", callback_data="pastcomptype:swimming"))
-    builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="pastcomptype:cycling"))
-    builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="pastcomptype:triathlon"))
-    builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="pastcomptype:trail"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="🏃 Бег"))
+    reply_builder.row(KeyboardButton(text="🏊 Плавание"))
+    reply_builder.row(KeyboardButton(text="🚴 Велоспорт"))
+    reply_builder.row(KeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон"))
+    reply_builder.row(KeyboardButton(text="⛰️ Трейл"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -838,7 +950,8 @@ async def handle_past_comp_calendar_day_select(callback: CallbackQuery, state: F
         f"Выберите <b>вид спорта</b>:"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_type)
     await callback.answer()
 
@@ -891,7 +1004,8 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=cal_format,
         current_date=current_date,
-        callback_prefix="cal_past_comp"
+        callback_prefix="cal_past_comp",
+        show_cancel=False
     )
 
     await callback.message.edit_reply_markup(reply_markup=calendar)
@@ -901,8 +1015,27 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
 @router.message(CompetitionStates.waiting_for_past_comp_date)
 async def process_past_comp_date_text(message: Message, state: FSMContext):
     """Обработать дату прошедшего соревнования (текстовый ввод)"""
+    from aiogram.types import ReplyKeyboardRemove
 
     date_text = message.text.strip()
+
+    # Проверка на отмену
+    if date_text == "❌ Отменить":
+        await state.clear()
+        from competitions.competitions_handlers import show_competitions_menu
+        await message.answer(
+            "Отменено",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        from types import SimpleNamespace
+        fake_callback = SimpleNamespace(
+            message=message,
+            from_user=message.from_user,
+            answer=lambda *args, **kwargs: None
+        )
+        await show_competitions_menu(fake_callback, state)
+        return
+
     user_id = message.from_user.id
 
     # Парсим дату с учетом формата пользователя
@@ -940,13 +1073,13 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
     # Создаём клавиатуру с типами
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🏃 Бег", callback_data="pastcomptype:running"))
-    builder.row(InlineKeyboardButton(text="🏊 Плавание", callback_data="pastcomptype:swimming"))
-    builder.row(InlineKeyboardButton(text="🚴 Велоспорт", callback_data="pastcomptype:cycling"))
-    builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="pastcomptype:triathlon"))
-    builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="pastcomptype:trail"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="🏃 Бег"))
+    reply_builder.row(KeyboardButton(text="🏊 Плавание"))
+    reply_builder.row(KeyboardButton(text="🚴 Велоспорт"))
+    reply_builder.row(KeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон"))
+    reply_builder.row(KeyboardButton(text="⛰️ Трейл"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Дата: <b>{formatted_date}</b>\n\n"
@@ -954,32 +1087,54 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
         f"Выберите <b>вид спорта</b>:"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_type)
 
 
-@router.callback_query(F.data.startswith("pastcomptype:"))
-async def process_past_comp_type(callback: CallbackQuery, state: FSMContext):
+@router.message(CompetitionStates.waiting_for_past_comp_type)
+async def process_past_comp_type(message: Message, state: FSMContext):
     """Обработать тип прошедшего соревнования"""
 
+    comp_type_text = message.text.strip()
+
+    # Проверка на отмену
+    if comp_type_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
     comp_type_map = {
-        "running": "бег",
-        "swimming": "плавание",
-        "cycling": "велоспорт",
-        "triathlon": "триатлон",
-        "trail": "трейл"
+        "🏃 Бег": "бег",
+        "🏊 Плавание": "плавание",
+        "🚴 Велоспорт": "велоспорт",
+        "🏊‍♂️🚴‍♂️🏃 Триатлон": "триатлон",
+        "⛰️ Трейл": "трейл"
     }
 
-    comp_type_key = callback.data.split(":")[1]
-    comp_type = comp_type_map.get(comp_type_key, "забег")
+    comp_type = comp_type_map.get(comp_type_text)
+
+    if not comp_type:
+        await message.answer("❌ Неверный вид спорта. Выберите из предложенных вариантов.")
+        return
 
     await state.update_data(comp_type=comp_type)
 
-    user_id = callback.from_user.id
+    user_id = message.from_user.id
     distance_unit = await get_distance_unit_name(user_id)
 
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
@@ -988,17 +1143,35 @@ async def process_past_comp_type(callback: CallbackQuery, state: FSMContext):
         f"<i>Например: 42.195, 21.1, 10, 5</i>"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_distance)
-    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_past_comp_distance)
 async def process_past_comp_distance(message: Message, state: FSMContext):
     """Обработать дистанцию прошедшего соревнования"""
 
+    distance_text = message.text.strip()
+
+    # Проверка на отмену
+    if distance_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
     user_id = message.from_user.id
-    distance_km = await parse_user_distance_input(message.text, user_id)
+    distance_km = await parse_user_distance_input(distance_text, user_id)
 
     if not distance_km or distance_km <= 0:
         await message.answer(
@@ -1018,15 +1191,15 @@ async def process_past_comp_distance(message: Message, state: FSMContext):
         f"• 1:23:45.50\n"
         f"• 42:30.25\n"
         f"• 1:23:45\n"
-        f"• 2:0:0</i>\n\n"
-        f"Или нажмите \"Пропустить\", если не добавляете результат"
+        f"• 2:0:0</i>"
     )
 
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="⏭️ Пропустить результат", callback_data="skip_past_comp_all_result"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="⏭️ Пропустить"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_result)
 
 
@@ -1043,6 +1216,27 @@ async def process_past_comp_result_time(message: Message, state: FSMContext):
 
     time_text = message.text.strip()
 
+    # Проверка на отмену
+    if time_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
+    # Проверка на пропуск
+    if time_text == "⏭️ Пропустить":
+        await finalize_past_competition(message, state, has_result=False)
+        return
+
     # Валидация формата времени
     if not validate_time_format(time_text):
         await message.answer(
@@ -1056,18 +1250,18 @@ async def process_past_comp_result_time(message: Message, state: FSMContext):
     await state.update_data(finish_time=normalized_time)
 
     # Запрашиваем место в общем зачёте
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_place_overall"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="⏭️ Пропустить"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         f"✅ Время: <b>{normalized_time}</b>\n\n"
         f"📝 <b>Шаг 7 из 9: Место в общем зачёте</b>\n\n"
-        f"Введите ваше <b>место в общем зачёте</b> (число):\n"
-        f"Или нажмите \"Пропустить\", если не помните"
+        f"Введите ваше <b>место в общем зачёте</b> (число):"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_place_overall)
 
 
@@ -1083,8 +1277,32 @@ async def skip_past_place_overall(callback: CallbackQuery, state: FSMContext):
 async def process_past_comp_place_overall(message: Message, state: FSMContext):
     """Обработать место в общем зачёте"""
 
+    place_text = message.text.strip()
+
+    # Проверка на отмену
+    if place_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
+    # Проверка на пропуск
+    if place_text == "⏭️ Пропустить":
+        await state.update_data(place_overall=None)
+        await ask_past_comp_place_age(message, state)
+        return
+
     try:
-        place = int(message.text.strip())
+        place = int(place_text)
         if place <= 0:
             await message.answer("❌ Место должно быть положительным числом")
             return
@@ -1100,17 +1318,17 @@ async def process_past_comp_place_overall(message: Message, state: FSMContext):
 
 async def ask_past_comp_place_age(message, state: FSMContext):
     """Запросить место в возрастной категории"""
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_place_age"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="⏭️ Пропустить"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         "📝 <b>Шаг 8 из 9: Место в возрастной категории</b>\n\n"
-        "Введите ваше <b>место в возрастной категории</b> (число):\n"
-        "Или нажмите \"Пропустить\", если не помните"
+        "Введите ваше <b>место в возрастной категории</b> (число):"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_place_age)
 
 
@@ -1126,8 +1344,32 @@ async def skip_past_place_age(callback: CallbackQuery, state: FSMContext):
 async def process_past_comp_place_age(message: Message, state: FSMContext):
     """Обработать место в возрастной категории"""
 
+    place_text = message.text.strip()
+
+    # Проверка на отмену
+    if place_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
+    # Проверка на пропуск
+    if place_text == "⏭️ Пропустить":
+        await state.update_data(place_age=None)
+        await ask_past_comp_heart_rate(message, state)
+        return
+
     try:
-        place = int(message.text.strip())
+        place = int(place_text)
         if place <= 0:
             await message.answer("❌ Место должно быть положительным числом")
             return
@@ -1143,17 +1385,17 @@ async def process_past_comp_place_age(message: Message, state: FSMContext):
 
 async def ask_past_comp_heart_rate(message, state: FSMContext):
     """Запросить средний пульс"""
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_past_heart_rate"))
-    builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="comp:cancel_creation"))
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="⏭️ Пропустить"))
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     text = (
         "📝 <b>Шаг 9 из 9: Средний пульс</b>\n\n"
-        "Введите ваш <b>средний пульс</b> за соревнование (уд/мин):\n"
-        "Или нажмите \"Пропустить\", если не помните"
+        "Введите ваш <b>средний пульс</b> за соревнование (уд/мин):"
     )
 
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML")
+    await message.answer("👇", reply_markup=reply_builder.as_markup(resize_keyboard=True))
     await state.set_state(CompetitionStates.waiting_for_past_comp_heart_rate)
 
 
@@ -1169,8 +1411,32 @@ async def skip_past_heart_rate(callback: CallbackQuery, state: FSMContext):
 async def process_past_comp_heart_rate(message: Message, state: FSMContext):
     """Обработать средний пульс и завершить"""
 
+    hr_text = message.text.strip()
+
+    # Проверка на отмену
+    if hr_text == "❌ Отменить":
+        from aiogram.types import ReplyKeyboardRemove
+        await state.clear()
+        await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        return
+
+    # Проверка на пропуск
+    if hr_text == "⏭️ Пропустить":
+        await state.update_data(heart_rate=None)
+        await finalize_past_competition(message, state, has_result=True)
+        return
+
     try:
-        hr = int(message.text.strip())
+        hr = int(hr_text)
         if hr <= 0 or hr > 250:
             await message.answer("❌ Пульс должен быть в диапазоне 1-250 уд/мин")
             return
@@ -1249,6 +1515,7 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         text += "\n✅ Соревнование добавлено в ваши результаты!"
 
         builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="➕ Добавить ещё результат", callback_data="comp:add_past"))
         builder.row(InlineKeyboardButton(text="🏅 Мои результаты", callback_data="comp:my_results"))
         builder.row(InlineKeyboardButton(text="◀️ Главное меню", callback_data="comp:menu"))
 

@@ -29,7 +29,9 @@ class CalendarKeyboard:
     def create_calendar(
         calendar_format: int = 1,
         current_date: Optional[datetime] = None,
-        callback_prefix: str = "cal"
+        callback_prefix: str = "cal",
+        show_cancel: bool = False,
+        cancel_callback: str = "comp:cancel_creation"
     ) -> InlineKeyboardMarkup:
         """
         Создает календарь в нужном формате
@@ -37,24 +39,26 @@ class CalendarKeyboard:
         :param calendar_format: 1=дни, 2=месяцы, 3=годы, 4=десятилетия
         :param current_date: текущая дата для отображения
         :param callback_prefix: префикс для callback_data
+        :param show_cancel: показывать ли кнопку отмены
+        :param cancel_callback: callback для кнопки отмены
         :return: InlineKeyboardMarkup
         """
         if current_date is None:
             current_date = datetime.now()
 
         if calendar_format == 1:
-            return CalendarKeyboard._create_days_calendar(current_date, callback_prefix)
+            return CalendarKeyboard._create_days_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
         elif calendar_format == 2:
-            return CalendarKeyboard._create_months_calendar(current_date, callback_prefix)
+            return CalendarKeyboard._create_months_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
         elif calendar_format == 3:
-            return CalendarKeyboard._create_years_calendar(current_date, callback_prefix)
+            return CalendarKeyboard._create_years_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
         elif calendar_format == 4:
-            return CalendarKeyboard._create_decades_calendar(current_date, callback_prefix)
+            return CalendarKeyboard._create_decades_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
         else:
             raise ValueError(f"Неверный формат календаря: {calendar_format}")
 
     @staticmethod
-    def _create_days_calendar(date: datetime, prefix: str) -> InlineKeyboardMarkup:
+    def _create_days_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
         """Создает календарь с днями месяца"""
         keyboard = []
 
@@ -132,10 +136,16 @@ class CalendarKeyboard:
         if current_row:
             keyboard.append(current_row)
 
+        # Добавляем кнопку отмены если нужно
+        if show_cancel:
+            keyboard.append([
+                InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
+            ])
+
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_months_calendar(date: datetime, prefix: str) -> InlineKeyboardMarkup:
+    def _create_months_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
         """Создает календарь с выбором месяца"""
         keyboard = []
         year = date.year
@@ -170,10 +180,16 @@ class CalendarKeyboard:
                 )
             keyboard.append(month_row)
 
+        # Добавляем кнопку отмены если нужно
+        if show_cancel:
+            keyboard.append([
+                InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
+            ])
+
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_years_calendar(date: datetime, prefix: str) -> InlineKeyboardMarkup:
+    def _create_years_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
         """Создает календарь с выбором года"""
         keyboard = []
         year = date.year
@@ -223,10 +239,16 @@ class CalendarKeyboard:
         if current_row:
             keyboard.append(current_row)
 
+        # Добавляем кнопку отмены если нужно
+        if show_cancel:
+            keyboard.append([
+                InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
+            ])
+
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_decades_calendar(date: datetime, prefix: str) -> InlineKeyboardMarkup:
+    def _create_decades_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
         """Создает календарь с выбором десятилетия"""
         keyboard = []
         year = date.year
@@ -282,6 +304,12 @@ class CalendarKeyboard:
 
         if current_row:
             keyboard.append(current_row)
+
+        # Добавляем кнопку отмены если нужно
+        if show_cancel:
+            keyboard.append([
+                InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
+            ])
 
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 

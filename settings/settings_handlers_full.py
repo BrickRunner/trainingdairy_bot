@@ -88,7 +88,16 @@ async def send_profile_menu(message: Message, user_id: int):
         info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
-        info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+
+        gender = settings.get('gender')
+        if gender == 'male':
+            gender_text = '👨 Мужской'
+        elif gender == 'female':
+            gender_text = '👩 Женский'
+        else:
+            gender_text = 'не указан'
+        info_text += f"⚧️ Пол: {gender_text}\n"
+
         weight_unit = settings.get('weight_unit', 'кг')
         weight_value = settings.get('weight')
         weight_display = f"{weight_value:.2f}" if weight_value else 'не указан'
@@ -229,7 +238,16 @@ async def settings_menu(message: Message, state: FSMContext):
         info_text += f"👤 Имя: {settings.get('name') or 'не указано'}\n"
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
-        info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+
+        gender = settings.get('gender')
+        if gender == 'male':
+            gender_text = '👨 Мужской'
+        elif gender == 'female':
+            gender_text = '👩 Женский'
+        else:
+            gender_text = 'не указан'
+        info_text += f"⚧️ Пол: {gender_text}\n"
+
         weight_value = settings.get('weight')
         weight_unit = settings.get('weight_unit', 'кг')
         weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'
@@ -483,7 +501,16 @@ async def callback_save_gender(callback: CallbackQuery):
             info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
             birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
             info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
-            info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+
+            gender = settings.get('gender')
+            if gender == 'male' or gender == 'мужской':
+                gender_text = '👨 Мужской'
+            elif gender == 'female' or gender == 'женский':
+                gender_text = '👩 Женский'
+            else:
+                gender_text = 'не указан'
+            info_text += f"⚧️ Пол: {gender_text}\n"
+
             weight_unit = settings.get('weight_unit', 'кг')
             info_text += f"⚖️ Вес: {settings.get('weight') or 'не указан'} {weight_unit}\n"
             info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
@@ -668,7 +695,16 @@ async def callback_save_training_types(callback: CallbackQuery, state: FSMContex
         info_text += f"✏️ Имя: {settings.get('name') or 'не указано'}\n"
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
-        info_text += f"⚧️ Пол: {settings.get('gender') or 'не указан'}\n"
+
+        gender = settings.get('gender')
+        if gender == 'male' or gender == 'мужской':
+            gender_text = '👨 Мужской'
+        elif gender == 'female' or gender == 'женский':
+            gender_text = '👩 Женский'
+        else:
+            gender_text = 'не указан'
+        info_text += f"⚧️ Пол: {gender_text}\n"
+
         weight_value = settings.get('weight')
         weight_unit = settings.get('weight_unit', 'кг')
         weight_display = f"{weight_value:.1f}" if weight_value else 'не указан'

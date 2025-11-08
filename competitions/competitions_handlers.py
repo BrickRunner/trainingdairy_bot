@@ -699,18 +699,81 @@ async def process_target_time_edit(message: Message, state: FSMContext):
     from competitions.competitions_queries import update_target_time
     success = await update_target_time(user_id, competition_id, distance, normalized_time)
 
+    await state.clear()
+
     if success:
-        await message.answer(
-            f"✅ Целевое время обновлено: {normalized_time}",
-            reply_markup=get_main_menu_keyboard()
-        )
+        await message.answer(f"✅ Целевое время обновлено: {normalized_time}")
+
+        # Возвращаемся в список "Мои соревнования"
+        competitions = await get_user_competitions(user_id, status_filter='upcoming')
+
+        if not competitions:
+            text = (
+                "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
+                "У вас пока нет запланированных соревнований.\n\n"
+                "Перейдите в раздел 'Найти соревнования' чтобы зарегистрироваться на забег!"
+            )
+            from aiogram.utils.keyboard import InlineKeyboardBuilder
+            builder = InlineKeyboardBuilder()
+            builder.row(
+                InlineKeyboardButton(text="🔍 Найти соревнования", callback_data="comp:search")
+            )
+            builder.row(
+                InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
+            )
+
+            await message.answer(
+                text,
+                reply_markup=builder.as_markup(),
+                parse_mode="HTML"
+            )
+        else:
+            # Копируем код отображения списка соревнований
+            text = "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
+
+            from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+            from competitions.competitions_keyboards import format_time_until_competition
+
+            for i, comp in enumerate(competitions, 1):
+                distance_str = await format_dist_with_units(comp['distance'], user_id)
+                date_str = await format_competition_date(comp['date'], user_id)
+                time_until = format_time_until_competition(comp['date'])
+
+                text += f"{i}. <b>{comp['name']}</b>\n"
+                text += f"   📏 {distance_str} • 📅 {date_str}\n"
+                text += f"   ⏱ До старта: {time_until}\n"
+
+                if comp.get('target_time'):
+                    text += f"   🎯 Цель: {comp['target_time']}\n"
+
+                text += "\n"
+
+            from aiogram.utils.keyboard import InlineKeyboardBuilder
+            builder = InlineKeyboardBuilder()
+
+            for i, comp in enumerate(competitions, 1):
+                button_text = f"{i}. {comp['name'][:25]}..." if len(comp['name']) > 25 else f"{i}. {comp['name']}"
+                builder.row(
+                    InlineKeyboardButton(
+                        text=button_text,
+                        callback_data=f"comp:view:{comp['id']}"
+                    )
+                )
+
+            builder.row(
+                InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
+            )
+
+            await message.answer(
+                text,
+                reply_markup=builder.as_markup(),
+                parse_mode="HTML"
+            )
     else:
         await message.answer(
             "❌ Ошибка при обновлении целевого времени",
             reply_markup=get_main_menu_keyboard()
         )
-
-    await state.clear()
 
 
 @router.callback_query(F.data.startswith("comp:cancel_registration:"))
