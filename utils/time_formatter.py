@@ -203,3 +203,42 @@ def calculate_pace(time_str: str, distance_km: float) -> Optional[str]:
     seconds = pace_seconds % 60
 
     return f"{minutes}:{seconds:02d}"
+
+
+async def calculate_pace_with_unit(time_str: str, distance_km: float, user_id: int) -> Optional[str]:
+    """
+    Рассчитать темп с учетом единицы измерения пользователя
+
+    Args:
+        time_str: Время в формате HH:MM:SS или MM:SS
+        distance_km: Дистанция в километрах
+        user_id: ID пользователя
+
+    Returns:
+        Темп в формате MM:SS/км или MM:SS/миля с указанием единицы, или None при ошибке
+    """
+    if not time_str or not distance_km or distance_km <= 0:
+        return None
+
+    from database.queries import get_user_settings
+
+    total_seconds = parse_time_to_seconds(time_str)
+    if total_seconds is None:
+        return None
+
+    settings = await get_user_settings(user_id)
+    distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+    if distance_unit == 'км':
+        pace_seconds = int(total_seconds / distance_km)
+        minutes = pace_seconds // 60
+        seconds = pace_seconds % 60
+        return f"{minutes}:{seconds:02d}/км"
+    else:
+        # Конвертируем в мили
+        from competitions.competitions_utils import km_to_miles
+        distance_miles = km_to_miles(distance_km)
+        pace_seconds = int(total_seconds / distance_miles)
+        minutes = pace_seconds // 60
+        seconds = pace_seconds % 60
+        return f"{minutes}:{seconds:02d}/миля"

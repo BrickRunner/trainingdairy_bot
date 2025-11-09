@@ -89,8 +89,13 @@ async def process_training_date(message: Message, state: FSMContext):
 
     await state.update_data(date=date.strftime("%Y-%m-%d"))
 
+    from utils.date_formatter import get_user_date_format, DateFormatter
+    user_id = message.from_user.id
+    user_date_format = await get_user_date_format(user_id)
+    formatted_date = DateFormatter.format_date(date.strftime("%Y-%m-%d"), user_date_format)
+
     await message.answer(
-        f"Дата: {date.strftime('%d.%m.%Y')}\n\n"
+        f"Дата: {formatted_date}\n\n"
         "Введите время начала (ЧЧ:ММ) или пропустите:",
         reply_markup=get_skip_keyboard()
     )
@@ -192,15 +197,23 @@ async def process_training_distance(message: Message, state: FSMContext):
             if distance <= 0:
                 raise ValueError
 
-            # Вычисляем темп
+            # Вычисляем темп с учетом единиц измерения студента
             data = await state.get_data()
             duration = data.get('duration')
-            if duration and distance:
+            student_id = data.get('student_id')
+
+            if duration and distance and student_id:
+                from database.queries import get_user_settings
+                settings = await get_user_settings(student_id)
+                distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
                 avg_pace_minutes = duration / distance
                 pace_min = int(avg_pace_minutes)
                 pace_sec = int((avg_pace_minutes - pace_min) * 60)
                 avg_pace = f"{pace_min:02d}:{pace_sec:02d}"
-                await state.update_data(distance=distance, avg_pace=avg_pace, pace_unit='мин/км')
+                pace_unit = 'мин/миля' if distance_unit == 'мили' else 'мин/км'
+
+                await state.update_data(distance=distance, avg_pace=avg_pace, pace_unit=pace_unit)
             else:
                 await state.update_data(distance=distance, avg_pace=None)
         except ValueError:
@@ -360,14 +373,32 @@ async def process_training_fatigue(callback: CallbackQuery, state: FSMContext):
     # Уведомляем ученика
     display_name = await get_student_display_name(coach_id, student_id)
     try:
-        training_date = datetime.strptime(data.get('date'), "%Y-%m-%d").strftime("%d.%m.%Y")
+        from utils.date_formatter import get_user_date_format, DateFormatter
+        from database.queries import get_user_settings
+
+        user_date_format = await get_user_date_format(student_id)
+        training_date = DateFormatter.format_date(data.get('date'), user_date_format)
+
+        # Получаем единицу измерения ученика
+        settings = await get_user_settings(student_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+        distance_text = ""
+        if data.get('distance'):
+            if distance_unit == 'км':
+                distance_text = f"Дистанция: {data.get('distance')} км\n"
+            else:
+                from competitions.competitions_utils import km_to_miles
+                distance_miles = km_to_miles(float(data.get('distance')))
+                distance_text = f"Дистанция: {distance_miles:.1f} миль\n"
+
         await callback.bot.send_message(
             student_id,
             f"👨‍🏫 <b>Новая тренировка от тренера</b>\n\n"
             f"Тип: {data.get('type').capitalize()}\n"
             f"Дата: {training_date}\n"
             f"Продолжительность: {data.get('duration')} мин\n"
-            + (f"Дистанция: {data.get('distance')} км\n" if data.get('distance') else "")
+            + distance_text
             + (f"\n💬 Комментарий тренера:\n{data.get('comment')}" if data.get('comment') else ""),
             parse_mode="HTML"
         )

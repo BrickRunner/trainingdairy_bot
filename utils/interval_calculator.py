@@ -226,12 +226,14 @@ def calculate_average_interval_pace(description: str) -> Optional[str]:
         # Средний темп = общее время / общая дистанция (в км)
         total_distance_km = total_distance_meters / 1000
         avg_pace_seconds_per_km = total_seconds / total_distance_km
-        
+
         # Конвертируем в мин:сек
         pace_min = int(avg_pace_seconds_per_km // 60)
         pace_sec = int(avg_pace_seconds_per_km % 60)
-        
+
+        # ПРИМЕЧАНИЕ: Эта функция используется для парсинга текста тренировок
+        # Единицы измерения задаются пользователем при вводе, здесь всегда км
         return f"{pace_min}:{pace_sec:02d} мин/км"
-    
+
     return None
 

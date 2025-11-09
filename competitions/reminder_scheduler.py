@@ -223,15 +223,22 @@ async def send_single_reminder(bot, reminder: dict):
         # Напоминание о предстоящем соревновании
         day_word = "день" if days_until == 1 else "дня" if 2 <= days_until <= 4 else "дней"
 
+        from utils.date_formatter import get_user_date_format, DateFormatter
+        from competitions.competitions_utils import format_competition_distance
+
+        user_date_format = await get_user_date_format(user_id)
+        formatted_date = DateFormatter.format_date(comp_date.strftime('%Y-%m-%d'), user_date_format)
+
         text = (
             f"⏰ <b>НАПОМИНАНИЕ О СОРЕВНОВАНИИ</b>\n\n"
             f"До старта осталось <b>{days_until} {day_word}</b>!\n\n"
             f"🏆 <b>{comp_name}</b>\n"
-            f"📅 Дата: {comp_date.strftime('%d.%m.%Y')}\n"
+            f"📅 Дата: {formatted_date}\n"
         )
 
         if reminder.get('distance'):
-            text += f"📏 Дистанция: {reminder['distance']} км\n"
+            distance_formatted = await format_competition_distance(reminder['distance'], user_id)
+            text += f"📏 Дистанция: {distance_formatted}\n"
 
         if reminder.get('target_time'):
             text += f"🎯 Ваша цель: {reminder['target_time']}\n"
@@ -258,7 +265,7 @@ async def schedule_competition_reminders(bot):
         try:
             # Проверяем время - отправляем напоминания в 10:20
             now = datetime.now()
-            if now.hour == 6 and 0 <= now.minute < 10:
+            if now.hour == 18 and 5 <= now.minute < 10:
                 logger.info(f"Sending reminders at {now.strftime('%H:%M')}")
                 await send_competition_reminders(bot)
 

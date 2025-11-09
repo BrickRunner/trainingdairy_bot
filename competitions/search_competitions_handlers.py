@@ -264,12 +264,17 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
     )
 
     # Показываем первые 5 соревнований
-    from competitions.competitions_keyboards import format_competition_distance, format_time_until_competition
+    from competitions.competitions_keyboards import format_time_until_competition
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+    from utils.date_formatter import get_user_date_format, DateFormatter
+
+    user_id = callback.from_user.id
+    user_date_format = await get_user_date_format(user_id)
 
     for i, comp in enumerate(competitions[:5], 1):
         try:
             comp_date = datetime.strptime(comp['date'], '%Y-%m-%d')
-            date_str = comp_date.strftime('%d.%m.%Y')
+            date_str = DateFormatter.format_date(comp['date'], user_date_format)
         except:
             date_str = comp['date']
 
@@ -283,7 +288,8 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
                 distances = json.loads(distances)
 
             if distances:
-                distances_str = ', '.join([format_competition_distance(float(d)) for d in distances])
+                distances_formatted = [await format_dist_with_units(float(d), user_id) for d in distances]
+                distances_str = ', '.join(distances_formatted)
             else:
                 distances_str = 'Дистанции уточняются'
         except:

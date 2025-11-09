@@ -31,7 +31,8 @@ class CalendarKeyboard:
         current_date: Optional[datetime] = None,
         callback_prefix: str = "cal",
         show_cancel: bool = False,
-        cancel_callback: str = "comp:cancel_creation"
+        cancel_callback: str = "comp:cancel_creation",
+        max_date: Optional[datetime] = None
     ) -> InlineKeyboardMarkup:
         """
         Создает календарь в нужном формате
@@ -41,24 +42,25 @@ class CalendarKeyboard:
         :param callback_prefix: префикс для callback_data
         :param show_cancel: показывать ли кнопку отмены
         :param cancel_callback: callback для кнопки отмены
+        :param max_date: максимальная дата (для ограничения навигации вперёд)
         :return: InlineKeyboardMarkup
         """
         if current_date is None:
             current_date = datetime.now()
 
         if calendar_format == 1:
-            return CalendarKeyboard._create_days_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
+            return CalendarKeyboard._create_days_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
         elif calendar_format == 2:
-            return CalendarKeyboard._create_months_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
+            return CalendarKeyboard._create_months_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
         elif calendar_format == 3:
-            return CalendarKeyboard._create_years_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
+            return CalendarKeyboard._create_years_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
         elif calendar_format == 4:
-            return CalendarKeyboard._create_decades_calendar(current_date, callback_prefix, show_cancel, cancel_callback)
+            return CalendarKeyboard._create_decades_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
         else:
             raise ValueError(f"Неверный формат календаря: {calendar_format}")
 
     @staticmethod
-    def _create_days_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
+    def _create_days_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
         """Создает календарь с днями месяца"""
         keyboard = []
 
@@ -66,6 +68,13 @@ class CalendarKeyboard:
         year = date.year
         month = date.month
         month_name = CalendarKeyboard.MONTH_NAMES[month - 1]
+
+        # Проверяем, можно ли листать вперёд
+        can_go_forward = True
+        if max_date:
+            # Проверяем, не является ли текущий месяц последним доступным
+            if date.year > max_date.year or (date.year == max_date.year and date.month >= max_date.month):
+                can_go_forward = False
 
         first_row = [
             InlineKeyboardButton(
@@ -77,8 +86,8 @@ class CalendarKeyboard:
                 callback_data=f"{prefix}_1_change_{year}_{month:02d}_01"
             ),
             InlineKeyboardButton(
-                text=">",
-                callback_data=f"{prefix}_1_more_{year}_{month:02d}_01"
+                text=">" if can_go_forward else " ",
+                callback_data=f"{prefix}_1_more_{year}_{month:02d}_01" if can_go_forward else f"{prefix}_empty"
             )
         ]
         keyboard.append(first_row)
@@ -145,10 +154,15 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_months_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
+    def _create_months_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
         """Создает календарь с выбором месяца"""
         keyboard = []
         year = date.year
+
+        # Проверяем, можно ли листать вперёд
+        can_go_forward = True
+        if max_date and year >= max_date.year:
+            can_go_forward = False
 
         # Первая строка: навигация и заголовок
         first_row = [
@@ -161,8 +175,8 @@ class CalendarKeyboard:
                 callback_data=f"{prefix}_2_change_{year}_01_01"
             ),
             InlineKeyboardButton(
-                text=">",
-                callback_data=f"{prefix}_2_more_{year}_01_01"
+                text=">" if can_go_forward else " ",
+                callback_data=f"{prefix}_2_more_{year}_01_01" if can_go_forward else f"{prefix}_empty"
             )
         ]
         keyboard.append(first_row)
@@ -189,7 +203,7 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_years_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
+    def _create_years_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
         """Создает календарь с выбором года"""
         keyboard = []
         year = date.year
@@ -205,6 +219,11 @@ class CalendarKeyboard:
             decade_end = 3999
             decade_start = max(1, decade_end - 11)
 
+        # Проверяем, можно ли листать вперёд
+        can_go_forward = True
+        if max_date and decade_start >= (max_date.year // 10) * 10:
+            can_go_forward = False
+
         # Первая строка: навигация и заголовок
         first_row = [
             InlineKeyboardButton(
@@ -216,8 +235,8 @@ class CalendarKeyboard:
                 callback_data=f"{prefix}_3_change_{decade_start}_01_01"
             ),
             InlineKeyboardButton(
-                text=">",
-                callback_data=f"{prefix}_3_more_{decade_start}_01_01"
+                text=">" if can_go_forward else " ",
+                callback_data=f"{prefix}_3_more_{decade_start}_01_01" if can_go_forward else f"{prefix}_empty"
             )
         ]
         keyboard.append(first_row)
@@ -248,7 +267,7 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_decades_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation") -> InlineKeyboardMarkup:
+    def _create_decades_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
         """Создает календарь с выбором десятилетия"""
         keyboard = []
         year = date.year
@@ -264,6 +283,11 @@ class CalendarKeyboard:
             century_end = 3999
             century_start = max(1, century_end - 119)
 
+        # Проверяем, можно ли листать вперёд
+        can_go_forward = True
+        if max_date and century_start >= (max_date.year // 100) * 100:
+            can_go_forward = False
+
         # Первая строка: навигация и заголовок
         first_row = [
             InlineKeyboardButton(
@@ -275,8 +299,8 @@ class CalendarKeyboard:
                 callback_data=f"{prefix}_4_change_{century_start}_01_01"
             ),
             InlineKeyboardButton(
-                text=">",
-                callback_data=f"{prefix}_4_more_{century_start}_01_01"
+                text=">" if can_go_forward else " ",
+                callback_data=f"{prefix}_4_more_{century_start}_01_01" if can_go_forward else f"{prefix}_empty"
             )
         ]
         keyboard.append(first_row)
@@ -385,12 +409,13 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=new_rows)
 
     @staticmethod
-    def handle_navigation(callback_data: str, prefix: str = "cal") -> Optional[InlineKeyboardMarkup]:
+    def handle_navigation(callback_data: str, prefix: str = "cal", max_date: Optional[datetime] = None) -> Optional[InlineKeyboardMarkup]:
         """
         Обрабатывает навигацию по календарю
 
         :param callback_data: данные callback
         :param prefix: префикс callback
+        :param max_date: максимальная дата (для ограничения навигации вперёд)
         :return: новая клавиатура или None
         """
         import logging
@@ -425,7 +450,7 @@ class CalendarKeyboard:
         # Смена формата (увеличение масштаба)
         if action == "change":
             new_format = current_format + 1 if current_format < 4 else 1
-            return CalendarKeyboard.create_calendar(new_format, date, prefix)
+            return CalendarKeyboard.create_calendar(new_format, date, prefix, max_date=max_date)
 
         # Навигация влево
         elif action == "less":
@@ -447,7 +472,7 @@ class CalendarKeyboard:
             else:
                 return None
 
-            return CalendarKeyboard.create_calendar(current_format, new_date, prefix)
+            return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date)
 
         # Навигация вправо
         elif action == "more":
@@ -457,28 +482,53 @@ class CalendarKeyboard:
                     new_date = datetime(date.year + 1, 1, 1)
                 else:
                     new_date = datetime(date.year, date.month + 1, 1)
+
+                # Проверяем ограничение max_date
+                if max_date and (new_date.year > max_date.year or
+                                 (new_date.year == max_date.year and new_date.month > max_date.month)):
+                    logger.info(f"Навигация вправо заблокирована max_date: {new_date} > {max_date}")
+                    return None  # Не позволяем листать дальше
+
             elif current_format == 2:
                 new_date = datetime(min(3999, date.year + 1), 1, 1)
+
+                # Проверяем ограничение max_date
+                if max_date and new_date.year > max_date.year:
+                    logger.info(f"Навигация вправо заблокирована max_date: {new_date.year} > {max_date.year}")
+                    return None
+
             elif current_format == 3:
                 # Переход на следующие 12 лет
                 year = (date.year // 10) * 10 + 12
                 new_date = datetime(min(3999, year), 1, 1)
+
+                # Проверяем ограничение max_date
+                if max_date and year > max_date.year:
+                    logger.info(f"Навигация вправо заблокирована max_date: {year} > {max_date.year}")
+                    return None
+
             elif current_format == 4:
                 # Переход на следующие 120 лет
                 year = (date.year // 100) * 100 + 120
                 new_date = datetime(min(3999, year), 1, 1)
+
+                # Проверяем ограничение max_date
+                if max_date and year > max_date.year:
+                    logger.info(f"Навигация вправо заблокирована max_date: {year} > {max_date.year}")
+                    return None
+
             else:
                 logger.warning(f"Неизвестный формат для навигации вправо: {current_format}")
                 return None
 
             logger.info(f"Навигация вправо: {date} -> {new_date}")
-            return CalendarKeyboard.create_calendar(current_format, new_date, prefix)
+            return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date)
 
         # Выбор элемента (не финальная дата)
         elif action == "select" and current_format > 1:
             # Уменьшаем формат (детализируем)
             logger.info(f"Выбор элемента: уменьшаем формат с {current_format} на {current_format - 1}")
-            return CalendarKeyboard.create_calendar(current_format - 1, date, prefix)
+            return CalendarKeyboard.create_calendar(current_format - 1, date, prefix, max_date=max_date)
 
         logger.warning(f"Действие не обработано: action={action}, format={current_format}")
         return None

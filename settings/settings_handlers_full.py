@@ -403,8 +403,8 @@ async def callback_set_birth_date(callback: CallbackQuery, state: FSMContext):
     from bot.calendar_keyboard import CalendarKeyboard
     from datetime import datetime
 
-    # Показываем календарь для выбора даты рождения
-    calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal_birth")
+    # Показываем календарь для выбора даты рождения (ограничен текущей датой)
+    calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal_birth", max_date=datetime.now())
     await callback.message.answer(
         "🎂 Выберите дату рождения из календаря:\n\n"
         "📌 Каждый год в день рождения вы будете получать поздравительное сообщение!",

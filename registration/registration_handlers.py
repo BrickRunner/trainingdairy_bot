@@ -291,10 +291,14 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
     }
     selected_names = [type_names.get(t, t) for t in selected_types]
 
-    # Форматируем дату рождения
+    # Форматируем дату рождения с учетом настроек пользователя
+    from utils.date_formatter import get_user_date_format, DateFormatter
+
     birth_date_str = data.get('birth_date', '')
     if birth_date_str:
-        birth_date_formatted = datetime.strptime(birth_date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+        user_id = callback.from_user.id
+        user_date_format = await get_user_date_format(user_id)
+        birth_date_formatted = DateFormatter.format_date(birth_date_str, user_date_format)
     else:
         birth_date_formatted = 'не указана'
 

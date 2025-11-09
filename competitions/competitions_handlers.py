@@ -77,6 +77,7 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
     """Показать список предстоящих соревнований"""
     await state.clear()
 
+    user_id = callback.from_user.id
     competitions = await get_upcoming_competitions(limit=10)
 
     if not competitions:
@@ -107,11 +108,12 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
     else:
         text = "📅 <b>Предстоящие соревнования</b>\n\n"
 
+        from utils.date_formatter import DateFormatter
+
         for i, comp in enumerate(competitions[:5], 1):
             # Форматируем дату
             try:
-                comp_date = datetime.strptime(comp['date'], '%Y-%m-%d')
-                date_str = comp_date.strftime('%d.%m.%Y')
+                date_str = DateFormatter.format_date(comp['date'], user_date_format)
             except:
                 date_str = comp['date']
 
@@ -120,8 +122,10 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
             # Форматируем дистанции
             try:
                 import json
+                from competitions.competitions_utils import format_competition_distance as format_dist_with_units
                 distances = json.loads(comp['distances']) if isinstance(comp['distances'], str) else comp['distances']
-                distances_str = ', '.join([format_competition_distance(float(d)) for d in distances])
+                distances_formatted = [await format_dist_with_units(float(d), user_id) for d in distances]
+                distances_str = ', '.join(distances_formatted)
             except:
                 distances_str = 'Дистанции уточняются'
 
@@ -194,6 +198,7 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
 
     # Форматируем дистанции
     try:
+        from competitions.competitions_utils import format_competition_distance as format_dist_with_units
         distances = comp.get('distances', [])
         if isinstance(distances, str):
             import json
@@ -201,7 +206,8 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
 
         distances_list = []
         for d in distances:
-            distances_list.append(f"  • {format_competition_distance(float(d))}")
+            formatted_dist = await format_dist_with_units(float(d), user_id)
+            distances_list.append(f"  • {formatted_dist}")
         distances_str = '\n'.join(distances_list) if distances_list else '  Дистанции уточняются'
     except Exception as e:
         logger.error(f"Error parsing distances: {e}")
@@ -290,6 +296,7 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
 async def select_distance(callback: CallbackQuery, state: FSMContext):
     """Выбор дистанции для регистрации"""
     competition_id = int(callback.data.split(":")[2])
+    user_id = callback.from_user.id
 
     comp = await get_competition(competition_id)
     if not comp:
@@ -314,12 +321,14 @@ async def select_distance(callback: CallbackQuery, state: FSMContext):
 
     # Создаём клавиатуру с дистанциями
     from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
     builder = InlineKeyboardBuilder()
 
     for distance in sorted(distances, reverse=True):
+        dist_text = await format_dist_with_units(distance, user_id)
         builder.row(
             InlineKeyboardButton(
-                text=format_competition_distance(distance),
+                text=dist_text,
                 callback_data=f"comp:register_dist:{competition_id}:{distance}"
             )
         )
@@ -371,12 +380,14 @@ async def register_user_for_competition(callback: CallbackQuery, state: FSMConte
 
         # Создаём напоминания о соревновании
         from competitions.reminder_scheduler import create_reminders_for_competition
+        from competitions.competitions_utils import format_competition_distance as format_dist_with_units
         await create_reminders_for_competition(user_id, competition_id, comp['date'])
 
+        dist_text = await format_dist_with_units(distance, user_id)
         text = (
             f"✅ <b>Вы успешно зарегистрированы!</b>\n\n"
             f"🏃 Соревнование: {comp['name']}\n"
-            f"📏 Дистанция: {format_competition_distance(distance)}\n"
+            f"📏 Дистанция: {dist_text}\n"
             f"📅 Дата: {comp['date']}\n\n"
             f"💪 Желаем удачной подготовки!\n\n"
             f"Вы можете установить целевое время в разделе 'Мои соревнования'."
@@ -457,14 +468,19 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext):
             target_time = comp.get('target_time')
             if target_time is None or target_time == 'None' or target_time == '':
                 target_time_str = 'Нет цели'
+                target_pace_str = ''
             else:
                 target_time_str = target_time
+                # Рассчитываем темп для целевого времени
+                from utils.time_formatter import calculate_pace_with_unit
+                target_pace = await calculate_pace_with_unit(target_time, comp['distance'], user_id)
+                target_pace_str = f" ({target_pace})" if target_pace else ''
 
             text += (
                 f"{i}. <b>{comp['name']}</b>\n"
                 f"   📏 {dist_str}\n"
                 f"   📅 {date_str} ({time_until})\n"
-                f"   🎯 Цель: {target_time_str}\n\n"
+                f"   🎯 Цель: {target_time_str}{target_pace_str}\n\n"
             )
 
         from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -530,10 +546,23 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
 
     # Форматируем целевое время
     target_time = registration.get('target_time')
+
+    # DEBUG: Логируем для отладки
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"DEBUG: target_time = {target_time}, type = {type(target_time)}")
+
     if target_time is None or target_time == 'None' or target_time == '':
         target_time_str = 'Нет цели'
+        target_pace_str = ''
     else:
         target_time_str = target_time
+        # Рассчитываем темп для целевого времени
+        from utils.time_formatter import calculate_pace_with_unit
+        target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
+        logger.info(f"DEBUG: target_pace calculated = {target_pace}")
+        target_pace_str = f"⚡ Целевой темп: {target_pace}\n" if target_pace else ''
+        logger.info(f"DEBUG: target_pace_str = {target_pace_str}")
 
     text = (
         f"🏃 <b>{competition['name']}</b>\n\n"
@@ -541,7 +570,8 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
         f"📅 Дата: {date_str}\n"
         f"⏰ До старта: {time_until}\n\n"
         f"📏 Ваша дистанция: {dist_str}\n"
-        f"🎯 Целевое время: {target_time_str}\n\n"
+        f"🎯 Целевое время: {target_time_str}\n"
+        f"{target_pace_str}"
     )
 
     if competition.get('description'):
@@ -941,10 +971,11 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
 
             # Получаем формат даты пользователя
             from utils.date_formatter import get_user_date_format, DateFormatter
+            from competitions.competitions_utils import format_competition_distance as format_dist_with_units
             user_date_format = await get_user_date_format(user_id)
 
             for i, comp in enumerate(finished_comps, 1):
-                dist_str = format_competition_distance(comp['distance'])
+                dist_str = await format_dist_with_units(comp['distance'], user_id)
 
                 # Форматируем дату согласно настройкам пользователя
                 formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
@@ -957,10 +988,11 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                     normalized_time = normalize_time(comp['finish_time'])
                     result_line = f"   ⏱️ {normalized_time}"
 
-                    # Добавляем темп
-                    pace = calculate_pace(comp['finish_time'], comp['distance'])
+                    # Добавляем темп с учетом единиц измерения
+                    from utils.time_formatter import calculate_pace_with_unit
+                    pace = await calculate_pace_with_unit(comp['finish_time'], comp['distance'], user_id)
                     if pace:
-                        result_line += f" • 🏃 {pace}/км"
+                        result_line += f" • 🏃 {pace}"
 
                     # Добавляем места
                     if comp.get('place_overall'):
@@ -1032,20 +1064,22 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
         for distance, record in sorted_records:
             dist_name = format_competition_distance(distance)
             normalized_time = normalize_time(record['best_time'])
-            text += f"🏃 <b>{dist_name}</b>: {normalized_time}"
+            text += f"🏃 <b>{dist_name}</b>\n"
+            text += f"⏱️ Время: {normalized_time}\n"
 
-            # Добавляем темп
-            pace = calculate_pace(record['best_time'], distance)
+            # Добавляем темп с учетом единиц измерения
+            from utils.time_formatter import calculate_pace_with_unit
+            pace = await calculate_pace_with_unit(record['best_time'], distance, user_id)
             if pace:
-                text += f" • {pace}/км"
+                text += f"⚡ Темп: {pace}\n"
 
             if record.get('competition_name'):
                 comp_name_short = record['competition_name'][:30] + "..." if len(record['competition_name']) > 30 else record['competition_name']
                 # Форматируем дату согласно настройкам пользователя
                 formatted_date = DateFormatter.format_date(record['date'], user_date_format)
-                text += f"\n   📅 {formatted_date}"
-                text += f"\n   🏆 {comp_name_short}"
-            text += "\n\n"
+                text += f"📅 Дата: {formatted_date}\n"
+                text += f"🏆 Соревнование: {comp_name_short}\n"
+            text += "\n"
 
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
@@ -1083,6 +1117,7 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
 
     # Получаем формат даты пользователя
     from utils.date_formatter import get_user_date_format, DateFormatter
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
     user_date_format = await get_user_date_format(user_id)
 
     from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -1090,7 +1125,7 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
 
     # Кнопки для удаления - показываем название и дату
     for comp in finished_comps[:10]:
-        dist_str = format_competition_distance(comp['distance'])
+        dist_str = await format_dist_with_units(comp['distance'], user_id)
         formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
 
         # Формируем короткое название для кнопки
@@ -1137,12 +1172,15 @@ async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Результат не найден", show_alert=True)
         return
 
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+    dist_text = await format_dist_with_units(user_comp['distance'], user_id)
+
     text = (
         "⚠️ <b>ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ</b>\n\n"
         f"Вы действительно хотите удалить результат?\n\n"
         f"🏆 <b>{comp['name']}</b>\n"
         f"📅 {comp['date']}\n"
-        f"📏 {format_competition_distance(user_comp['distance'])}\n"
+        f"📏 {dist_text}\n"
     )
 
     if user_comp.get('finish_time'):
@@ -1322,6 +1360,19 @@ async def process_place_age_category(message: Message, state: FSMContext):
             if place <= 0:
                 await message.answer("❌ Место должно быть положительным числом")
                 return
+
+            # Проверяем, что место в категории не больше места в общем зачёте
+            data = await state.get_data()
+            place_overall = data.get('result_place_overall')
+
+            if place_overall is not None and place > place_overall:
+                await message.answer(
+                    f"❌ Место в возрастной категории ({place}) не может быть больше "
+                    f"места в общем зачёте ({place_overall}).\n\n"
+                    f"Введите корректное значение или нажмите \"Пропустить\""
+                )
+                return
+
             await state.update_data(result_place_age=place)
         except ValueError:
             await message.answer(
@@ -1396,11 +1447,31 @@ async def process_heart_rate(message: Message, state: FSMContext):
 
     if success:
         comp = await get_competition(competition_id)
+
+        # Форматируем дистанцию с учетом единиц пользователя
+        from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+        dist_text = await format_dist_with_units(distance, user_id)
+
+        # Форматируем дату
+        from utils.date_formatter import get_user_date_format, DateFormatter
+        user_date_format = await get_user_date_format(user_id)
+        formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
+
+        # Рассчитываем темп
+        from utils.time_formatter import calculate_pace_with_unit
+        pace = await calculate_pace_with_unit(data['result_finish_time'], distance, user_id)
+
         text = (
             "✅ <b>РЕЗУЛЬТАТ ДОБАВЛЕН!</b>\n\n"
             f"🏆 <b>{comp['name']}</b>\n"
+            f"📅 Дата: {formatted_date}\n"
+            f"📏 Дистанция: {dist_text}\n"
             f"⏱️ Время: {data['result_finish_time']}\n"
         )
+
+        if pace:
+            text += f"⚡ Темп: {pace}\n"
+
         if data.get('result_place_overall'):
             text += f"🏆 Место общее: {data['result_place_overall']}\n"
         if data.get('result_place_age'):
@@ -1408,10 +1479,20 @@ async def process_heart_rate(message: Message, state: FSMContext):
         if data.get('result_heart_rate'):
             text += f"❤️ Средний пульс: {data['result_heart_rate']} уд/мин\n"
 
+        # Создаём клавиатуру с кнопкой для добавления ещё результата
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        builder = InlineKeyboardBuilder()
+        builder.row(
+            InlineKeyboardButton(text="➕ Добавить ещё результат", callback_data="comp:add_past_results")
+        )
+        builder.row(
+            InlineKeyboardButton(text="◀️ Главное меню", callback_data="comp:menu")
+        )
+
         await message.answer(
             text,
             parse_mode="HTML",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=builder.as_markup()
         )
     else:
         await message.answer(

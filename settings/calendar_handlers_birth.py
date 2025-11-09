@@ -93,7 +93,8 @@ async def handle_calendar_birth_date_navigation(callback: CallbackQuery, state: 
     callback_data_normalized = callback.data.replace("cal_birth_", "cal_")
     logger.info(f"Нормализованный callback: {callback_data_normalized}")
 
-    new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal")
+    # Для даты рождения ограничиваем календарь текущей датой
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal", max_date=datetime.now())
     logger.info(f"Получена новая клавиатура: {new_keyboard is not None}")
 
     if new_keyboard:

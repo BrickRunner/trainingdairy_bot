@@ -415,15 +415,30 @@ async def show_training_detail(callback: CallbackQuery):
         return
 
     # Форматируем информацию о тренировке
+    from database.queries import get_user_settings
+    from utils.date_formatter import get_user_date_format, DateFormatter
+    from competitions.competitions_utils import km_to_miles
+
+    user_date_format = await get_user_date_format(student_id)
+    formatted_date = DateFormatter.format_date(training['date'], user_date_format)
+
+    settings = await get_user_settings(student_id)
+    distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
     text = f"📊 <b>Тренировка: {training['type'].capitalize()}</b>\n\n"
-    text += f"📅 Дата: {training['date']}\n"
+    text += f"📅 Дата: {formatted_date}\n"
     text += f"⏱ Продолжительность: {training['duration']} мин\n"
 
     if training.get('distance'):
-        text += f"📏 Дистанция: {training['distance']} км\n"
+        if distance_unit == 'км':
+            text += f"📏 Дистанция: {training['distance']} км\n"
+        else:
+            distance_miles = km_to_miles(float(training['distance']))
+            text += f"📏 Дистанция: {distance_miles:.1f} миль\n"
 
     if training.get('avg_pace'):
-        text += f"⚡ Средний темп: {training['avg_pace']} мин/км\n"
+        pace_unit = "мин/миля" if distance_unit == 'мили' else "мин/км"
+        text += f"⚡ Средний темп: {training['avg_pace']} {pace_unit}\n"
 
     if training.get('avg_pulse'):
         text += f"💓 Средний пульс: {training['avg_pulse']} bpm\n"

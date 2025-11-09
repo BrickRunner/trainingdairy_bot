@@ -101,40 +101,7 @@ def get_competition_card_keyboard(
     return builder.as_markup()
 
 
-def get_distance_selection_keyboard(competition_id: int, distances: List[float]) -> InlineKeyboardMarkup:
-    """
-    Клавиатура выбора дистанции
-
-    Args:
-        competition_id: ID соревнования
-        distances: Список доступных дистанций
-    """
-    builder = InlineKeyboardBuilder()
-
-    # Форматируем дистанции красиво
-    distance_names = {
-        42.195: "🏃 Марафон (42.195 км)",
-        21.1: "🏃 Полумарафон (21.1 км)",
-        10.0: "🏃 10 км",
-        5.0: "🏃 5 км",
-        3.0: "🏃 3 км"
-    }
-
-    for distance in sorted(distances, reverse=True):
-        # Если есть красивое имя, используем его, иначе просто км
-        text = distance_names.get(distance, f"🏃 {distance} км")
-        builder.row(
-            InlineKeyboardButton(
-                text=text,
-                callback_data=f"comp:register_dist:{competition_id}:{distance}"
-            )
-        )
-
-    builder.row(
-        InlineKeyboardButton(text="❌ Отмена", callback_data=f"comp:view:{competition_id}")
-    )
-
-    return builder.as_markup()
+# УСТАРЕВШАЯ ФУНКЦИЯ - удалена, используйте async версию ниже
 
 
 def get_my_competitions_menu() -> InlineKeyboardMarkup:
@@ -314,6 +281,7 @@ def get_result_input_keyboard() -> ReplyKeyboardMarkup:
 def format_competition_distance(distance: float) -> str:
     """
     Форматировать дистанцию для отображения (без учета настроек пользователя)
+    УСТАРЕВШАЯ: используйте async версию из competitions_utils.py
 
     Args:
         distance: Дистанция в км
@@ -333,6 +301,36 @@ def format_competition_distance(distance: float) -> str:
         return f"{int(distance)} км"
     else:
         return f"{distance} км"
+
+
+async def get_distance_selection_keyboard(competition_id: int, distances: List[float], user_id: int) -> InlineKeyboardMarkup:
+    """
+    Создать клавиатуру выбора дистанции для соревнования
+
+    Args:
+        competition_id: ID соревнования
+        distances: Список доступных дистанций
+        user_id: ID пользователя
+    """
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+
+    builder = InlineKeyboardBuilder()
+
+    for distance in sorted(distances, reverse=True):
+        # Используем async функцию с учетом настроек пользователя
+        text = await format_dist_with_units(distance, user_id)
+        builder.row(
+            InlineKeyboardButton(
+                text=f"🏃 {text}",
+                callback_data=f"comp:register_dist:{competition_id}:{distance}"
+            )
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="❌ Отмена", callback_data=f"comp:view:{competition_id}")
+    )
+
+    return builder.as_markup()
 
 
 def format_time_until_competition(competition_date: str) -> str:
@@ -357,7 +355,9 @@ def format_time_until_competition(competition_date: str) -> str:
         elif delta == 1:
             return "Через 1 день"
         elif delta < 7:
-            return f"Через {delta} дней"
+            # Правильное склонение: 2 дня, 3 дня, 4 дня, 5 дней, 6 дней
+            day_word = "дня" if 2 <= delta <= 4 else "дней"
+            return f"Через {delta} {day_word}"
         elif delta < 30:
             weeks = delta // 7
             return f"Через {weeks} нед."

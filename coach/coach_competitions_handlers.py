@@ -123,8 +123,13 @@ async def process_proposed_comp_date(message: Message, state: FSMContext):
     builder.row(InlineKeyboardButton(text="🏊‍♂️🚴‍♂️🏃 Триатлон", callback_data="comptype:triathlon"))
     builder.row(InlineKeyboardButton(text="⛰️ Трейл", callback_data="comptype:trail"))
 
+    from utils.date_formatter import get_user_date_format, DateFormatter
+    coach_id = message.from_user.id
+    user_date_format = await get_user_date_format(coach_id)
+    formatted_date = DateFormatter.format_date(comp_date.strftime('%Y-%m-%d'), user_date_format)
+
     text = (
-        f"✅ Дата: <b>{comp_date.strftime('%d.%m.%Y')}</b>\n\n"
+        f"✅ Дата: <b>{formatted_date}</b>\n\n"
         f"📝 <b>Шаг 3 из 5</b>\n\n"
         f"Выберите <b>вид спорта</b>:"
     )
@@ -199,17 +204,10 @@ async def process_proposed_comp_distance(message: Message, state: FSMContext):
 
     await state.update_data(comp_distance=distance)
 
-    # Определяем название дистанции
-    if distance == 42.195 or distance == 42.2:
-        distance_name = "Марафон (42.195 км)"
-    elif distance == 21.1 or distance == 21.0975:
-        distance_name = "Полумарафон (21.1 км)"
-    elif distance == 10:
-        distance_name = "10 км"
-    elif distance == 5:
-        distance_name = "5 км"
-    else:
-        distance_name = f"{distance} км"
+    # Определяем название дистанции с учетом единиц измерения студента
+    student_id = data.get('propose_student_id')
+    from competitions.competitions_utils import format_competition_distance
+    distance_name = await format_competition_distance(distance, student_id) if student_id else f"{distance} км"
 
     text = (
         f"✅ Дистанция: <b>{distance_name}</b>\n\n"
@@ -312,13 +310,20 @@ async def process_proposed_comp_target_and_send(message: Message, state: FSMCont
         # Отправляем уведомление ученику
         student_display_name = await get_student_display_name(coach_id, student_id)
 
+        from utils.date_formatter import get_user_date_format, DateFormatter
+        from competitions.competitions_utils import format_competition_distance
+
+        student_date_format = await get_user_date_format(student_id)
+        formatted_date = DateFormatter.format_date(comp_date, student_date_format)
+        formatted_distance = await format_competition_distance(comp_distance, student_id)
+
         notification_text = (
             f"🏆 <b>ПРЕДЛОЖЕНИЕ ОТ ТРЕНЕРА</b>\n\n"
             f"<b>{coach_name}</b> предлагает вам участие в соревновании:\n\n"
             f"📌 <b>{comp_name}</b>\n"
-            f"📅 Дата: {datetime.strptime(comp_date, '%Y-%m-%d').strftime('%d.%m.%Y')}\n"
+            f"📅 Дата: {formatted_date}\n"
             f"🏃 Вид: {comp_type}\n"
-            f"📏 Дистанция: {comp_distance} км\n"
+            f"📏 Дистанция: {formatted_distance}\n"
         )
 
         if target_time:
@@ -348,12 +353,16 @@ async def process_proposed_comp_target_and_send(message: Message, state: FSMCont
         )
 
         # Подтверждение тренеру
+        coach_date_format = await get_user_date_format(coach_id)
+        coach_formatted_date = DateFormatter.format_date(comp_date, coach_date_format)
+        coach_formatted_distance = await format_competition_distance(comp_distance, coach_id)
+
         text = (
             "✅ <b>Предложение отправлено!</b>\n\n"
             f"Ученик <b>{student_display_name}</b> получил уведомление о соревновании:\n\n"
             f"🏆 <b>{comp_name}</b>\n"
-            f"📅 {datetime.strptime(comp_date, '%Y-%m-%d').strftime('%d.%m.%Y')}\n"
-            f"📏 {comp_distance} км\n\n"
+            f"📅 {coach_formatted_date}\n"
+            f"📏 {coach_formatted_distance}\n\n"
             f"Вы получите уведомление, когда ученик примет решение."
         )
 
@@ -443,10 +452,14 @@ async def student_accept_competition(callback: CallbackQuery):
         )
 
         # Отвечаем ученику
+        from utils.date_formatter import get_user_date_format, DateFormatter
+        student_date_format = await get_user_date_format(student_id)
+        formatted_date = DateFormatter.format_date(proposal['date'], student_date_format)
+
         text = (
             f"✅ <b>Вы приняли участие!</b>\n\n"
             f"🏆 <b>{proposal['name']}</b>\n"
-            f"📅 Дата: {datetime.strptime(proposal['date'], '%Y-%m-%d').strftime('%d.%m.%Y')}\n\n"
+            f"📅 Дата: {formatted_date}\n\n"
             f"🔔 Напоминания настроены. Вы будете получать уведомления перед соревнованием.\n\n"
             f"Соревнование добавлено в раздел 'Мои соревнования'."
         )
