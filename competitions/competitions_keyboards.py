@@ -28,6 +28,9 @@ def get_competitions_main_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🏆 Личные рекорды", callback_data="comp:personal_records")
     )
     builder.row(
+        InlineKeyboardButton(text="📊 Статистика", callback_data="comp:stats:show")
+    )
+    builder.row(
         InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
 
@@ -395,3 +398,41 @@ def get_month_selection_keyboard() -> InlineKeyboardMarkup:
     )
 
     return builder.as_markup()
+
+
+def get_statistics_menu() -> InlineKeyboardMarkup:
+    """Меню статистики соревнований"""
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
+    )
+
+    return builder.as_markup()
+
+
+def get_export_period_menu() -> InlineKeyboardMarkup:
+    """Меню выбора периода для экспорта"""
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(text="📅 Последний год", callback_data="comp:export:year")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Всё время", callback_data="comp:export:all")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Произвольный период", callback_data="comp:export:custom")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_export_menu")
+    )
+
+    return builder.as_markup()
+
+
+def get_cancel_keyboard() -> ReplyKeyboardMarkup:
+    """Клавиатура с кнопкой отмены"""
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text="❌ Отмена"))
+    return builder.as_markup(resize_keyboard=True)

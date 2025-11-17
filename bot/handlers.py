@@ -1515,6 +1515,15 @@ async def process_export_type(callback: CallbackQuery):
             parse_mode="HTML",
             reply_markup=get_health_export_period_keyboard()
         )
+    elif export_type == "competitions":
+        # Показываем меню выбора периода для соревнований
+        from competitions.competitions_keyboards import get_export_period_menu
+        await callback.message.edit_text(
+            "🏃 <b>Экспорт соревнований в PDF</b>\n\n"
+            "Выберите период для экспорта:",
+            parse_mode="HTML",
+            reply_markup=get_export_period_menu()
+        )
 
     await callback.answer()
 
@@ -1606,9 +1615,8 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Отправляем кнопку отмены отдельным сообщением
         await callback.message.answer(
-            "Для отмены нажмите кнопку:",
+            "❌ Отмена",
             reply_markup=cancel_keyboard
         )
 
@@ -1725,7 +1733,7 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
 
         await message.answer(
-            "Для отмены нажмите кнопку:",
+            "❌ Отмена",
             reply_markup=cancel_keyboard
         )
 

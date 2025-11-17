@@ -279,8 +279,8 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         settings = await get_user_settings(user_id)
         weight_goal = settings.get('weight_goal') if settings else None
 
-        # Генерируем график
-        graph_buffer = await generate_health_graphs(metrics, period_name, weight_goal)
+        # Генерируем график с учётом формата даты
+        graph_buffer = await generate_health_graphs(metrics, period_name, weight_goal, user_format)
 
         # Добавляем график как изображение
         img = Image(graph_buffer, width=17*cm, height=14*cm)

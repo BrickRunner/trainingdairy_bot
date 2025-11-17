@@ -794,3 +794,66 @@ async def get_competition_statistics(competition_id: int) -> Dict[str, Any]:
             'finished_participants': finished_participants,
             'distances_stats': distances_stats
         }
+
+
+async def get_user_competitions_with_details(
+    user_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None
+) -> List[Dict[str, Any]]:
+    """
+    Получить соревнования пользователя с полной детальной информацией для экспорта
+
+    Args:
+        user_id: ID пользователя
+        start_date: Начальная дата (опционально)
+        end_date: Конечная дата (опционально)
+
+    Returns:
+        Список соревнований с данными участия
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        conditions = ["cp.user_id = ?"]
+        params = [user_id]
+
+        if start_date:
+            conditions.append("c.date >= ?")
+            params.append(start_date.strftime('%Y-%m-%d'))
+
+        if end_date:
+            conditions.append("c.date <= ?")
+            params.append(end_date.strftime('%Y-%m-%d'))
+
+        where_clause = " AND ".join(conditions)
+
+        async with db.execute(
+            f"""
+            SELECT
+                c.id, c.name, c.date, c.city, c.country, c.location,
+                c.distances, c.type, c.sport_type, c.description, c.official_url,
+                c.organizer, c.registration_status, c.status,
+                cp.distance, cp.target_time, cp.finish_time,
+                cp.place_overall, cp.place_age_category, cp.age_category,
+                cp.result_comment, cp.result_photo, cp.status as participant_status
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE {where_clause}
+            ORDER BY c.date ASC
+            """,
+            tuple(params)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            competitions = []
+            for row in rows:
+                comp = dict(row)
+                # Используем participant_status как основной status
+                comp['status'] = comp.get('participant_status', 'registered')
+                if comp.get('distances'):
+                    try:
+                        comp['distances'] = json.loads(comp['distances'])
+                    except:
+                        pass
+                competitions.append(comp)
+            return competitions

@@ -338,13 +338,16 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def parse_callback_data(callback_data: str) -> dict:
+    def parse_callback_data(callback_data: str, prefix: str = None) -> dict:
         """
         Парсит callback_data и возвращает словарь с информацией
 
         Формат: prefix_format_action_year_month_day
 
+        Префикс может быть многословным (например: health_export_start)
+
         :param callback_data: строка callback_data
+        :param prefix: ожидаемый префикс (опционально, для многословных префиксов)
         :return: словарь с ключами: prefix, format, action, date
         """
         parts = callback_data.split("_")
@@ -352,22 +355,49 @@ class CalendarKeyboard:
         if len(parts) < 2:
             return {}
 
-        result = {
-            "prefix": parts[0],
-            "format": int(parts[1]) if parts[1].isdigit() else None,
-            "action": parts[2] if len(parts) > 2 else None,
-            "date": None
-        }
+        # Если передан префикс, используем его для определения смещения
+        if prefix and callback_data.startswith(f"{prefix}_"):
+            prefix_parts_count = len(prefix.split("_"))
+            format_idx = prefix_parts_count
+            action_idx = prefix_parts_count + 1
+            year_idx = prefix_parts_count + 2
+            month_idx = prefix_parts_count + 3
+            day_idx = prefix_parts_count + 4
 
-        # Парсим дату если есть
-        if len(parts) >= 6:
-            try:
-                year = int(parts[3])
-                month = int(parts[4])
-                day = int(parts[5])
-                result["date"] = datetime(year, month, day)
-            except (ValueError, IndexError):
-                pass
+            result = {
+                "prefix": prefix,
+                "format": int(parts[format_idx]) if format_idx < len(parts) and parts[format_idx].isdigit() else None,
+                "action": parts[action_idx] if action_idx < len(parts) else None,
+                "date": None
+            }
+
+            # Парсим дату если есть
+            if day_idx < len(parts):
+                try:
+                    year = int(parts[year_idx])
+                    month = int(parts[month_idx])
+                    day = int(parts[day_idx])
+                    result["date"] = datetime(year, month, day)
+                except (ValueError, IndexError):
+                    pass
+        else:
+            # Стандартный парсинг для одноословных префиксов
+            result = {
+                "prefix": parts[0],
+                "format": int(parts[1]) if parts[1].isdigit() else None,
+                "action": parts[2] if len(parts) > 2 else None,
+                "date": None
+            }
+
+            # Парсим дату если есть
+            if len(parts) >= 6:
+                try:
+                    year = int(parts[3])
+                    month = int(parts[4])
+                    day = int(parts[5])
+                    result["date"] = datetime(year, month, day)
+                except (ValueError, IndexError):
+                    pass
 
         return result
 
@@ -426,7 +456,7 @@ class CalendarKeyboard:
             logger.debug(f"Игнорируем пустой callback: {callback_data}")
             return None
 
-        parsed = CalendarKeyboard.parse_callback_data(callback_data)
+        parsed = CalendarKeyboard.parse_callback_data(callback_data, prefix=prefix)
         logger.debug(f"Parsed callback '{callback_data}': {parsed}")
 
         if not parsed or parsed.get("prefix") != prefix:

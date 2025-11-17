@@ -244,6 +244,9 @@ def get_export_type_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="❤️ Экспорт данных здоровья", callback_data="export_type:health")
     )
     builder.row(
+        InlineKeyboardButton(text="🏃 Экспорт соревнований", callback_data="export_type:competitions")
+    )
+    builder.row(
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
     )
     return builder.as_markup()

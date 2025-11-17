@@ -17,7 +17,22 @@ logger = logging.getLogger(__name__)
 plt.rcParams['font.family'] = 'DejaVu Sans'
 
 
-async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_goal: float = None) -> io.BytesIO:
+def get_short_strftime_fmt(date_format: str) -> str:
+    """
+    Получает короткий формат без года (например, для 'DD.MM.YYYY' → '%d.%m')
+    """
+    # Удаляем часть с годом
+    if 'YYYY' in date_format:
+        short = date_format.split('YYYY')[0].rstrip('.-/')
+    elif 'YY' in date_format:
+        short = date_format.split('YY')[0].rstrip('.-/')
+    else:
+        short = date_format
+    # Преобразуем в strftime формат
+    return short.replace('DD', '%d').replace('MM', '%m')
+
+
+async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_goal: float = None, date_format: str = 'DD.MM.YYYY') -> io.BytesIO:
     """
     Генерирует графики метрик здоровья
 
@@ -25,6 +40,7 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_g
         metrics: Список метрик за период
         period_name: Название периода (например, "этот месяц", "7 дней")
         weight_goal: Целевой вес (если установлен)
+        date_format: Формат даты для осей графиков (например, 'DD.MM.YYYY')
 
     Returns:
         BytesIO объект с изображением графиков
@@ -50,6 +66,9 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_g
 
         logger.info(f"Total dates collected: {len(dates)}")
 
+        # Получаем короткий формат даты для осей
+        short_fmt = get_short_strftime_fmt(date_format)
+
         # Создание фигуры с подграфиками
         fig, axes = plt.subplots(3, 1, figsize=(12, 10))
         fig.suptitle(f'Метрики здоровья за {period_name}', fontsize=16, fontweight='bold')
@@ -58,21 +77,21 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_g
         _plot_metric(
             axes[0], dates, pulse_values,
             'Утренний пульс', 'уд/мин',
-            '#e74c3c', ''
+            '#e74c3c', '', date_format=short_fmt
         )
 
         # График веса
         _plot_metric(
             axes[1], dates, weight_values,
             'Вес', 'кг',
-            '#3498db', '', weight_goal
+            '#3498db', '', weight_goal, date_format=short_fmt
         )
 
         # График сна
         _plot_metric(
             axes[2], dates, sleep_values,
             'Длительность сна', 'часы',
-            '#9b59b6', ''
+            '#9b59b6', '', date_format=short_fmt
         )
 
         # Настройка отступов
@@ -91,7 +110,7 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_g
         raise
 
 
-def _plot_metric(ax, dates, values, title, ylabel, color, emoji, goal_value=None):
+def _plot_metric(ax, dates, values, title, ylabel, color, emoji, goal_value=None, date_format='%d.%m'):
     """Построение одного графика метрики"""
     # Фильтруем None значения
     valid_data = [(d, v) for d, v in zip(dates, values) if v is not None]
@@ -143,8 +162,11 @@ def _plot_metric(ax, dates, values, title, ylabel, color, emoji, goal_value=None
     ax.set_ylabel(ylabel, fontsize=10)
     ax.grid(True, alpha=0.3, linestyle='--')
 
-    # Убираем метки дат на оси X - просто нумеруем точки
-    ax.set_xticks([])
+    # Форматирование дат на оси X
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    # Поворачиваем метки дат для лучшей читаемости
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
 
     # Добавление средней линии
     avg_value = sum(valid_values) / len(valid_values)

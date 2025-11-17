@@ -41,13 +41,12 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
 
     # Проверка на выбор даты
     if "_select_" in callback_data:
-        # Парсим выбранную дату
-        parts = callback_data.split("_")
+        # Парсим выбранную дату используя parse_callback_data
+        parsed = CalendarKeyboard.parse_callback_data(callback_data, prefix="health_export_start")
         try:
-            year = int(parts[4])
-            month = int(parts[5])
-            day = int(parts[6])
-            selected_date = date(year, month, day)
+            if not parsed or not parsed.get("date"):
+                raise ValueError("Не удалось распарсить дату")
+            selected_date = parsed["date"].date()
 
             logger.info(f"Selected start date: {selected_date}")
 
@@ -115,13 +114,12 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
 
     # Проверка на выбор даты
     if "_select_" in callback_data:
-        # Парсим выбранную дату
-        parts = callback_data.split("_")
+        # Парсим выбранную дату используя parse_callback_data
+        parsed = CalendarKeyboard.parse_callback_data(callback_data, prefix="health_export_end")
         try:
-            year = int(parts[4])
-            month = int(parts[5])
-            day = int(parts[6])
-            selected_date = date(year, month, day)
+            if not parsed or not parsed.get("date"):
+                raise ValueError("Не удалось распарсить дату")
+            selected_date = parsed["date"].date()
 
             logger.info(f"Selected end date: {selected_date}")
 
@@ -152,8 +150,11 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
                 # Импортируем функцию экспорта
                 from health.health_pdf_export import create_health_pdf
 
+                # Формируем параметр периода в формате custom_YYYYMMDD_YYYYMMDD
+                period_param = f"custom_{start_date.strftime('%Y%m%d')}_{selected_date.strftime('%Y%m%d')}"
+
                 # Генерируем PDF
-                pdf_buffer = await create_health_pdf(user_id, "custom", start_date, selected_date)
+                pdf_buffer = await create_health_pdf(user_id, period_param)
 
                 # Формируем имя файла
                 filename = f"health_custom_{start_date.strftime('%Y%m%d')}_{selected_date.strftime('%Y%m%d')}.pdf"

@@ -1162,10 +1162,10 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
     if period_param == "custom":
         user_id = callback.from_user.id
         date_format_desc = await get_date_format_description(user_id)
-        from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-        from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
         # Создаем клавиатуру с кнопкой отмены
+        from aiogram.types import KeyboardButton
+        from aiogram.utils.keyboard import ReplyKeyboardBuilder
         builder = ReplyKeyboardBuilder()
         builder.row(KeyboardButton(text="❌ Отмена"))
         cancel_keyboard = builder.as_markup(resize_keyboard=True)
@@ -1187,9 +1187,8 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Отправляем кнопку отмены отдельным сообщением
         await callback.message.answer(
-            "Для отмены нажмите кнопку:",
+            "",
             reply_markup=cancel_keyboard
         )
 
@@ -1383,10 +1382,10 @@ async def process_export_end_date(message: Message, state: FSMContext):
     # Обработка отмены - возврат на шаг назад к вводу начальной даты
     if message.text == "❌ Отмена":
         date_format_desc = await get_date_format_description(user_id)
-        from aiogram.types import KeyboardButton
-        from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
         # Создаем клавиатуру с кнопкой отмены
+        from aiogram.types import KeyboardButton
+        from aiogram.utils.keyboard import ReplyKeyboardBuilder
         builder = ReplyKeyboardBuilder()
         builder.row(KeyboardButton(text="❌ Отмена"))
         cancel_keyboard = builder.as_markup(resize_keyboard=True)
@@ -1409,7 +1408,7 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
 
         await message.answer(
-            "Для отмены нажмите кнопку:",
+            "❌ Отмена",
             reply_markup=cancel_keyboard
         )
 

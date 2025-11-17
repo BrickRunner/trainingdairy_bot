@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS competitions (
     -- Детали соревнования
     distances TEXT,  -- JSON массив: ["42.195", "21.1", "10", "5"]
     type TEXT,  -- 'марафон', 'полумарафон', 'трейл', 'забег', 'ультра'
+    sport_type TEXT DEFAULT 'бег',  -- 'бег', 'велоспорт', 'плавание', 'триатлон'
     description TEXT,
     official_url TEXT,
 
