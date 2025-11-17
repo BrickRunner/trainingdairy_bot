@@ -18,7 +18,15 @@
       "Bash(\"venv/Scripts/python.exe\" test_place_validation.py)",
       "Bash(\"venv/Scripts/python.exe\" -m py_compile:*)",
       "Bash(\"venv/Scripts/python.exe\" -c \"print(''Calendar max_date feature implemented successfully for birth date. Check complete!'')\")",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile bot/calendar_keyboard.py)"
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile bot/calendar_keyboard.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile health/health_handlers.py bot/handlers.py competitions/custom_competitions_handlers.py)",
+      "Bash(health/health_handlers.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile health/health_handlers.py health/health_handlers_calendar_export.py competitions/custom_competitions_handlers.py main.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile health/health_handlers.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile health/health_handlers_calendar_export.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile bot/keyboards.py bot/handlers.py health/health_keyboards.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile bot/handlers.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile bot/handlers.py health/health_handlers.py)"
     ],
     "deny": [],
     "ask": []

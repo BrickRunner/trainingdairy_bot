@@ -370,6 +370,8 @@ async def process_name(message: Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
         await message.answer("❌ Отменено", reply_markup={"remove_keyboard": True})
+        # Возврат в меню профиля
+        await send_profile_menu(message, message.from_user.id)
         return
     
     name = message.text.strip()

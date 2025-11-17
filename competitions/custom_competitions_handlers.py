@@ -871,12 +871,13 @@ async def process_past_comp_city(message: Message, state: FSMContext):
     # Сохраняем город
     await state.update_data(comp_city=comp_city)
 
-    # Показываем календарь для выбора даты (без ограничения на прошлые даты)
+    # Показываем календарь для выбора даты (ограничен текущей датой - прошедшее соревнование)
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
         callback_prefix="cal_past_comp",
-        show_cancel=False
+        show_cancel=False,
+        max_date=datetime.now()
     )
 
     user_id = message.from_user.id
@@ -959,6 +960,11 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
     action = parsed.get("action", "")
     cal_format = parsed.get("format", 1)
 
+    # Проверяем на пустой callback (disabled кнопка)
+    if action == "empty" or callback.data.endswith("_empty"):
+        await callback.answer()
+        return
+
     # Обрабатываем навигацию (аналогично обычному календарю)
     if action == "less":
         if cal_format == 1:
@@ -989,12 +995,13 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
     elif action == "select_year":
         cal_format = 3
 
-    # Создаём обновлённый календарь
+    # Создаём обновлённый календарь (ограничен текущей датой)
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=cal_format,
         current_date=current_date,
         callback_prefix="cal_past_comp",
-        show_cancel=False
+        show_cancel=False,
+        max_date=datetime.now()
     )
 
     await callback.message.edit_reply_markup(reply_markup=calendar)

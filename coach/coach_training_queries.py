@@ -94,7 +94,7 @@ async def get_student_trainings(
             FROM trainings t
             LEFT JOIN users u ON u.id = t.added_by_coach_id
             WHERE t.user_id = ?
-            ORDER BY t.date DESC, t.created_at DESC
+            ORDER BY t.date ASC, t.created_at ASC
             LIMIT ? OFFSET ?
             """,
             (student_id, limit, offset)

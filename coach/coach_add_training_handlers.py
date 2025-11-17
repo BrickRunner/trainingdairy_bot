@@ -134,7 +134,18 @@ async def process_training_duration(message: Message, state: FSMContext):
 
     if text == "❌ Отменить":
         await state.clear()
-        await message.answer("❌ Добавление тренировки отменено")
+        await message.answer(
+            "❌ Добавление тренировки отменено",
+            reply_markup={"remove_keyboard": True}
+        )
+        # Возврат в меню тренера
+        from coach.coach_keyboards import get_coach_main_menu
+        await message.answer(
+            "👨‍🏫 <b>Раздел тренера</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_coach_main_menu()
+        )
         return
 
     try:

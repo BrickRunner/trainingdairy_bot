@@ -698,11 +698,18 @@ async def process_target_time_edit(message: Message, state: FSMContext):
     from utils.time_formatter import validate_time_format
 
     if message.text == "❌ Отмена":
+        await state.clear()
         await message.answer(
             "❌ Изменение целевого времени отменено",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup={"remove_keyboard": True}
         )
-        await state.clear()
+        # Возврат в меню соревнований
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
         return
 
     time_text = message.text.strip()
@@ -1273,11 +1280,18 @@ async def process_finish_time(message: Message, state: FSMContext):
     from utils.time_formatter import validate_time_format
 
     if message.text == "❌ Отмена":
+        await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup={"remove_keyboard": True}
         )
-        await state.clear()
+        # Возврат в меню соревнований
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
         return
 
     time_text = message.text.strip()
@@ -1309,11 +1323,18 @@ async def process_place_overall(message: Message, state: FSMContext):
     """Обработать место в общем зачёте"""
 
     if message.text == "❌ Отмена":
+        await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup={"remove_keyboard": True}
         )
-        await state.clear()
+        # Возврат в меню соревнований
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
         return
 
     if message.text == "⏭️ Пропустить":
@@ -1345,11 +1366,18 @@ async def process_place_age_category(message: Message, state: FSMContext):
     """Обработать место в возрастной категории"""
 
     if message.text == "❌ Отмена":
+        await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup={"remove_keyboard": True}
         )
-        await state.clear()
+        # Возврат в меню соревнований
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
         return
 
     if message.text == "⏭️ Пропустить":
@@ -1394,11 +1422,18 @@ async def process_heart_rate(message: Message, state: FSMContext):
     """Обработать средний пульс"""
 
     if message.text == "❌ Отмена":
+        await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup={"remove_keyboard": True}
         )
-        await state.clear()
+        # Возврат в меню соревнований
+        await message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
         return
 
     if message.text == "⏭️ Пропустить":

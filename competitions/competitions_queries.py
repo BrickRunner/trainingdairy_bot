@@ -393,7 +393,7 @@ async def get_user_competitions(
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
             WHERE cp.user_id = ? AND {date_condition}
-            ORDER BY c.date DESC
+            ORDER BY c.date ASC
             """,
             (user_id,)
         ) as cursor:
@@ -451,7 +451,7 @@ async def get_user_competitions_by_period(
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
             WHERE {where_clause}
-            ORDER BY c.date DESC
+            ORDER BY c.date ASC
             """,
             tuple(params)
         ) as cursor:

@@ -234,6 +234,21 @@ def get_training_detail_keyboard(period: str, training_id: int = None):
     return builder.as_markup()
 
 
+def get_export_type_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора типа экспорта в PDF"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="📊 Экспорт тренировок", callback_data="export_type:trainings")
+    )
+    builder.row(
+        InlineKeyboardButton(text="❤️ Экспорт данных здоровья", callback_data="export_type:health")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
+    )
+    return builder.as_markup()
+
+
 def get_export_period_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора периода для экспорта в PDF"""
     builder = InlineKeyboardBuilder()
@@ -247,6 +262,6 @@ def get_export_period_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📅 Произвольный период", callback_data="export_period:custom")
     )
     builder.row(
-        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_export_menu")
     )
     return builder.as_markup()

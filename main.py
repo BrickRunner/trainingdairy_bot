@@ -13,6 +13,7 @@ import os
 from bot.handlers import router
 from settings.settings_handlers_full import router as settings_router
 from health.health_handlers import router as health_router
+from health.health_handlers_calendar_export import router as health_calendar_export_router
 from ratings.ratings_handlers import router as ratings_router
 from registration.registration_handlers import router as registration_router
 from competitions.competitions_handlers import router as competitions_router
@@ -62,6 +63,7 @@ async def main():
     dp.include_router(coach_router)  # Роутер тренеров
     dp.include_router(coach_add_training_router)  # Роутер добавления тренировок для учеников
     dp.include_router(coach_competitions_router)  # Роутер предложения соревнований от тренера
+    dp.include_router(health_calendar_export_router)  # Роутер календарей экспорта здоровья
     dp.include_router(health_router)
     dp.include_router(ratings_router)
     dp.include_router(router)  # Основной роутер (общие команды)

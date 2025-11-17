@@ -116,9 +116,9 @@ async def get_user_trainings(user_id: int, limit: int = 10) -> list:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """
-            SELECT * FROM trainings 
-            WHERE user_id = ? 
-            ORDER BY date DESC, created_at DESC
+            SELECT * FROM trainings
+            WHERE user_id = ?
+            ORDER BY date ASC, created_at ASC
             LIMIT ?
             """,
             (user_id, limit)

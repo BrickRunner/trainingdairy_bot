@@ -20,9 +20,6 @@ def get_health_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="😴 Анализ сна", callback_data="health:sleep_analysis")
     )
     builder.row(
-        InlineKeyboardButton(text="📄 Экспорт в PDF", callback_data="health:export_pdf")
-    )
-    builder.row(
         InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
     return builder.as_markup()
@@ -171,7 +168,7 @@ def get_export_period_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📅 Произвольный период", callback_data="health_export:custom")
     )
     builder.row(
-        InlineKeyboardButton(text="🔙 Назад", callback_data="health:menu")
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_export_menu")
     )
     return builder.as_markup()
 
