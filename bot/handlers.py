@@ -1616,7 +1616,7 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         )
 
         await callback.message.answer(
-            "❌ Отмена",
+            ".",
             reply_markup=cancel_keyboard
         )
 
@@ -1733,7 +1733,7 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
 
         await message.answer(
-            "❌ Отмена",
+            ".",
             reply_markup=cancel_keyboard
         )
 

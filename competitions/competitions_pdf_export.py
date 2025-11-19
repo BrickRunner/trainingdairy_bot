@@ -19,7 +19,9 @@ import sys
 from .competitions_queries import get_user_competitions_with_details
 from .competitions_statistics import calculate_competitions_statistics
 from .competitions_graphs import generate_competitions_graphs
+from .competitions_utils import format_competition_distance, get_user_distance_unit
 from utils.date_formatter import DateFormatter, get_user_date_format
+from utils.unit_converter import km_to_miles
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +105,9 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     Returns:
         BytesIO объект с PDF документом
     """
-    # Получаем формат даты пользователя
+    # Получаем формат даты и единицы измерения пользователя
     user_format = await get_user_date_format(user_id)
+    distance_unit = await get_user_distance_unit(user_id)
 
     # Определяем период и получаем данные
     if period_param == "year":
@@ -191,11 +194,19 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     # Общая статистика в виде таблицы
     story.append(Paragraph("Общая статистика", heading_style))
 
+    # Форматируем суммарную дистанцию с учетом единиц измерения
+    total_distance = stats['total_distance']
+    if distance_unit == 'мили':
+        total_distance = km_to_miles(total_distance)
+        distance_label = f"{total_distance:.1f} миль"
+    else:
+        distance_label = f"{total_distance:.1f} км"
+
     general_stats_data = [
         ['Показатель', 'Значение'],
         ['Всего соревнований', str(stats['total_competitions'])],
         ['Финишировано', str(stats['finished'])],
-        ['Суммарный километраж', f"{stats['total_distance']:.1f} км"],
+        ['Суммарный километраж', distance_label],
     ]
 
     if stats['registered'] > 0:
@@ -234,8 +245,16 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
                 datetime.strptime(pr['date'], '%Y-%m-%d').date(),
                 user_format
             ) if pr.get('date') else '-'
+
+            # Форматируем дистанцию с учетом единиц измерения
+            if distance_unit == 'мили':
+                distance_miles = km_to_miles(distance)
+                distance_str = f"{distance_miles:.1f} миль"
+            else:
+                distance_str = f"{distance} км"
+
             pr_data.append([
-                f"{distance} км",
+                distance_str,
                 pr['time'],
                 pr.get('pace', '-'),
                 pr['competition'][:30],  # Ограничиваем длину
@@ -267,8 +286,8 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             achievement_rate = (stats['goal_achievement']['achieved'] / total_with_goal) * 100
 
             goal_text = f"Из {total_with_goal} соревнований с целевым временем:<br/>"
-            goal_text += f"✅ Выполнено: {stats['goal_achievement']['achieved']} ({achievement_rate:.0f}%)<br/>"
-            goal_text += f"❌ Не выполнено: {stats['goal_achievement']['not_achieved']}"
+            goal_text += f"Выполнено: {stats['goal_achievement']['achieved']} ({achievement_rate:.0f}%)<br/>"
+            goal_text += f"Не выполнено: {stats['goal_achievement']['not_achieved']}"
 
             story.append(Paragraph(goal_text, normal_style))
             story.append(Spacer(1, 0.5*cm))
@@ -311,8 +330,17 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             user_format
         ) if p.get('date') else '-'
 
-        name = p.get('name', 'Без названия')[:25]  # Ограничиваем длину
-        distance = f"{p.get('distance', '-')} км" if p.get('distance') else '-'
+        name = p.get('name', 'Без названия')[:40]  # Ограничиваем длину
+
+        # Форматируем дистанцию с учетом единиц измерения
+        if p.get('distance'):
+            if distance_unit == 'мили':
+                distance_miles = km_to_miles(p.get('distance'))
+                distance = f"{distance_miles:.1f} миль"
+            else:
+                distance = f"{p.get('distance')} км"
+        else:
+            distance = '-'
 
         # Время и темп
         if p.get('status') == 'finished' and p.get('finish_time'):
@@ -358,19 +386,19 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
 
     competitions_table = Table(
         competitions_data,
-        colWidths=[1.8*cm, 3.5*cm, 1.8*cm, 1.8*cm, 1.8*cm, 2.5*cm, 1.8*cm]
+        colWidths=[1.4*cm, 4.5*cm, 1.4*cm, 1.4*cm, 1.4*cm, 2.8*cm, 1.3*cm]
     )
     competitions_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2ecc71')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), FONT_NAME_BOLD),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
         ('BACKGROUND', (0, 1), (-1, -1), colors.lightgreen),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('FONTNAME', (0, 1), (-1, -1), FONT_NAME),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         # Чередующиеся цвета строк
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgreen]),

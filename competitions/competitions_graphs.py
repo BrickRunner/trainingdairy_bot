@@ -86,30 +86,57 @@ async def generate_competitions_graphs(
         plt.close(fig)
         buffers.append(buf)
 
+        # Основные дистанции (в км)
+        standard_distances = {
+            42.195,  # Марафон
+            21.1,    # Полумарафон
+            10.0,    # 10км
+            5.0,     # 5км
+            3.0,     # 3км
+            1.5,     # 1.5км
+            0.8,     # 800м
+            0.4,     # 400м
+            0.2,     # 200м
+            0.1,     # 100м
+            0.06     # 60м
+        }
+
         # Создаем графики динамики для каждой дистанции с более чем одним событием
         by_distance = defaultdict(list)
         for p in participants:
             if p.get('status') == 'finished' and p.get('finish_time') and p.get('distance') and p.get('date'):
                 distance = p['distance']
+                # Фильтруем только основные дистанции
+                if distance not in standard_distances:
+                    continue
                 date_obj = datetime.strptime(p['date'], '%Y-%m-%d')
                 time_seconds = _time_to_seconds(p['finish_time'])
                 if time_seconds > 0:
                     by_distance[distance].append((date_obj, time_seconds))
 
-        # Фильтруем дистанции с более чем одним событием и сортируем
+        # Фильтруем дистанции с более чем одним событием и сортируем по дистанции (от большей к меньшей)
         distances_with_multiple = [(d, data) for d, data in by_distance.items() if len(data) > 1]
-        distances_with_multiple.sort(key=lambda x: x[0])  # Сортируем по дистанции
+        distances_with_multiple.sort(key=lambda x: x[0], reverse=True)  # Сортируем от большей к меньшей
 
         if distances_with_multiple:
-            # Создаем графики по 2 на страницу
-            for i in range(0, len(distances_with_multiple), 2):
-                fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-                if not isinstance(axes, list):
-                    axes = [axes]
+            # Создаем графики по 4 на страницу (2 строки x 2 колонки)
+            for i in range(0, len(distances_with_multiple), 4):
+                num_plots = min(4, len(distances_with_multiple) - i)
 
-                fig.suptitle(f'Динамика результатов', fontsize=20, fontweight='bold')
+                # Определяем размер сетки
+                if num_plots == 1:
+                    fig, ax = plt.subplots(1, 1, figsize=(14, 6))
+                    axes_list = [ax]
+                elif num_plots == 2:
+                    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+                    axes_list = list(axes)
+                else:
+                    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+                    axes_list = axes.flatten().tolist()
 
-                for j, ax in enumerate(axes):
+                fig.suptitle(f'Динамика результатов', fontsize=16, fontweight='bold')
+
+                for j, ax in enumerate(axes_list):
                     idx = i + j
                     if idx < len(distances_with_multiple):
                         distance, data = distances_with_multiple[idx]
@@ -139,6 +166,9 @@ def _plot_single_distance_timeline(ax, distance: float, data: List[tuple]):
 
     # Строим график
     ax.plot(dates, times, marker='o', linewidth=2, markersize=8, color='#3498db')
+
+    # Инвертируем ось Y (меньшее время = лучше = выше)
+    ax.invert_yaxis()
 
     # Форматирование оси Y (время)
     y_ticks = ax.get_yticks()
