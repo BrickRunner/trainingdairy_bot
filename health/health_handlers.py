@@ -1188,7 +1188,7 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
         )
 
         await callback.message.answer(
-            "",
+            "Для отмены используйте кнопку ниже ⬇️",
             reply_markup=cancel_keyboard
         )
 
@@ -1234,19 +1234,13 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
 
         logger.info(f"PDF экспорт здоровья успешно создан для пользователя {user_id}, период: {period_param}")
 
-        # Возвращаем в меню
-        filled = await check_today_metrics_filled(user_id)
-        status_text = "📋 <b>Статус на сегодня:</b>\n"
-        status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
-        status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
-        status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
-
+        # Автоматически возвращаемся в меню экспорта
+        from bot.keyboards import get_export_type_keyboard
         await callback.message.answer(
-            f"❤️ <b>Здоровье и метрики</b>\n\n"
-            f"{status_text}\n"
-            f"Выберите действие:",
-            reply_markup=get_health_menu_keyboard(),
-            parse_mode="HTML"
+            "📥 <b>Экспорт в PDF</b>\n\n"
+            "Выберите, что вы хотите экспортировать:",
+            parse_mode="HTML",
+            reply_markup=get_export_type_keyboard()
         )
 
     except ValueError as e:

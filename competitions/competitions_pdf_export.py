@@ -110,14 +110,14 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     distance_unit = await get_user_distance_unit(user_id)
 
     # Определяем период и получаем данные
-    if period_param == "year":
+    if period_param == "halfyear":
+        start_date = date.today() - timedelta(days=180)
+        end_date = date.today()
+        period_name = "Последние полгода"
+    elif period_param == "year":
         start_date = date.today() - timedelta(days=365)
         end_date = date.today()
         period_name = "Последний год"
-    elif period_param == "all":
-        start_date = None
-        end_date = None
-        period_name = "Всё время"
     elif period_param.startswith("custom_"):
         # Формат: custom_YYYYMMDD_YYYYMMDD
         parts = period_param.split("_")
@@ -300,7 +300,7 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
         story.append(Spacer(1, 0.5*cm))
 
         # Генерируем графики (возвращается список буферов)
-        graph_buffers = await generate_competitions_graphs(participants, stats, period_name)
+        graph_buffers = await generate_competitions_graphs(participants, stats, period_name, distance_unit)
 
         # Добавляем каждый график на отдельную страницу
         for i, graph_buffer in enumerate(graph_buffers):
@@ -384,9 +384,11 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             status_str
         ])
 
+    # Оптимизируем ширину колонок для максимального использования ширины страницы
+    # Общая доступная ширина: ~17см (A4 минус отступы)
     competitions_table = Table(
         competitions_data,
-        colWidths=[1.4*cm, 4.5*cm, 1.4*cm, 1.4*cm, 1.4*cm, 2.8*cm, 1.3*cm]
+        colWidths=[1.6*cm, 5.5*cm, 1.8*cm, 1.8*cm, 1.8*cm, 3.2*cm, 1.5*cm]
     )
     competitions_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2ecc71')),

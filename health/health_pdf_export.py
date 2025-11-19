@@ -21,6 +21,7 @@ from .health_queries import get_health_metrics_range, get_latest_health_metrics
 from .health_graphs import generate_health_graphs
 from .sleep_analysis import SleepAnalyzer, format_sleep_analysis_message
 from utils.date_formatter import DateFormatter, get_user_date_format
+from utils.unit_converter import kg_to_lbs
 from database.queries import get_user_settings
 
 logger = logging.getLogger(__name__)
@@ -116,8 +117,10 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
     Returns:
         BytesIO объект с PDF документом
     """
-    # Получаем формат даты пользователя
+    # Получаем формат даты и единицы измерения пользователя
     user_format = await get_user_date_format(user_id)
+    settings = await get_user_settings(user_id)
+    weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
 
     # Получаем метрики за период
     if period_param == "week":
@@ -243,9 +246,20 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         current_weight = weight_values[-1]
         first_weight = weight_values[0]
         weight_change = current_weight - first_weight
-        stats_data.append(["Текущий вес:", f"{current_weight:.1f} кг"])
+
+        # Конвертируем вес если нужно
+        if weight_unit == 'фунты':
+            current_weight_display = kg_to_lbs(current_weight)
+            weight_change_display = kg_to_lbs(weight_change)
+            unit_label = 'фунтов'
+        else:
+            current_weight_display = current_weight
+            weight_change_display = weight_change
+            unit_label = 'кг'
+
+        stats_data.append(["Текущий вес:", f"{current_weight_display:.1f} {unit_label}"])
         if abs(weight_change) > 0.1:
-            stats_data.append(["Изменение веса:", f"{weight_change:+.1f} кг"])
+            stats_data.append(["Изменение веса:", f"{weight_change_display:+.1f} {unit_label}"])
 
     if sleep_values:
         avg_sleep = sum(sleep_values) / len(sleep_values)
@@ -276,11 +290,10 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         story.append(Spacer(1, 0.5*cm))
 
         # Получаем целевой вес из настроек пользователя
-        settings = await get_user_settings(user_id)
         weight_goal = settings.get('weight_goal') if settings else None
 
-        # Генерируем график с учётом формата даты
-        graph_buffer = await generate_health_graphs(metrics, period_name, weight_goal, user_format)
+        # Генерируем график с учётом формата даты и единиц измерения
+        graph_buffer = await generate_health_graphs(metrics, period_name, weight_goal, user_format, weight_unit)
 
         # Добавляем график как изображение
         img = Image(graph_buffer, width=17*cm, height=14*cm)
@@ -299,7 +312,17 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         metric_date_obj = datetime.strptime(metric['date'], '%Y-%m-%d').date()
         metric_date = DateFormatter.format_date(metric_date_obj, user_format)
         pulse = f"{metric['morning_pulse']}" if metric.get('morning_pulse') else "-"
-        weight = f"{metric['weight']:.1f} кг" if metric.get('weight') else "-"
+
+        # Форматируем вес с учетом единиц измерения
+        if metric.get('weight'):
+            if weight_unit == 'фунты':
+                weight_display = kg_to_lbs(metric['weight'])
+                weight = f"{weight_display:.1f} фунтов"
+            else:
+                weight = f"{metric['weight']:.1f} кг"
+        else:
+            weight = "-"
+
         sleep = format_sleep_duration(metric['sleep_duration']) if metric.get('sleep_duration') else "-"
         quality = f"{metric['sleep_quality']}/5" if metric.get('sleep_quality') else "-"
 

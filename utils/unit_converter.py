@@ -20,14 +20,40 @@ def km_to_miles(km: float) -> float:
 def miles_to_km(miles: float) -> float:
     """
     Конвертирует мили в километры
-    
+
     Args:
         miles: Расстояние в милях
-        
+
     Returns:
         Расстояние в километрах
     """
     return miles / 0.621371
+
+
+def kg_to_lbs(kg: float) -> float:
+    """
+    Конвертирует килограммы в фунты
+
+    Args:
+        kg: Вес в килограммах
+
+    Returns:
+        Вес в фунтах
+    """
+    return kg * 2.20462
+
+
+def lbs_to_kg(lbs: float) -> float:
+    """
+    Конвертирует фунты в килограммы
+
+    Args:
+        lbs: Вес в фунтах
+
+    Returns:
+        Вес в килограммах
+    """
+    return lbs / 2.20462
 
 
 def format_distance(distance_km: float, distance_unit: str = 'км') -> str:

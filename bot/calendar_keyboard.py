@@ -83,7 +83,7 @@ class CalendarKeyboard:
             ),
             InlineKeyboardButton(
                 text=f"{month_name} {year}",
-                callback_data=f"{prefix}_1_change_{year}_{month:02d}_01"
+                callback_data=f"{prefix}_empty"
             ),
             InlineKeyboardButton(
                 text=">" if can_go_forward else " ",

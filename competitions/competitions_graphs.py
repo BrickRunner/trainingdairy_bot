@@ -48,7 +48,8 @@ def _seconds_to_time(seconds: int) -> str:
 async def generate_competitions_graphs(
     participants: List[Dict[str, Any]],
     stats: Dict[str, Any],
-    period_text: str
+    period_text: str,
+    distance_unit: str = 'км'
 ) -> List[io.BytesIO]:
     """
     Генерирует изображения с графиками для соревнований
@@ -57,6 +58,7 @@ async def generate_competitions_graphs(
         participants: Список участий с данными соревнований
         stats: Словарь со статистикой
         period_text: Текстовое описание периода
+        distance_unit: Единица измерения дистанции ('км' или 'мили')
 
     Returns:
         Список BytesIO с изображениями графиков
@@ -74,7 +76,7 @@ async def generate_competitions_graphs(
         _plot_by_type(ax1, stats)
 
         # График 2: Распределение по дистанциям
-        _plot_by_distance(ax2, stats)
+        _plot_by_distance(ax2, stats, distance_unit)
 
         # Настройка отступов
         plt.tight_layout()
@@ -140,7 +142,7 @@ async def generate_competitions_graphs(
                     idx = i + j
                     if idx < len(distances_with_multiple):
                         distance, data = distances_with_multiple[idx]
-                        _plot_single_distance_timeline(ax, distance, data)
+                        _plot_single_distance_timeline(ax, distance, data, distance_unit)
                     else:
                         ax.axis('off')
 
@@ -159,8 +161,10 @@ async def generate_competitions_graphs(
         raise
 
 
-def _plot_single_distance_timeline(ax, distance: float, data: List[tuple]):
+def _plot_single_distance_timeline(ax, distance: float, data: List[tuple], distance_unit: str = 'км'):
     """График динамики результатов для одной дистанции"""
+    from utils.unit_converter import km_to_miles
+
     data = sorted(data)
     dates, times = zip(*data)
 
@@ -179,7 +183,14 @@ def _plot_single_distance_timeline(ax, distance: float, data: List[tuple]):
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
 
-    ax.set_title(f'Динамика результатов ({distance} км)', fontsize=14, fontweight='bold')
+    # Форматируем дистанцию для заголовка
+    if distance_unit == 'мили':
+        distance_miles = km_to_miles(distance)
+        distance_label = f'{distance_miles:.1f} миль'
+    else:
+        distance_label = f'{distance} км'
+
+    ax.set_title(f'Динамика результатов ({distance_label})', fontsize=14, fontweight='bold')
     ax.set_xlabel('Дата соревнования', fontsize=12)
     ax.set_ylabel('Время финиша', fontsize=12)
     ax.grid(True, alpha=0.3, linestyle='--')
@@ -220,8 +231,10 @@ def _plot_by_type(ax, stats: Dict[str, Any]):
     ax.grid(True, alpha=0.3, axis='y', linestyle='--')
 
 
-def _plot_by_distance(ax, stats: Dict[str, Any]):
+def _plot_by_distance(ax, stats: Dict[str, Any], distance_unit: str = 'км'):
     """График распределения по дистанциям"""
+    from utils.unit_converter import km_to_miles
+
     by_distance = stats.get('by_distance', {})
 
     if not by_distance:
@@ -236,8 +249,11 @@ def _plot_by_distance(ax, stats: Dict[str, Any]):
     sorted_distances = sorted(by_distance.items(), key=lambda x: x[0])
     distances, counts = zip(*sorted_distances)
 
-    # Форматируем подписи дистанций
-    distance_labels = [f'{d} км' for d in distances]
+    # Форматируем подписи дистанций с учетом единиц измерения
+    if distance_unit == 'мили':
+        distance_labels = [f'{km_to_miles(d):.1f} миль' for d in distances]
+    else:
+        distance_labels = [f'{d} км' for d in distances]
 
     # Цвета для разных дистанций
     colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']

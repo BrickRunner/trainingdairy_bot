@@ -58,19 +58,6 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             date_format_desc = await get_date_format_description(user_id)
             formatted_start = await format_date_for_user(selected_date, user_id)
 
-            # Создаем клавиатуру с кнопкой отмены
-            builder = ReplyKeyboardBuilder()
-            builder.row(KeyboardButton(text="❌ Отмена"))
-            cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-            await callback.message.answer(
-                f"✅ Дата начала: {formatted_start}\n\n"
-                f"📅 Теперь введите дату окончания периода\n\n"
-                f"<i>📝 Или введите дату вручную в формате {date_format_desc}</i>",
-                parse_mode="HTML",
-                reply_markup=cancel_keyboard
-            )
-
             # Отправляем календарь для даты окончания
             calendar_keyboard = CalendarKeyboard.create_calendar(
                 calendar_format=1,
@@ -80,8 +67,20 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             )
 
             await callback.message.answer(
-                "📅 Календарь:",
+                f"✅ Дата начала: {formatted_start}\n\n"
+                f"📅 Теперь выберите дату окончания из календаря или введите вручную в формате {date_format_desc}",
+                parse_mode="HTML",
                 reply_markup=calendar_keyboard
+            )
+
+            # Создаем клавиатуру с кнопкой отмены
+            builder = ReplyKeyboardBuilder()
+            builder.row(KeyboardButton(text="❌ Отмена"))
+            cancel_keyboard = builder.as_markup(resize_keyboard=True)
+
+            await callback.message.answer(
+                "Для отмены используйте кнопку ниже ⬇️",
+                reply_markup=cancel_keyboard
             )
 
             await state.set_state(HealthExportStates.waiting_for_end_date)
@@ -140,11 +139,8 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
             # Очищаем состояние
             await state.clear()
 
-            # Показываем сообщение о генерации
-            await callback.message.answer(
-                "⏳ Генерирую PDF...",
-                reply_markup={"remove_keyboard": True}
-            )
+            # Показываем всплывающее окно о генерации
+            await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
             try:
                 # Импортируем функцию экспорта
@@ -165,9 +161,12 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
                 formatted_start = await format_date_for_user(start_date, user_id)
                 formatted_end = await format_date_for_user(selected_date, user_id)
 
+                # Убираем клавиатуру при отправке документа
+                from aiogram.types import ReplyKeyboardRemove
                 await callback.message.answer_document(
                     document=document,
-                    caption=f"📄 Экспорт данных здоровья за период {formatted_start} - {formatted_end}"
+                    caption=f"📄 Экспорт данных здоровья за период {formatted_start} - {formatted_end}",
+                    reply_markup=ReplyKeyboardRemove()
                 )
 
                 logger.info(f"PDF экспорт здоровья успешно создан для пользователя {user_id}, период: {start_date} - {selected_date}")

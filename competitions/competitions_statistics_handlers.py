@@ -107,29 +107,26 @@ async def show_statistics(callback: CallbackQuery):
             pass
 
 
-@router.callback_query(F.data == "comp:export:year")
-async def export_year(callback: CallbackQuery):
-    """Экспорт соревнований за последний год"""
+@router.callback_query(F.data == "comp:export:halfyear")
+async def export_halfyear(callback: CallbackQuery):
+    """Экспорт соревнований за последние полгода"""
     user_id = callback.from_user.id
 
-    await callback.message.edit_text(
-        "⏳ Генерирую PDF за последний год...\n\n"
-        "Пожалуйста, подождите..."
-    )
+    await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
     try:
         # Генерируем PDF
-        pdf_buffer = await create_competitions_pdf(user_id, "year")
+        pdf_buffer = await create_competitions_pdf(user_id, "halfyear")
 
         # Формируем имя файла
-        filename = f"competitions_year_{date.today().strftime('%Y%m%d')}.pdf"
+        filename = f"competitions_halfyear_{date.today().strftime('%Y%m%d')}.pdf"
 
         # Отправляем PDF
         document = BufferedInputFile(pdf_buffer.read(), filename=filename)
 
         await callback.message.answer_document(
             document=document,
-            caption="📄 Экспорт соревнований за последний год"
+            caption="📄 Экспорт соревнований за последние полгода"
         )
 
         # Автоматически возвращаемся в меню экспорта
@@ -162,29 +159,26 @@ async def export_year(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "comp:export:all")
-async def export_all(callback: CallbackQuery):
-    """Экспорт всех соревнований"""
+@router.callback_query(F.data == "comp:export:year")
+async def export_year(callback: CallbackQuery):
+    """Экспорт соревнований за последний год"""
     user_id = callback.from_user.id
 
-    await callback.message.edit_text(
-        "⏳ Генерирую PDF за всё время...\n\n"
-        "Пожалуйста, подождите..."
-    )
+    await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
     try:
         # Генерируем PDF
-        pdf_buffer = await create_competitions_pdf(user_id, "all")
+        pdf_buffer = await create_competitions_pdf(user_id, "year")
 
         # Формируем имя файла
-        filename = f"competitions_all_{date.today().strftime('%Y%m%d')}.pdf"
+        filename = f"competitions_year_{date.today().strftime('%Y%m%d')}.pdf"
 
         # Отправляем PDF
         document = BufferedInputFile(pdf_buffer.read(), filename=filename)
 
         await callback.message.answer_document(
             document=document,
-            caption="📄 Экспорт всех соревнований"
+            caption="📄 Экспорт соревнований за последний год"
         )
 
         # Автоматически возвращаемся в меню экспорта
@@ -245,8 +239,9 @@ async def export_custom(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML"
     )
 
+    # Отправляем клавиатуру отмены
     await callback.message.answer(
-        ".",
+        "Для отмены используйте кнопку ниже ⬇️",
         reply_markup=cancel_keyboard
     )
 
@@ -280,18 +275,6 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             date_format_desc = await get_date_format_description(user_id)
             formatted_start = await format_date_for_user(selected_date, user_id)
 
-            # Создаем клавиатуру с кнопкой отмены
-            from aiogram.utils.keyboard import ReplyKeyboardBuilder
-            from aiogram.types import KeyboardButton
-            builder = ReplyKeyboardBuilder()
-            builder.row(KeyboardButton(text="❌ Отмена"))
-            cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-            await callback.message.answer(
-                ".",
-                reply_markup=cancel_keyboard
-            )
-
             # Отправляем календарь для даты окончания
             calendar_keyboard = CalendarKeyboard.create_calendar(
                 calendar_format=1,
@@ -306,6 +289,18 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
                 f"<i>📝 Или введите дату вручную в формате {date_format_desc}</i>",
                 parse_mode="HTML",
                 reply_markup=calendar_keyboard
+            )
+
+            # Создаем клавиатуру с кнопкой отмены
+            from aiogram.utils.keyboard import ReplyKeyboardBuilder
+            from aiogram.types import KeyboardButton
+            builder = ReplyKeyboardBuilder()
+            builder.row(KeyboardButton(text="❌ Отмена"))
+            cancel_keyboard = builder.as_markup(resize_keyboard=True)
+
+            await callback.message.answer(
+                "Для отмены используйте кнопку ниже ⬇️",
+                reply_markup=cancel_keyboard
             )
 
             await state.set_state(CompetitionsExportStates.waiting_for_end_date)
@@ -368,11 +363,8 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
             # Очищаем состояние
             await state.clear()
 
-            # Показываем сообщение о генерации
-            await callback.message.answer(
-                "⏳ Генерирую PDF...",
-                reply_markup={"remove_keyboard": True}
-            )
+            # Показываем всплывающее окно о генерации
+            await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
             try:
                 # Формируем параметр периода в формате custom_YYYYMMDD_YYYYMMDD
@@ -390,18 +382,23 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
                 formatted_start = await format_date_for_user(start_date, user_id)
                 formatted_end = await format_date_for_user(selected_date, user_id)
 
+                # Убираем клавиатуру при отправке документа
+                from aiogram.types import ReplyKeyboardRemove
                 await callback.message.answer_document(
                     document=document,
-                    caption=f"📄 Экспорт соревнований за период {formatted_start} - {formatted_end}"
+                    caption=f"📄 Экспорт соревнований за период {formatted_start} - {formatted_end}",
+                    reply_markup=ReplyKeyboardRemove()
                 )
 
                 logger.info(f"PDF экспорт соревнований успешно создан для пользователя {user_id}, период: {start_date} - {selected_date}")
 
-                # Возвращаем в меню
+                # Автоматически возвращаемся в меню экспорта
+                from bot.keyboards import get_export_type_keyboard
                 await callback.message.answer(
-                    "✅ PDF успешно создан!\n\n"
-                    "Выберите действие:",
-                    reply_markup=get_back_to_export_menu_keyboard()
+                    "📥 <b>Экспорт в PDF</b>\n\n"
+                    "Выберите, что вы хотите экспортировать:",
+                    parse_mode="HTML",
+                    reply_markup=get_export_type_keyboard()
                 )
 
             except ValueError as e:
@@ -440,7 +437,18 @@ async def cancel_export(message: Message, state: FSMContext):
     """Отмена процесса экспорта"""
     await state.clear()
     from aiogram.types import ReplyKeyboardRemove
+    from bot.keyboards import get_export_type_keyboard
+
+    # Убираем клавиатуру с кнопкой отмены
     await message.answer(
         "Экспорт отменен",
         reply_markup=ReplyKeyboardRemove()
+    )
+
+    # Возвращаем пользователя в меню экспорта
+    await message.answer(
+        "📥 <b>Экспорт в PDF</b>\n\n"
+        "Выберите, что вы хотите экспортировать:",
+        parse_mode="HTML",
+        reply_markup=get_export_type_keyboard()
     )

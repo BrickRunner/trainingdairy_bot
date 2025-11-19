@@ -32,7 +32,7 @@ def get_short_strftime_fmt(date_format: str) -> str:
     return short.replace('DD', '%d').replace('MM', '%m')
 
 
-async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_goal: float = None, date_format: str = 'DD.MM.YYYY') -> io.BytesIO:
+async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_goal: float = None, date_format: str = 'DD.MM.YYYY', weight_unit: str = 'кг') -> io.BytesIO:
     """
     Генерирует графики метрик здоровья
 
@@ -41,6 +41,7 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_g
         period_name: Название периода (например, "этот месяц", "7 дней")
         weight_goal: Целевой вес (если установлен)
         date_format: Формат даты для осей графиков (например, 'DD.MM.YYYY')
+        weight_unit: Единица измерения веса ('кг' или 'фунты')
 
     Returns:
         BytesIO объект с изображением графиков
@@ -80,11 +81,21 @@ async def generate_health_graphs(metrics: List[Dict], period_name: str, weight_g
             '#e74c3c', '', date_format=short_fmt
         )
 
-        # График веса
+        # График веса - конвертируем значения если нужно
+        from utils.unit_converter import kg_to_lbs
+        if weight_unit == 'фунты':
+            weight_values_display = [kg_to_lbs(w) if w else None for w in weight_values]
+            weight_goal_display = kg_to_lbs(weight_goal) if weight_goal else None
+            weight_label = 'фунты'
+        else:
+            weight_values_display = weight_values
+            weight_goal_display = weight_goal
+            weight_label = 'кг'
+
         _plot_metric(
-            axes[1], dates, weight_values,
-            'Вес', 'кг',
-            '#3498db', '', weight_goal, date_format=short_fmt
+            axes[1], dates, weight_values_display,
+            'Вес', weight_label,
+            '#3498db', '', weight_goal_display, date_format=short_fmt
         )
 
         # График сна

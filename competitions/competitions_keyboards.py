@@ -416,10 +416,10 @@ def get_export_period_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     builder.row(
-        InlineKeyboardButton(text="📅 Последний год", callback_data="comp:export:year")
+        InlineKeyboardButton(text="📅 Полгода", callback_data="comp:export:halfyear")
     )
     builder.row(
-        InlineKeyboardButton(text="📅 Всё время", callback_data="comp:export:all")
+        InlineKeyboardButton(text="📅 Год", callback_data="comp:export:year")
     )
     builder.row(
         InlineKeyboardButton(text="📅 Произвольный период", callback_data="comp:export:custom")
