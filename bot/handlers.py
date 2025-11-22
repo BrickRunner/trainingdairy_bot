@@ -1595,25 +1595,20 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
         format_desc = DateFormatter.get_format_description(date_format)
 
-        # Создаем клавиатуру с кнопкой отмены
-        from aiogram.utils.keyboard import ReplyKeyboardBuilder
-        from aiogram.types import KeyboardButton
-        builder = ReplyKeyboardBuilder()
-        builder.row(KeyboardButton(text="❌ Отмена"))
-        cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-        # Показываем календарь (ограничен текущей датой)
-        calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal", max_date=datetime.now())
+        # Показываем календарь с inline кнопкой отмены (ограничен текущей датой)
+        calendar = CalendarKeyboard.create_calendar(
+            calendar_format=1,
+            current_date=datetime.now(),
+            callback_prefix="cal",
+            max_date=datetime.now(),
+            show_cancel=True,
+            cancel_callback="trainings:export:cancel"
+        )
         await callback.message.edit_text(
             f"📅 <b>Произвольный период</b>\n\n"
             f"Выберите начальную дату из календаря или введите вручную в формате {format_desc}",
             reply_markup=calendar,
             parse_mode="HTML"
-        )
-
-        await callback.message.answer(
-            ".",
-            reply_markup=cancel_keyboard
         )
 
         await state.set_state(ExportPDFStates.waiting_for_start_date)
@@ -1623,22 +1618,6 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
 @router.message(ExportPDFStates.waiting_for_start_date)
 async def process_export_start_date(message: Message, state: FSMContext):
     """Обработка начальной даты для произвольного периода"""
-    # Проверка на отмену
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer(
-            "❌ Экспорт отменен",
-            reply_markup={"remove_keyboard": True}
-        )
-        # Возврат в меню выбора периода экспорта
-        await message.answer(
-            "📊 <b>Экспорт тренировок в PDF</b>\n\n"
-            "Выберите период для экспорта:",
-            parse_mode="HTML",
-            reply_markup=get_export_period_keyboard()
-        )
-        return
-
     # Проверка на None для message.text
     if not message.text:
         await message.answer(
@@ -1683,59 +1662,31 @@ async def process_export_start_date(message: Message, state: FSMContext):
     
     # Сохраняем начальную дату
     await state.update_data(start_date=start_date.strftime('%Y-%m-%d'))
-    
+
     format_desc = DateFormatter.get_format_description(date_format)
     start_date_str = DateFormatter.format_date(start_date, date_format)
 
-    # Создаем клавиатуру с кнопкой отмены
-    from aiogram.utils.keyboard import ReplyKeyboardBuilder
-    from aiogram.types import KeyboardButton
-    builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text="❌ Отмена"))
-    cancel_keyboard = builder.as_markup(resize_keyboard=True)
+    # Показываем календарь для конечной даты с inline кнопкой отмены
+    calendar = CalendarKeyboard.create_calendar(
+        calendar_format=1,
+        current_date=datetime.now(),
+        callback_prefix="cal_end",
+        max_date=datetime.now(),
+        show_cancel=True,
+        cancel_callback="trainings:export:cancel"
+    )
 
     await message.answer(
         f"✅ Начальная дата: {start_date_str}\n\n"
-        f"Теперь введите конечную дату в формате {format_desc}",
-        reply_markup=cancel_keyboard
+        f"📅 Теперь выберите конечную дату из календаря или введите вручную в формате {format_desc}",
+        reply_markup=calendar,
+        parse_mode="HTML"
     )
     await state.set_state(ExportPDFStates.waiting_for_end_date)
 
 @router.message(ExportPDFStates.waiting_for_end_date)
 async def process_export_end_date(message: Message, state: FSMContext):
     """Обработка конечной даты для произвольного периода"""
-    # Проверка на отмену
-    if message.text == "❌ Отмена":
-        # Возврат на шаг назад - к вводу начальной даты
-        user_settings = await get_user_settings(message.from_user.id)
-        date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
-        format_desc = DateFormatter.get_format_description(date_format)
-
-        # Создаем клавиатуру с кнопкой отмены
-        from aiogram.utils.keyboard import ReplyKeyboardBuilder
-        from aiogram.types import KeyboardButton
-        builder = ReplyKeyboardBuilder()
-        builder.row(KeyboardButton(text="❌ Отмена"))
-        cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-        # Показываем календарь (ограничен текущей датой)
-        from datetime import datetime
-        calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal", max_date=datetime.now())
-        await message.answer(
-            f"📅 <b>Произвольный период</b>\n\n"
-            f"Выберите начальную дату из календаря или введите вручную в формате {format_desc}",
-            reply_markup=calendar,
-            parse_mode="HTML"
-        )
-
-        await message.answer(
-            ".",
-            reply_markup=cancel_keyboard
-        )
-
-        await state.set_state(ExportPDFStates.waiting_for_start_date)
-        return
-
     # Проверка на None для message.text
     if not message.text:
         await message.answer(
@@ -1966,7 +1917,7 @@ async def handle_calendar_end_date_navigation(callback: CallbackQuery, state: FS
 
     # Это навигация по календарю (ограничен текущей датой для выбора периода тренировок)
     callback_data_normalized = callback.data.replace("cal_end_", "cal_")
-    new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal", max_date=datetime.now())
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal", max_date=datetime.now(), show_cancel=True, cancel_callback="trainings:export:cancel")
 
     if new_keyboard:
         # Меняем префикс обратно на cal_end для конечной даты
@@ -2044,10 +1995,17 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
             f"Теперь выберите конечную дату"
         )
 
-        # Показываем календарь для выбора конечной даты (ограничен текущей датой)
-        calendar = CalendarKeyboard.create_calendar(1, selected_date, "cal_end", max_date=datetime.now())
+        # Показываем календарь для выбора конечной даты с inline кнопкой отмены (ограничен текущей датой)
+        calendar = CalendarKeyboard.create_calendar(
+            calendar_format=1,
+            current_date=selected_date,
+            callback_prefix="cal_end",
+            max_date=datetime.now(),
+            show_cancel=True,
+            cancel_callback="trainings:export:cancel"
+        )
         await callback.message.answer(
-            "📅 Выберите конечную дату:",
+            "📅 Выберите конечную дату или введите вручную в формате " + format_desc,
             reply_markup=calendar
         )
 
@@ -2114,7 +2072,7 @@ async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext)
         return
 
     # Получаем новую клавиатуру для навигации (ограничен текущей датой)
-    new_keyboard = CalendarKeyboard.handle_navigation(callback.data, prefix="cal", max_date=datetime.now())
+    new_keyboard = CalendarKeyboard.handle_navigation(callback.data, prefix="cal", max_date=datetime.now(), show_cancel=True, cancel_callback="trainings:export:cancel")
 
     if new_keyboard:
         try:
@@ -2127,6 +2085,22 @@ async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext)
         logger.warning(f"Навигация календаря не сработала для callback: {callback.data}")
 
     await callback.answer()
+
+
+@router.callback_query(F.data == "trainings:export:cancel")
+async def cancel_trainings_export_inline(callback: CallbackQuery, state: FSMContext):
+    """Отмена процесса экспорта тренировок (inline кнопка)"""
+    await state.clear()
+    from bot.keyboards import get_export_type_keyboard
+
+    # Возвращаем пользователя в меню экспорта
+    await callback.message.edit_text(
+        "📥 <b>Экспорт в PDF</b>\n\n"
+        "Выберите, что вы хотите экспортировать:",
+        parse_mode="HTML",
+        reply_markup=get_export_type_keyboard()
+    )
+    await callback.answer("Экспорт отменен")
 
 
 # ============== ОБРАБОТЧИК КНОПКИ "ТРЕНЕР" ==============

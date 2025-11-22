@@ -406,8 +406,6 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
                     parse_mode="HTML",
                     reply_markup=get_export_period_menu()
                 )
-
-            await callback.answer()
             return
 
         except (IndexError, ValueError) as e:
