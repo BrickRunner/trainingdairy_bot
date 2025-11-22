@@ -1007,6 +1007,10 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                     if comp.get('place_age_category'):
                         result_line += f" • 🏅 Категория: {comp['place_age_category']}"
 
+                    # Добавляем разряд
+                    if comp.get('qualification'):
+                        result_line += f"\n   🎖️ Разряд: {comp['qualification']}"
+
                     # Добавляем пульс
                     if comp.get('heart_rate'):
                         result_line += f"\n   ❤️ Пульс: {comp['heart_rate']} уд/мин"
@@ -1079,6 +1083,10 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
             pace = await calculate_pace_with_unit(record['best_time'], distance, user_id)
             if pace:
                 text += f"⚡ Темп: {pace}\n"
+
+            # Добавляем разряд
+            if record.get('qualification'):
+                text += f"🎖️ Разряд: {record['qualification']}\n"
 
             if record.get('competition_name'):
                 comp_name_short = record['competition_name'][:30] + "..." if len(record['competition_name']) > 30 else record['competition_name']

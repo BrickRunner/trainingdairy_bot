@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS competition_participants (
     place_overall INTEGER,  -- место в общем зачёте
     place_age_category INTEGER,  -- место в возрастной категории
     age_category TEXT,  -- возрастная категория (например M30-39)
+    qualification TEXT,  -- выполненный разряд (КМС, МС, МСМК и т.д.)
     result_comment TEXT,  -- впечатления
     result_photo TEXT,  -- путь к фото финишера
 
@@ -249,6 +250,7 @@ CREATE TABLE IF NOT EXISTS personal_records (
     best_time TEXT NOT NULL,  -- лучшее время (HH:MM:SS)
     competition_id INTEGER,  -- на каком соревновании установлен (если есть)
     date DATE NOT NULL,  -- дата установления рекорда
+    qualification TEXT,  -- выполненный разряд (КМС, МС, МСМК и т.д.)
 
     -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
