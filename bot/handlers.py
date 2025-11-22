@@ -1558,12 +1558,10 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         start_date = today - timedelta(days=180)
         end_date = today
         period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
-        
-        await callback.message.edit_text(
-            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите...",
-            parse_mode="Markdown"
-        )
-        
+
+        # Показываем всплывающее окно
+        await callback.answer("⏳ Генерирую PDF...", show_alert=True)
+
         # Генерируем PDF
         await generate_and_send_pdf(
             callback.message,
@@ -1578,12 +1576,10 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         start_date = today - timedelta(days=365)
         end_date = today
         period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
-        
-        await callback.message.edit_text(
-            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите...",
-            parse_mode="Markdown"
-        )
-        
+
+        # Показываем всплывающее окно
+        await callback.answer("⏳ Генерирую PDF...", show_alert=True)
+
         # Генерируем PDF
         await generate_and_send_pdf(
             callback.message,
@@ -1799,12 +1795,8 @@ async def process_export_end_date(message: Message, state: FSMContext):
     
     # Формируем текстовое описание периода
     period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
-    
-    await message.answer(
-        f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
-    )
-    
-    # Генерируем PDF
+
+    # Генерируем PDF без отображения сообщения ожидания
     await generate_and_send_pdf(
         message,
         message.from_user.id,
@@ -1941,10 +1933,8 @@ async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSM
     period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
     date_str = DateFormatter.format_date(end_date, date_format)
 
-    await callback.message.edit_text(
-        f"✅ Конечная дата: {date_str}\n\n"
-        f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
-    )
+    # Показываем всплывающее окно
+    await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
     # Генерируем PDF
     await generate_and_send_pdf(
@@ -2088,10 +2078,8 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         # Формируем текстовое описание периода
         period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
 
-        await callback.message.edit_text(
-            f"✅ Конечная дата: {date_str}\n\n"
-            f"⏳ Генерирую PDF за период:\n{period_text}\n\nПожалуйста, подождите..."
-        )
+        # Показываем всплывающее окно
+        await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
         # Генерируем PDF
         await generate_and_send_pdf(

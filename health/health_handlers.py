@@ -19,8 +19,7 @@ from health.health_keyboards import (
     get_graphs_period_keyboard,
     get_cancel_keyboard,
     get_skip_cancel_keyboard,
-    get_date_choice_keyboard,
-    get_export_period_keyboard
+    get_date_choice_keyboard
 )
 from health.health_queries import (
     save_health_metrics,
@@ -1163,21 +1162,16 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
         user_id = callback.from_user.id
         date_format_desc = await get_date_format_description(user_id)
 
-        # Создаем клавиатуру с кнопкой отмены
-        from aiogram.types import KeyboardButton
-        from aiogram.utils.keyboard import ReplyKeyboardBuilder
-        builder = ReplyKeyboardBuilder()
-        builder.row(KeyboardButton(text="❌ Отмена"))
-        cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-        # Отправляем календарь
+        # Отправляем календарь с inline кнопкой отмены
         from bot.calendar_keyboard import CalendarKeyboard
         from datetime import datetime
         calendar_keyboard = CalendarKeyboard.create_calendar(
             calendar_format=1,
             current_date=datetime.now(),
             callback_prefix="health_export_start",
-            max_date=datetime.now()
+            max_date=datetime.now(),
+            show_cancel=True,
+            cancel_callback="health:export:cancel"
         )
 
         await callback.message.edit_text(
@@ -1185,11 +1179,6 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
             f"Выберите дату начала из календаря или введите вручную в формате {date_format_desc}",
             reply_markup=calendar_keyboard,
             parse_mode="HTML"
-        )
-
-        await callback.message.answer(
-            "Для отмены используйте кнопку ниже ⬇️",
-            reply_markup=cancel_keyboard
         )
 
         await state.set_state(HealthExportStates.waiting_for_start_date)
@@ -1293,22 +1282,6 @@ async def process_export_start_date(message: Message, state: FSMContext):
     """Обработка даты начала периода экспорта"""
     user_id = message.from_user.id
 
-    # Обработка отмены
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer(
-            "❌ Экспорт отменен",
-            reply_markup={"remove_keyboard": True}
-        )
-        # Возврат в меню выбора периода экспорта
-        await message.answer(
-            "📄 <b>Экспорт данных здоровья в PDF</b>\n\n"
-            "Выберите период для экспорта:\n\n",
-            reply_markup=get_export_period_keyboard(),
-            parse_mode="HTML"
-        )
-        return
-
     try:
         # Парсим дату с использованием пользовательского формата
         start_date = await parse_user_date(message.text, user_id)
@@ -1328,33 +1301,22 @@ async def process_export_start_date(message: Message, state: FSMContext):
         date_format_desc = await get_date_format_description(user_id)
         formatted_start = await format_date_for_user(start_date, user_id)
 
-        # Создаем клавиатуру с кнопкой отмены
-        from aiogram.utils.keyboard import ReplyKeyboardBuilder
-        from aiogram.types import KeyboardButton
-        builder = ReplyKeyboardBuilder()
-        builder.row(KeyboardButton(text="❌ Отмена"))
-        cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-        await message.answer(
-            f"✅ Дата начала: {formatted_start}\n\n"
-            f"📅 Теперь введите дату окончания периода\n\n"
-            f"<i>📝 Или введите дату вручную в формате {date_format_desc}</i>",
-            parse_mode="HTML",
-            reply_markup=cancel_keyboard
-        )
-
-        # Отправляем календарь
+        # Отправляем календарь с inline кнопкой отмены
         from bot.calendar_keyboard import CalendarKeyboard
         from datetime import datetime
         calendar_keyboard = CalendarKeyboard.create_calendar(
             calendar_format=1,
             current_date=datetime.now(),
             callback_prefix="health_export_end",
-            max_date=datetime.now()
+            max_date=datetime.now(),
+            show_cancel=True,
+            cancel_callback="health:export:cancel"
         )
 
         await message.answer(
-            "📅 Календарь:",
+            f"✅ Дата начала: {formatted_start}\n\n"
+            f"📅 Теперь выберите дату окончания из календаря или введите вручную в формате {date_format_desc}",
+            parse_mode="HTML",
             reply_markup=calendar_keyboard
         )
 
@@ -1372,42 +1334,6 @@ async def process_export_start_date(message: Message, state: FSMContext):
 async def process_export_end_date(message: Message, state: FSMContext):
     """Обработка даты окончания периода экспорта и генерация PDF"""
     user_id = message.from_user.id
-
-    # Обработка отмены - возврат на шаг назад к вводу начальной даты
-    if message.text == "❌ Отмена":
-        date_format_desc = await get_date_format_description(user_id)
-
-        # Создаем клавиатуру с кнопкой отмены
-        from aiogram.types import KeyboardButton
-        from aiogram.utils.keyboard import ReplyKeyboardBuilder
-        builder = ReplyKeyboardBuilder()
-        builder.row(KeyboardButton(text="❌ Отмена"))
-        cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-        # Отправляем календарь
-        from bot.calendar_keyboard import CalendarKeyboard
-        from datetime import datetime
-        calendar_keyboard = CalendarKeyboard.create_calendar(
-            calendar_format=1,
-            current_date=datetime.now(),
-            callback_prefix="health_export_start",
-            max_date=datetime.now()
-        )
-
-        await message.answer(
-            f"📅 <b>Произвольный период</b>\n\n"
-            f"Выберите дату начала из календаря или введите вручную в формате {date_format_desc}",
-            reply_markup=calendar_keyboard,
-            parse_mode="HTML"
-        )
-
-        await message.answer(
-            "❌ Отмена",
-            reply_markup=cancel_keyboard
-        )
-
-        await state.set_state(HealthExportStates.waiting_for_start_date)
-        return
 
     try:
         # Парсим дату с использованием пользовательского формата
@@ -1438,9 +1364,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
         # Очищаем состояние
         await state.clear()
 
-        # Показываем сообщение о генерации
-        wait_msg = await message.answer("⏳ Генерирую PDF...")
-
         try:
             # Импортируем функцию экспорта
             from health.health_pdf_export import create_health_pdf
@@ -1450,7 +1373,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
             metrics = await get_health_metrics_range(user_id, start_date, end_date)
 
             if not metrics:
-                await wait_msg.delete()
                 formatted_start = await format_date_for_user(start_date, user_id)
                 formatted_end = await format_date_for_user(end_date, user_id)
                 await message.answer(
@@ -1478,9 +1400,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
             # Формируем имя файла
             filename = f"health_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.pdf"
 
-            # Удаляем сообщение о генерации
-            await wait_msg.delete()
-
             # Отправляем PDF
             document = BufferedInputFile(pdf_buffer.read(), filename=filename)
             await message.answer_document(
@@ -1495,7 +1414,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
 
         except Exception as e:
             logger.error(f"Ошибка при экспорте PDF (произвольный период): {e}", exc_info=True)
-            await wait_msg.delete()
             await message.answer(
                 "❌ Произошла ошибка при генерации PDF. Попробуйте позже."
             )
@@ -1553,4 +1471,21 @@ async def handle_daily_reminder_no(callback: CallbackQuery):
         await callback.message.delete()
     except:
         pass
+
+
+@router.callback_query(F.data == "health:export:cancel")
+async def cancel_health_export_inline(callback: CallbackQuery, state: FSMContext):
+    """Отмена процесса экспорта здоровья (inline кнопка)"""
+    await state.clear()
+    from bot.keyboards import get_export_type_keyboard
+
+    # Возвращаем пользователя в меню экспорта
+    await callback.message.edit_text(
+        "📥 <b>Экспорт в PDF</b>\n\n"
+        "Выберите, что вы хотите экспортировать:",
+        parse_mode="HTML",
+        reply_markup=get_export_type_keyboard()
+    )
+    await callback.answer("Экспорт отменен")
+
 

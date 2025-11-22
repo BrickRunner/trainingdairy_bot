@@ -30,9 +30,9 @@ class CalendarKeyboard:
         calendar_format: int = 1,
         current_date: Optional[datetime] = None,
         callback_prefix: str = "cal",
+        max_date: Optional[datetime] = None,
         show_cancel: bool = False,
-        cancel_callback: str = "comp:cancel_creation",
-        max_date: Optional[datetime] = None
+        cancel_callback: str = "cancel"
     ) -> InlineKeyboardMarkup:
         """
         Создает календарь в нужном формате
@@ -40,27 +40,27 @@ class CalendarKeyboard:
         :param calendar_format: 1=дни, 2=месяцы, 3=годы, 4=десятилетия
         :param current_date: текущая дата для отображения
         :param callback_prefix: префикс для callback_data
+        :param max_date: максимальная дата (для ограничения навигации вперёд)
         :param show_cancel: показывать ли кнопку отмены
         :param cancel_callback: callback для кнопки отмены
-        :param max_date: максимальная дата (для ограничения навигации вперёд)
         :return: InlineKeyboardMarkup
         """
         if current_date is None:
             current_date = datetime.now()
 
         if calendar_format == 1:
-            return CalendarKeyboard._create_days_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
+            return CalendarKeyboard._create_days_calendar(current_date, callback_prefix, max_date, show_cancel, cancel_callback)
         elif calendar_format == 2:
-            return CalendarKeyboard._create_months_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
+            return CalendarKeyboard._create_months_calendar(current_date, callback_prefix, max_date, show_cancel, cancel_callback)
         elif calendar_format == 3:
-            return CalendarKeyboard._create_years_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
+            return CalendarKeyboard._create_years_calendar(current_date, callback_prefix, max_date, show_cancel, cancel_callback)
         elif calendar_format == 4:
-            return CalendarKeyboard._create_decades_calendar(current_date, callback_prefix, show_cancel, cancel_callback, max_date)
+            return CalendarKeyboard._create_decades_calendar(current_date, callback_prefix, max_date, show_cancel, cancel_callback)
         else:
             raise ValueError(f"Неверный формат календаря: {calendar_format}")
 
     @staticmethod
-    def _create_days_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
+    def _create_days_calendar(date: datetime, prefix: str, max_date: Optional[datetime] = None, show_cancel: bool = False, cancel_callback: str = "cancel") -> InlineKeyboardMarkup:
         """Создает календарь с днями месяца"""
         keyboard = []
 
@@ -154,7 +154,7 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_months_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
+    def _create_months_calendar(date: datetime, prefix: str, max_date: Optional[datetime] = None, show_cancel: bool = False, cancel_callback: str = "cancel") -> InlineKeyboardMarkup:
         """Создает календарь с выбором месяца"""
         keyboard = []
         year = date.year
@@ -203,7 +203,7 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_years_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
+    def _create_years_calendar(date: datetime, prefix: str, max_date: Optional[datetime] = None, show_cancel: bool = False, cancel_callback: str = "cancel") -> InlineKeyboardMarkup:
         """Создает календарь с выбором года"""
         keyboard = []
         year = date.year
@@ -267,7 +267,7 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
-    def _create_decades_calendar(date: datetime, prefix: str, show_cancel: bool = False, cancel_callback: str = "comp:cancel_creation", max_date: Optional[datetime] = None) -> InlineKeyboardMarkup:
+    def _create_decades_calendar(date: datetime, prefix: str, max_date: Optional[datetime] = None, show_cancel: bool = False, cancel_callback: str = "cancel") -> InlineKeyboardMarkup:
         """Создает календарь с выбором десятилетия"""
         keyboard = []
         year = date.year
@@ -439,13 +439,15 @@ class CalendarKeyboard:
         return InlineKeyboardMarkup(inline_keyboard=new_rows)
 
     @staticmethod
-    def handle_navigation(callback_data: str, prefix: str = "cal", max_date: Optional[datetime] = None) -> Optional[InlineKeyboardMarkup]:
+    def handle_navigation(callback_data: str, prefix: str = "cal", max_date: Optional[datetime] = None, show_cancel: bool = False, cancel_callback: str = "cancel") -> Optional[InlineKeyboardMarkup]:
         """
         Обрабатывает навигацию по календарю
 
         :param callback_data: данные callback
         :param prefix: префикс callback
         :param max_date: максимальная дата (для ограничения навигации вперёд)
+        :param show_cancel: показывать ли кнопку отмены
+        :param cancel_callback: callback для кнопки отмены
         :return: новая клавиатура или None
         """
         import logging
@@ -480,7 +482,7 @@ class CalendarKeyboard:
         # Смена формата (увеличение масштаба)
         if action == "change":
             new_format = current_format + 1 if current_format < 4 else 1
-            return CalendarKeyboard.create_calendar(new_format, date, prefix, max_date=max_date)
+            return CalendarKeyboard.create_calendar(new_format, date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 
         # Навигация влево
         elif action == "less":
@@ -502,7 +504,7 @@ class CalendarKeyboard:
             else:
                 return None
 
-            return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date)
+            return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 
         # Навигация вправо
         elif action == "more":
@@ -552,13 +554,13 @@ class CalendarKeyboard:
                 return None
 
             logger.info(f"Навигация вправо: {date} -> {new_date}")
-            return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date)
+            return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 
         # Выбор элемента (не финальная дата)
         elif action == "select" and current_format > 1:
             # Уменьшаем формат (детализируем)
             logger.info(f"Выбор элемента: уменьшаем формат с {current_format} на {current_format - 1}")
-            return CalendarKeyboard.create_calendar(current_format - 1, date, prefix, max_date=max_date)
+            return CalendarKeyboard.create_calendar(current_format - 1, date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 
         logger.warning(f"Действие не обработано: action={action}, format={current_format}")
         return None

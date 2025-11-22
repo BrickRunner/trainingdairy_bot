@@ -33,8 +33,6 @@ async def get_date_format_description(user_id: int) -> str:
 async def process_export_start_calendar(callback: CallbackQuery, state: FSMContext):
     """Обработка навигации и выбора даты начала экспорта в календаре"""
     from bot.calendar_keyboard import CalendarKeyboard
-    from aiogram.utils.keyboard import ReplyKeyboardBuilder
-    from aiogram.types import KeyboardButton
 
     callback_data = callback.data
     logger.info(f"=== EXPORT START CALENDAR CALLBACK: {callback_data} ===")
@@ -58,12 +56,14 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             date_format_desc = await get_date_format_description(user_id)
             formatted_start = await format_date_for_user(selected_date, user_id)
 
-            # Отправляем календарь для даты окончания
+            # Отправляем календарь для даты окончания с inline кнопкой отмены
             calendar_keyboard = CalendarKeyboard.create_calendar(
                 calendar_format=1,
                 current_date=datetime.now(),
                 callback_prefix="health_export_end",
-                max_date=datetime.now()
+                max_date=datetime.now(),
+                show_cancel=True,
+                cancel_callback="health:export:cancel"
             )
 
             await callback.message.answer(
@@ -71,16 +71,6 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
                 f"📅 Теперь выберите дату окончания из календаря или введите вручную в формате {date_format_desc}",
                 parse_mode="HTML",
                 reply_markup=calendar_keyboard
-            )
-
-            # Создаем клавиатуру с кнопкой отмены
-            builder = ReplyKeyboardBuilder()
-            builder.row(KeyboardButton(text="❌ Отмена"))
-            cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-            await callback.message.answer(
-                "Для отмены используйте кнопку ниже ⬇️",
-                reply_markup=cancel_keyboard
             )
 
             await state.set_state(HealthExportStates.waiting_for_end_date)
@@ -93,7 +83,7 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             return
 
     # Обработка навигации
-    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="health_export_start", max_date=datetime.now())
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="health_export_start", max_date=datetime.now(), show_cancel=True, cancel_callback="health:export:cancel")
 
     if new_keyboard:
         try:
@@ -202,7 +192,7 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
             return
 
     # Обработка навигации
-    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="health_export_end", max_date=datetime.now())
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="health_export_end", max_date=datetime.now(), show_cancel=True, cancel_callback="health:export:cancel")
 
     if new_keyboard:
         try:

@@ -34,7 +34,8 @@
       "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_pdf_export.py)",
       "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics_handlers.py)",
       "Bash(\"venv/Scripts/python.exe\" -m py_compile health/health_pdf_export.py health/health_graphs.py competitions/competitions_pdf_export.py)",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics_handlers.py health/health_handlers_calendar_export.py)"
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics_handlers.py health/health_handlers_calendar_export.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics_handlers.py health/health_handlers.py)"
     ],
     "deny": [],
     "ask": []

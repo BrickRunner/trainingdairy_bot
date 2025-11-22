@@ -140,6 +140,7 @@ async def export_halfyear(callback: CallbackQuery):
 
     except ValueError as e:
         logger.error(f"Ошибка при экспорте PDF: {e}")
+        await callback.answer()
         # Возвращаем в меню выбора периода
         await callback.message.edit_text(
             f"❌ {str(e)}\n\n"
@@ -150,13 +151,12 @@ async def export_halfyear(callback: CallbackQuery):
         )
     except Exception as e:
         logger.error(f"Неожиданная ошибка при экспорте PDF: {e}")
+        await callback.answer()
         await callback.message.edit_text(
             "❌ Произошла ошибка при создании PDF\n\n"
             "Попробуйте позже",
             reply_markup=get_back_to_export_menu_keyboard()
         )
-
-    await callback.answer()
 
 
 @router.callback_query(F.data == "comp:export:year")
@@ -192,6 +192,7 @@ async def export_year(callback: CallbackQuery):
 
     except ValueError as e:
         logger.error(f"Ошибка при экспорте PDF: {e}")
+        await callback.answer()
         # Возвращаем в меню выбора периода
         await callback.message.edit_text(
             f"❌ {str(e)}\n\n"
@@ -202,13 +203,12 @@ async def export_year(callback: CallbackQuery):
         )
     except Exception as e:
         logger.error(f"Неожиданная ошибка при экспорте PDF: {e}")
+        await callback.answer()
         await callback.message.edit_text(
             "❌ Произошла ошибка при создании PDF\n\n"
             "Попробуйте позже",
             reply_markup=get_back_to_export_menu_keyboard()
         )
-
-    await callback.answer()
 
 
 @router.callback_query(F.data == "comp:export:custom")
@@ -217,19 +217,14 @@ async def export_custom(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     date_format_desc = await get_date_format_description(user_id)
 
-    # Создаем клавиатуру с кнопкой отмены
-    from aiogram.types import KeyboardButton
-    from aiogram.utils.keyboard import ReplyKeyboardBuilder
-    builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text="❌ Отмена"))
-    cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-    # Отправляем календарь
+    # Отправляем календарь с inline кнопкой отмены
     calendar_keyboard = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
         callback_prefix="comp_export_start",
-        max_date=datetime.now()
+        max_date=datetime.now(),
+        show_cancel=True,
+        cancel_callback="comp:export:cancel"
     )
 
     await callback.message.edit_text(
@@ -237,12 +232,6 @@ async def export_custom(callback: CallbackQuery, state: FSMContext):
         f"Выберите дату начала из календаря или введите вручную в формате {date_format_desc}",
         reply_markup=calendar_keyboard,
         parse_mode="HTML"
-    )
-
-    # Отправляем клавиатуру отмены
-    await callback.message.answer(
-        "Для отмены используйте кнопку ниже ⬇️",
-        reply_markup=cancel_keyboard
     )
 
     await state.set_state(CompetitionsExportStates.waiting_for_start_date)
@@ -275,12 +264,14 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             date_format_desc = await get_date_format_description(user_id)
             formatted_start = await format_date_for_user(selected_date, user_id)
 
-            # Отправляем календарь для даты окончания
+            # Отправляем календарь для даты окончания с inline кнопкой отмены
             calendar_keyboard = CalendarKeyboard.create_calendar(
                 calendar_format=1,
                 current_date=datetime.now(),
                 callback_prefix="comp_export_end",
-                max_date=datetime.now()
+                max_date=datetime.now(),
+                show_cancel=True,
+                cancel_callback="comp:export:cancel"
             )
 
             await callback.message.answer(
@@ -289,18 +280,6 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
                 f"<i>📝 Или введите дату вручную в формате {date_format_desc}</i>",
                 parse_mode="HTML",
                 reply_markup=calendar_keyboard
-            )
-
-            # Создаем клавиатуру с кнопкой отмены
-            from aiogram.utils.keyboard import ReplyKeyboardBuilder
-            from aiogram.types import KeyboardButton
-            builder = ReplyKeyboardBuilder()
-            builder.row(KeyboardButton(text="❌ Отмена"))
-            cancel_keyboard = builder.as_markup(resize_keyboard=True)
-
-            await callback.message.answer(
-                "Для отмены используйте кнопку ниже ⬇️",
-                reply_markup=cancel_keyboard
             )
 
             await state.set_state(CompetitionsExportStates.waiting_for_end_date)
@@ -313,7 +292,7 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             return
 
     # Обработка навигации
-    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="comp_export_start", max_date=datetime.now())
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="comp_export_start", max_date=datetime.now(), show_cancel=True, cancel_callback="comp:export:cancel")
 
     if new_keyboard:
         try:
@@ -321,6 +300,22 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
         except Exception as e:
             logger.error(f"Error updating keyboard: {e}")
     await callback.answer()
+
+
+@router.callback_query(F.data == "comp:export:cancel")
+async def cancel_export_inline(callback: CallbackQuery, state: FSMContext):
+    """Отмена процесса экспорта (inline кнопка)"""
+    await state.clear()
+    from bot.keyboards import get_export_type_keyboard
+
+    # Возвращаем пользователя в меню экспорта
+    await callback.message.edit_text(
+        "📥 <b>Экспорт в PDF</b>\n\n"
+        "Выберите, что вы хотите экспортировать:",
+        parse_mode="HTML",
+        reply_markup=get_export_type_keyboard()
+    )
+    await callback.answer("Экспорт отменен")
 
 
 # Обработчики календаря для конечной даты
@@ -421,7 +416,7 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
             return
 
     # Обработка навигации
-    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="comp_export_end", max_date=datetime.now())
+    new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="comp_export_end", max_date=datetime.now(), show_cancel=True, cancel_callback="comp:export:cancel")
 
     if new_keyboard:
         try:
@@ -431,24 +426,139 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
     await callback.answer()
 
 
-@router.message(F.text == "❌ Отмена", CompetitionsExportStates.waiting_for_start_date)
-@router.message(F.text == "❌ Отмена", CompetitionsExportStates.waiting_for_end_date)
-async def cancel_export(message: Message, state: FSMContext):
-    """Отмена процесса экспорта"""
-    await state.clear()
-    from aiogram.types import ReplyKeyboardRemove
-    from bot.keyboards import get_export_type_keyboard
+# ============== Обработчики ручного ввода даты ==============
 
-    # Убираем клавиатуру с кнопкой отмены
-    await message.answer(
-        "Экспорт отменен",
-        reply_markup=ReplyKeyboardRemove()
-    )
+@router.message(CompetitionsExportStates.waiting_for_start_date)
+async def process_export_start_date_manual(message: Message, state: FSMContext):
+    """Обработка ручного ввода даты начала периода экспорта"""
+    user_id = message.from_user.id
 
-    # Возвращаем пользователя в меню экспорта
-    await message.answer(
-        "📥 <b>Экспорт в PDF</b>\n\n"
-        "Выберите, что вы хотите экспортировать:",
-        parse_mode="HTML",
-        reply_markup=get_export_type_keyboard()
-    )
+    try:
+        # Парсим дату с использованием пользовательского формата
+        start_date = await parse_user_date(message.text, user_id)
+
+        # Проверяем, что дата не в будущем
+        if start_date > date.today():
+            await message.answer(
+                "❌ Дата начала не может быть в будущем!\n\n"
+                "Введите корректную дату:"
+            )
+            return
+
+        # Сохраняем дату начала
+        await state.update_data(export_start_date=start_date)
+
+        # Запрашиваем дату окончания
+        date_format_desc = await get_date_format_description(user_id)
+        formatted_start = await format_date_for_user(start_date, user_id)
+
+        # Отправляем календарь с inline кнопкой отмены
+        calendar_keyboard = CalendarKeyboard.create_calendar(
+            calendar_format=1,
+            current_date=datetime.now(),
+            callback_prefix="comp_export_end",
+            max_date=datetime.now(),
+            show_cancel=True,
+            cancel_callback="comp:export:cancel"
+        )
+
+        await message.answer(
+            f"✅ Дата начала: {formatted_start}\n\n"
+            f"📅 Теперь выберите дату окончания из календаря или введите вручную в формате {date_format_desc}",
+            parse_mode="HTML",
+            reply_markup=calendar_keyboard
+        )
+
+        await state.set_state(CompetitionsExportStates.waiting_for_end_date)
+
+    except ValueError:
+        date_format_desc = await get_date_format_description(user_id)
+        await message.answer(
+            f"❌ Неверный формат даты!\n\n"
+            f"Введите дату в формате {date_format_desc}"
+        )
+
+
+@router.message(CompetitionsExportStates.waiting_for_end_date)
+async def process_export_end_date_manual(message: Message, state: FSMContext):
+    """Обработка ручного ввода даты окончания периода экспорта и генерация PDF"""
+    user_id = message.from_user.id
+
+    try:
+        # Парсим дату с использованием пользовательского формата
+        end_date = await parse_user_date(message.text, user_id)
+
+        # Проверяем, что дата не в будущем
+        if end_date > date.today():
+            await message.answer(
+                "❌ Дата окончания не может быть в будущем!\n\n"
+                "Введите корректную дату:"
+            )
+            return
+
+        # Получаем дату начала
+        data = await state.get_data()
+        start_date = data.get('export_start_date')
+
+        # Проверяем, что дата окончания не раньше даты начала
+        if end_date < start_date:
+            formatted_start = await format_date_for_user(start_date, user_id)
+            await message.answer(
+                f"❌ Дата окончания не может быть раньше даты начала ({formatted_start})!\n\n"
+                "Введите корректную дату:"
+            )
+            return
+
+        # Очищаем состояние
+        await state.clear()
+
+        try:
+            # Формируем параметр периода в формате custom_YYYYMMDD_YYYYMMDD
+            period_param = f"custom_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
+
+            # Генерируем PDF
+            pdf_buffer = await create_competitions_pdf(user_id, period_param)
+
+            # Формируем имя файла
+            filename = f"competitions_custom_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.pdf"
+
+            # Отправляем PDF
+            document = BufferedInputFile(pdf_buffer.read(), filename=filename)
+
+            formatted_start = await format_date_for_user(start_date, user_id)
+            formatted_end = await format_date_for_user(end_date, user_id)
+
+            await message.answer_document(
+                document=document,
+                caption=f"📄 Экспорт соревнований за период {formatted_start} - {formatted_end}"
+            )
+
+            logger.info(f"PDF экспорт соревнований успешно создан для пользователя {user_id}, период: {start_date} - {end_date}")
+
+            # Автоматически возвращаемся в меню экспорта
+            from bot.keyboards import get_export_type_keyboard
+            await message.answer(
+                "📥 <b>Экспорт в PDF</b>\n\n"
+                "Выберите, что вы хотите экспортировать:",
+                parse_mode="HTML",
+                reply_markup=get_export_type_keyboard()
+            )
+
+        except ValueError as e:
+            logger.error(f"Ошибка при экспорте PDF: {e}")
+            # Возвращаем в меню выбора периода
+            await message.answer(
+                f"❌ {str(e)}\n\n"
+                "🏃 <b>Экспорт соревнований в PDF</b>\n\n"
+                "Попробуйте выбрать другой период или добавьте больше соревнований:",
+                parse_mode="HTML",
+                reply_markup=get_export_period_menu()
+            )
+
+    except ValueError:
+        date_format_desc = await get_date_format_description(user_id)
+        await message.answer(
+            f"❌ Неверный формат даты!\n\n"
+            f"Введите дату в формате {date_format_desc}"
+        )
+
