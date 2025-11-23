@@ -28,6 +28,7 @@ from notifications.notification_scheduler import start_notification_scheduler
 from utils.birthday_checker import schedule_birthday_check
 from ratings.rating_updater import schedule_rating_updates
 from competitions.reminder_scheduler import schedule_competition_reminders
+from utils.qualifications_scheduler import schedule_qualifications_check
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -89,6 +90,10 @@ async def main():
     # Запуск планировщика напоминаний о соревнованиях
     asyncio.create_task(schedule_competition_reminders(bot))
     logger.info("Планировщик напоминаний о соревнованиях запущен")
+
+    # Запуск планировщика проверки обновлений нормативов ЕВСК
+    asyncio.create_task(schedule_qualifications_check(bot))
+    logger.info("Планировщик проверки обновлений нормативов ЕВСК запущен")
 
     # Запуск бота
     logger.info("Бот запущен!")

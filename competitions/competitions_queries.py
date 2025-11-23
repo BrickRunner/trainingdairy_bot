@@ -388,7 +388,7 @@ async def get_user_competitions(
             f"""
             SELECT c.*, cp.distance, cp.target_time, cp.finish_time,
                    cp.place_overall, cp.place_age_category, cp.age_category,
-                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.status as participant_status,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
                    cp.registered_at, cp.result_added_at
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
@@ -446,7 +446,7 @@ async def get_user_competitions_by_period(
             f"""
             SELECT c.*, cp.distance, cp.target_time, cp.finish_time,
                    cp.place_overall, cp.place_age_category, cp.age_category,
-                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.status as participant_status,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
                    cp.registered_at, cp.result_added_at
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
@@ -537,6 +537,30 @@ async def add_competition_result(
     normalized_time = normalize_time(finish_time)
 
     async with aiosqlite.connect(DB_PATH) as db:
+        # Получаем тип спорта соревнования и пол пользователя для расчета разряда
+        cursor = await db.execute(
+            """
+            SELECT c.sport_type, us.gender
+            FROM competitions c
+            LEFT JOIN user_settings us ON us.user_id = ?
+            WHERE c.id = ?
+            """,
+            (user_id, competition_id)
+        )
+        row = await cursor.fetchone()
+        sport_type = row[0] if row else 'бег'
+        gender = row[1] if row and row[1] else 'male'
+
+        # Рассчитываем разряд
+        qualification = None
+        try:
+            from utils.qualifications import get_qualification, time_to_seconds
+            time_seconds = time_to_seconds(normalized_time)
+            qualification = get_qualification(sport_type, distance, time_seconds, gender)
+        except Exception as e:
+            # Если не удалось рассчитать разряд, продолжаем без него
+            print(f"Ошибка расчета разряда: {e}")
+
         cursor = await db.execute(
             """
             UPDATE competition_participants
@@ -547,20 +571,22 @@ async def add_competition_result(
                 heart_rate = ?,
                 result_comment = ?,
                 result_photo = ?,
+                qualification = ?,
                 status = 'finished',
                 result_added_at = CURRENT_TIMESTAMP
             WHERE user_id = ? AND competition_id = ? AND distance = ?
             """,
             (
                 normalized_time, place_overall, place_age_category, age_category,
-                heart_rate, result_comment, result_photo, user_id, competition_id, distance
+                heart_rate, result_comment, result_photo, qualification,
+                user_id, competition_id, distance
             )
         )
         await db.commit()
 
         # Проверяем и обновляем личный рекорд
         if cursor.rowcount > 0:
-            await update_personal_record(user_id, distance, normalized_time, competition_id)
+            await update_personal_record(user_id, distance, normalized_time, competition_id, qualification)
 
         return cursor.rowcount > 0
 
@@ -646,7 +672,8 @@ async def update_personal_record(
     user_id: int,
     distance: float,
     time: str,
-    competition_id: int = None
+    competition_id: int = None,
+    qualification: str = None
 ) -> bool:
     """
     Обновить личный рекорд пользователя если новое время лучше
@@ -656,6 +683,7 @@ async def update_personal_record(
         distance: Дистанция
         time: Время (HH:MM:SS)
         competition_id: ID соревнования
+        qualification: Разряд (МСМК, МС, КМС и т.д.)
 
     Returns:
         True если рекорд был обновлён
@@ -690,10 +718,10 @@ async def update_personal_record(
                 await db.execute(
                     """
                     UPDATE personal_records
-                    SET best_time = ?, competition_id = ?, date = date('now'), updated_at = CURRENT_TIMESTAMP
+                    SET best_time = ?, competition_id = ?, qualification = ?, date = date('now'), updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = ? AND distance = ?
                     """,
-                    (time, competition_id, user_id, distance)
+                    (time, competition_id, qualification, user_id, distance)
                 )
                 await db.commit()
                 return True
@@ -701,10 +729,10 @@ async def update_personal_record(
             # Создаём новый рекорд
             await db.execute(
                 """
-                INSERT INTO personal_records (user_id, distance, best_time, competition_id, date)
-                VALUES (?, ?, ?, ?, date('now'))
+                INSERT INTO personal_records (user_id, distance, best_time, competition_id, qualification, date)
+                VALUES (?, ?, ?, ?, ?, date('now'))
                 """,
-                (user_id, distance, time, competition_id)
+                (user_id, distance, time, competition_id, qualification)
             )
             await db.commit()
             return True
@@ -720,7 +748,7 @@ async def get_user_personal_records(user_id: int) -> Dict[float, Dict[str, Any]]
         user_id: ID пользователя
 
     Returns:
-        Словарь {дистанция: {best_time, date, competition_id}}
+        Словарь {дистанция: {best_time, date, competition_id, qualification}}
     """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -742,7 +770,8 @@ async def get_user_personal_records(user_id: int) -> Dict[float, Dict[str, Any]]
                     'best_time': record['best_time'],
                     'date': record['date'],
                     'competition_id': record['competition_id'],
-                    'competition_name': record['competition_name']
+                    'competition_name': record['competition_name'],
+                    'qualification': record.get('qualification')
                 }
             return records
 
