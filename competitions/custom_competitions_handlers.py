@@ -1481,6 +1481,7 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         await register_for_competition(user_id, comp_id, data['comp_distance'])
 
         # Если есть результат, добавляем его
+        qualification = None
         if has_result and 'finish_time' in data:
             await add_competition_result(
                 user_id=user_id,
@@ -1491,6 +1492,29 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 place_age_category=data.get('place_age'),
                 heart_rate=data.get('heart_rate')
             )
+
+            # Рассчитываем разряд для отображения
+            try:
+                from utils.qualifications import get_qualification, time_to_seconds
+                from competitions.competitions_queries import get_competition_by_id
+
+                comp_info = await get_competition_by_id(comp_id)
+                sport_type = comp_info.get('sport_type', 'бег') if comp_info else 'бег'
+
+                # Получаем пол пользователя
+                from database.queries import get_connection
+                async with get_connection() as db:
+                    async with db.execute(
+                        "SELECT gender FROM user_settings WHERE user_id = ?",
+                        (user_id,)
+                    ) as cursor:
+                        row = await cursor.fetchone()
+                        gender = row[0] if row and row[0] else 'male'
+
+                time_seconds = time_to_seconds(data['finish_time'])
+                qualification = get_qualification(sport_type, data['comp_distance'], time_seconds, gender)
+            except Exception as e:
+                logger.error(f"Error calculating qualification for display: {e}")
 
         from competitions.competitions_utils import format_competition_distance
         from utils.date_formatter import get_user_date_format, DateFormatter
@@ -1513,6 +1537,8 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 text += f"🏆 Место общее: {data['place_overall']}\n"
             if data.get('place_age'):
                 text += f"🏅 Место в категории: {data['place_age']}\n"
+            if qualification:
+                text += f"🎖️ Разряд: {qualification}\n"
             if data.get('heart_rate'):
                 text += f"❤️ Средний пульс: {data['heart_rate']} уд/мин\n"
 

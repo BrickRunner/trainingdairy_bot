@@ -238,7 +238,7 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     if stats['personal_records']:
         story.append(Paragraph("Личные рекорды", heading_style))
 
-        pr_data = [['Дистанция', 'Время', 'Темп', 'Соревнование', 'Дата']]
+        pr_data = [['Дистанция', 'Время', 'Темп', 'Разряд', 'Соревнование', 'Дата']]
         for distance in sorted(stats['personal_records'].keys()):
             pr = stats['personal_records'][distance]
             formatted_date = DateFormatter.format_date(
@@ -257,11 +257,12 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
                 distance_str,
                 pr['time'],
                 pr.get('pace', '-'),
+                pr.get('qualification', '-'),
                 pr['competition'][:30],  # Ограничиваем длину
                 formatted_date
             ])
 
-        pr_table = Table(pr_data, colWidths=[2.5*cm, 2.5*cm, 2.5*cm, 6*cm, 2.5*cm])
+        pr_table = Table(pr_data, colWidths=[2*cm, 2*cm, 2*cm, 1.5*cm, 5*cm, 2.5*cm])
         pr_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -322,7 +323,7 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     # Сортируем по дате (сначала новые)
     sorted_participants = sorted(participants, key=lambda x: x.get('date', ''), reverse=True)
 
-    competitions_data = [['Дата', 'Название', 'Дистанция', 'Время', 'Темп', 'Место', 'Статус']]
+    competitions_data = [['Дата', 'Название', 'Дистанция', 'Время', 'Темп', 'Разряд', 'Место', 'Статус']]
 
     for p in sorted_participants:
         formatted_date = DateFormatter.format_date(
@@ -365,6 +366,9 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
         else:
             place_str = '-'
 
+        # Разряд
+        qualification_str = p.get('qualification', '-')
+
         # Статус
         status_map = {
             'finished': 'Финиш',
@@ -380,6 +384,7 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             distance,
             time_str,
             pace_str,
+            qualification_str,
             place_str,
             status_str
         ])
@@ -388,7 +393,7 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     # Общая доступная ширина: ~17см (A4 минус отступы)
     competitions_table = Table(
         competitions_data,
-        colWidths=[1.6*cm, 5.5*cm, 1.8*cm, 1.8*cm, 1.8*cm, 3.2*cm, 1.5*cm]
+        colWidths=[1.5*cm, 4.5*cm, 1.6*cm, 1.6*cm, 1.6*cm, 1.3*cm, 2.8*cm, 1.3*cm]
     )
     competitions_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2ecc71')),

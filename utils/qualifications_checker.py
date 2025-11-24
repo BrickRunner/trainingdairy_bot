@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import aiohttp
 import aiosqlite
+import os
 from datetime import datetime
 from typing import Dict, Optional, List
 import logging
@@ -29,7 +30,7 @@ SOURCES = {
     }
 }
 
-DB_PATH = 'trainingdiary.db'
+DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
 async def get_page_hash(url: str) -> Optional[str]:

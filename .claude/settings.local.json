@@ -9,7 +9,12 @@
       "Bash(\"venv/Scripts/python.exe\" -c:*)",
       "Bash(\"venv/Scripts/python.exe\" migrations/update_qualifications.py)",
       "Bash(\"venv/Scripts/python.exe\" -m py_compile utils/qualifications_scheduler.py)",
-      "Bash(\"venv/Scripts/python.exe\":*)"
+      "Bash(\"venv/Scripts/python.exe\":*)",
+      "Bash(\"venv/Scripts/python.exe\" migrations/add_qualification_column.py)",
+      "Bash(dir:*)",
+      "Bash(nul)",
+      "Bash(\"venv/Scripts/python.exe\" main.py)",
+      "Bash(timeout /t 3:*)"
     ],
     "deny": [],
     "ask": []

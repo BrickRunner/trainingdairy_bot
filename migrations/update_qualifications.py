@@ -23,7 +23,7 @@ async def update_competition_qualifications():
     """
     Обновить разряды для всех результатов соревнований
     """
-    db_path = 'trainingdiary.db'
+    db_path = os.getenv('DB_PATH', 'database.sqlite')
 
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
@@ -96,7 +96,7 @@ async def update_personal_records_qualifications():
     """
     Обновить разряды для всех личных рекордов
     """
-    db_path = 'trainingdiary.db'
+    db_path = os.getenv('DB_PATH', 'database.sqlite')
 
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
@@ -182,8 +182,9 @@ async def main():
     print("=" * 60)
 
     # Проверяем существование базы данных
-    if not os.path.exists('trainingdiary.db'):
-        print("\n⚠️ База данных trainingdiary.db не найдена")
+    db_path = os.getenv('DB_PATH', 'database.sqlite')
+    if not os.path.exists(db_path):
+        print(f"\n⚠️ База данных {db_path} не найдена")
         print("\n📝 Это нормально, если бот еще не запускался.")
         print("   База данных будет создана при первом запуске бота.")
         print("\n💡 Что делать:")
@@ -195,7 +196,7 @@ async def main():
 
     try:
         # Проверяем наличие таблиц
-        async with aiosqlite.connect('trainingdiary.db') as db:
+        async with aiosqlite.connect(db_path) as db:
             async with db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='competition_participants'"
             ) as cursor:

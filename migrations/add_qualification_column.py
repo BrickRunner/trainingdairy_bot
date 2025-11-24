@@ -23,7 +23,7 @@ async def add_qualification_column():
     """
     Добавляет колонку qualification в таблицы competition_participants и personal_records
     """
-    db_path = 'trainingdiary.db'
+    db_path = os.getenv('DB_PATH', 'database.sqlite')
 
     if not os.path.exists(db_path):
         print("⚠️ База данных не найдена. Колонка будет добавлена при создании таблиц.")

@@ -140,7 +140,8 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
                     'time': finish_time,
                     'competition': p.get('name', 'Без названия'),
                     'date': p.get('date'),
-                    'pace': calculate_pace(distance, finish_time)
+                    'pace': calculate_pace(distance, finish_time),
+                    'qualification': p.get('qualification')
                 }
             else:
                 # Сравниваем времена
@@ -150,7 +151,8 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
                         'time': finish_time,
                         'competition': p.get('name', 'Без названия'),
                         'date': p.get('date'),
-                        'pace': calculate_pace(distance, finish_time)
+                        'pace': calculate_pace(distance, finish_time),
+                        'qualification': p.get('qualification')
                     }
 
             # Собираем данные для среднего темпа
@@ -289,7 +291,8 @@ def format_statistics_message(stats: Dict[str, Any]) -> str:
         for distance in sorted(stats['personal_records'].keys()):
             pr = stats['personal_records'][distance]
             pace_info = f" ({pr['pace']} мин/км)" if pr.get('pace') else ""
-            msg += f"  • {distance} км: {pr['time']}{pace_info}\n"
+            qualification_info = f" - {pr['qualification']}" if pr.get('qualification') else ""
+            msg += f"  • {distance} км: {pr['time']}{pace_info}{qualification_info}\n"
 
     # Лучшие места
     if stats['best_places_overall']:

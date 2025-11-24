@@ -1007,9 +1007,27 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                     if comp.get('place_age_category'):
                         result_line += f" • 🏅 Категория: {comp['place_age_category']}"
 
-                    # Добавляем разряд
-                    if comp.get('qualification'):
-                        result_line += f"\n   🎖️ Разряд: {comp['qualification']}"
+                    # Добавляем разряд (рассчитываем если не сохранён)
+                    qualification = comp.get('qualification')
+                    if not qualification and comp.get('distance'):
+                        try:
+                            from utils.qualifications import get_qualification, time_to_seconds
+                            sport_type = comp.get('sport_type', 'бег')
+                            from database.queries import get_connection
+                            async with get_connection() as db:
+                                async with db.execute(
+                                    "SELECT gender FROM user_settings WHERE user_id = ?",
+                                    (user_id,)
+                                ) as cursor:
+                                    row = await cursor.fetchone()
+                                    gender = row[0] if row and row[0] else 'male'
+                            time_sec = time_to_seconds(comp['finish_time'])
+                            qualification = get_qualification(sport_type, comp['distance'], time_sec, gender)
+                        except Exception:
+                            pass
+
+                    if qualification:
+                        result_line += f"\n   🎖️ Разряд: {qualification}"
 
                     # Добавляем пульс
                     if comp.get('heart_rate'):
@@ -1200,6 +1218,9 @@ async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
 
     if user_comp.get('finish_time'):
         text += f"⏱️ Время: {normalize_time(user_comp['finish_time'])}\n"
+
+    if user_comp.get('qualification'):
+        text += f"🎖️ Разряд: {user_comp['qualification']}\n"
 
     text += "\n❗️ <i>Результат будет удалён, но регистрация сохранится</i>"
 
@@ -1488,6 +1509,29 @@ async def process_heart_rate(message: Message, state: FSMContext):
         heart_rate=data.get('result_heart_rate')
     )
 
+    # Рассчитываем разряд для отображения
+    qualification = None
+    if success:
+        try:
+            from utils.qualifications import get_qualification, time_to_seconds
+            comp = await get_competition(competition_id)
+            sport_type = comp.get('sport_type', 'бег')
+
+            # Получаем пол пользователя
+            from database.queries import get_connection
+            async with get_connection() as db:
+                async with db.execute(
+                    "SELECT gender FROM user_settings WHERE user_id = ?",
+                    (user_id,)
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    gender = row[0] if row and row[0] else 'male'
+
+            time_seconds = time_to_seconds(data['result_finish_time'])
+            qualification = get_qualification(sport_type, distance, time_seconds, gender)
+        except Exception as e:
+            logger.error(f"Error calculating qualification for display: {e}")
+
     if success:
         comp = await get_competition(competition_id)
 
@@ -1519,6 +1563,8 @@ async def process_heart_rate(message: Message, state: FSMContext):
             text += f"🏆 Место общее: {data['result_place_overall']}\n"
         if data.get('result_place_age'):
             text += f"🏅 Место в категории: {data['result_place_age']}\n"
+        if qualification:
+            text += f"🎖️ Разряд: {qualification}\n"
         if data.get('result_heart_rate'):
             text += f"❤️ Средний пульс: {data['result_heart_rate']} уд/мин\n"
 
