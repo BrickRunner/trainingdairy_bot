@@ -89,12 +89,21 @@ def format_pace(distance_km: float, total_seconds: int,
         Кортеж (темп, единица_измерения)
     """
     if training_type == 'плавание':
-        # Для плавания: мин:сек на 100 метров (не зависит от единиц дистанции)
-        distance_in_meters = distance_km * 1000
-        seconds_per_100m = (total_seconds / distance_in_meters) * 100
-        pace_minutes = int(seconds_per_100m // 60)
-        pace_seconds = int(seconds_per_100m % 60)
-        return f"{pace_minutes}:{pace_seconds:02d}", "мин/100м"
+        # Для плавания: темп зависит от единиц измерения
+        if distance_unit == 'мили':
+            # Для миль используем ярды: 1 км = 1093.61 ярдов
+            distance_in_yards = distance_km * 1093.61
+            seconds_per_100yards = (total_seconds / distance_in_yards) * 100
+            pace_minutes = int(seconds_per_100yards // 60)
+            pace_seconds = int(seconds_per_100yards % 60)
+            return f"{pace_minutes}:{pace_seconds:02d}", "мин/100ярд"
+        else:
+            # Для километров используем метры
+            distance_in_meters = distance_km * 1000
+            seconds_per_100m = (total_seconds / distance_in_meters) * 100
+            pace_minutes = int(seconds_per_100m // 60)
+            pace_seconds = int(seconds_per_100m % 60)
+            return f"{pace_minutes}:{pace_seconds:02d}", "мин/100м"
     
     elif training_type == 'велотренировка':
         # Для велотренировки: средняя скорость

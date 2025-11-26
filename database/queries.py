@@ -65,18 +65,25 @@ async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
 async def add_training(data: Dict[str, Any]) -> None:
     """
     Добавить тренировку в базу данных
-    
+
     Args:
         data: Словарь с данными тренировки
               Обязательные поля: user_id, type, date, time, duration
               Опциональные: distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, calculated_volume, description, results, comment, fatigue_level
+              Для плавания: swimming_location, pool_length, swimming_styles (JSON), swimming_sets
     """
+    # Преобразуем список стилей в JSON, если он есть
+    swimming_styles_json = None
+    if data.get('selected_swimming_styles'):
+        import json
+        swimming_styles_json = json.dumps(data['selected_swimming_styles'])
+
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """
-            INSERT INTO trainings 
-            (user_id, type, date, time, duration, distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, calculated_volume, description, results, comment, fatigue_level)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO trainings
+            (user_id, type, date, time, duration, distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, calculated_volume, description, results, comment, fatigue_level, swimming_location, pool_length, swimming_styles, swimming_sets)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data['user_id'],
@@ -95,7 +102,11 @@ async def add_training(data: Dict[str, Any]) -> None:
                 data.get('description'),
                 data.get('results'),
                 data.get('comment'),
-                data.get('fatigue_level')
+                data.get('fatigue_level'),
+                data.get('swimming_location'),
+                data.get('pool_length'),
+                swimming_styles_json,
+                data.get('swimming_sets')
             )
         )
         await db.commit()

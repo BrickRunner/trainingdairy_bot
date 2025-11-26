@@ -324,10 +324,10 @@ async def get_user_competitions_by_period(user_id: int, start_date: datetime = N
             # Все соревнования
             async with db.execute(
                 """
-                SELECT cp.place
+                SELECT cp.place_overall
                 FROM competition_participants cp
                 JOIN competitions c ON cp.competition_id = c.id
-                WHERE cp.participant_id = ? AND cp.place IS NOT NULL
+                WHERE cp.user_id = ? AND cp.place_overall IS NOT NULL
                 """,
                 (user_id,)
             ) as cursor:
@@ -336,11 +336,11 @@ async def get_user_competitions_by_period(user_id: int, start_date: datetime = N
             # За период
             async with db.execute(
                 """
-                SELECT cp.place
+                SELECT cp.place_overall
                 FROM competition_participants cp
                 JOIN competitions c ON cp.competition_id = c.id
-                WHERE cp.participant_id = ?
-                AND cp.place IS NOT NULL
+                WHERE cp.user_id = ?
+                AND cp.place_overall IS NOT NULL
                 AND c.date >= ? AND c.date <= ?
                 """,
                 (user_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))

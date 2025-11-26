@@ -9,11 +9,17 @@
 
 import aiosqlite
 import asyncio
+import sys
+import io
+
+# UTF-8 для вывода в Windows
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
 async def migrate():
     """Добавляет поля для плавания в таблицу trainings"""
-    async with aiosqlite.connect('trainingdiary.db') as db:
+    async with aiosqlite.connect('database.sqlite') as db:
         print("=" * 60)
         print("Миграция: Добавление полей для плавания")
         print("=" * 60)

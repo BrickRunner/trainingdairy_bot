@@ -268,3 +268,84 @@ def get_export_period_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_export_menu")
     )
     return builder.as_markup()
+
+
+# ===== КЛАВИАТУРЫ ДЛЯ ПЛАВАНИЯ =====
+
+def get_swimming_location_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора места для плавания"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🏊 Бассейн", callback_data="swimming_location:pool")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌊 Открытая вода", callback_data="swimming_location:open_water")
+    )
+    return builder.as_markup()
+
+
+def get_pool_length_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора длины бассейна"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="25 м", callback_data="pool_length:25"),
+        InlineKeyboardButton(text="50 м", callback_data="pool_length:50")
+    )
+    return builder.as_markup()
+
+
+def get_swimming_styles_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора стилей плавания (множественный выбор)"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="☐ Вольный стиль", callback_data="swimming_style:freestyle")
+    )
+    builder.row(
+        InlineKeyboardButton(text="☐ Брасс", callback_data="swimming_style:breaststroke")
+    )
+    builder.row(
+        InlineKeyboardButton(text="☐ Баттерфляй", callback_data="swimming_style:butterfly")
+    )
+    builder.row(
+        InlineKeyboardButton(text="☐ На спине", callback_data="swimming_style:backstroke")
+    )
+    builder.row(
+        InlineKeyboardButton(text="☐ Комплекс (IM)", callback_data="swimming_style:im")
+    )
+    builder.row(
+        InlineKeyboardButton(text="✅ Готово", callback_data="swimming_styles:done")
+    )
+    return builder.as_markup()
+
+
+def update_swimming_styles_keyboard(selected_styles: list) -> InlineKeyboardMarkup:
+    """
+    Обновляет клавиатуру стилей плавания с отметками выбранных
+
+    Args:
+        selected_styles: Список выбранных стилей
+    """
+    styles = {
+        'freestyle': 'Вольный стиль',
+        'breaststroke': 'Брасс',
+        'butterfly': 'Баттерфляй',
+        'backstroke': 'На спине',
+        'im': 'Комплекс (IM)'
+    }
+
+    builder = InlineKeyboardBuilder()
+
+    for style_key, style_name in styles.items():
+        checkbox = "☑" if style_key in selected_styles else "☐"
+        builder.row(
+            InlineKeyboardButton(
+                text=f"{checkbox} {style_name}",
+                callback_data=f"swimming_style:{style_key}"
+            )
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="✅ Готово", callback_data="swimming_styles:done")
+    )
+
+    return builder.as_markup()

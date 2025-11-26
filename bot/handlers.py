@@ -286,8 +286,11 @@ async def process_date(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Дата: {date_str}\n\n"
         "⏰ Введите время тренировки\n\n"
-        "Формат: ЧЧ:ММ:СС\n"
-        "Примеры: 01:25:30 или 25:15:45 (для ультрамарафонов)",
+        "Формат: ЧЧ:ММ:СС или ММ:СС (если меньше часа)\n"
+        "Примеры:\n"
+        "• 45:30 (45 минут 30 секунд)\n"
+        "• 01:25:30 или 1:25:30 (1 час 25 минут)\n"
+        "• 25:15:45 (для ультрамарафонов)",
         reply_markup=get_cancel_keyboard()
     )
     
@@ -299,21 +302,33 @@ async def process_time(message: Message, state: FSMContext):
     if message.text == "❌ Отменить":
         await cancel_handler(message, state)
         return
-    
-    # Гибкая проверка формата Ч:ММ:СС или ЧЧ:ММ:СС или ЧЧЧ:ММ:СС (для ультрамарафонов)
-    time_pattern = r'^\d{1,3}:\d{1,2}:\d{1,2}$'
+
+    # Гибкая проверка формата: ЧЧ:ММ:СС или ММ:СС (для тренировок < 1 часа)
+    time_pattern = r'^\d{1,3}:\d{1,2}(:\d{1,2})?$'
     if not re.match(time_pattern, message.text):
         await message.answer(
             "❌ Неверный формат времени!\n\n"
-            "Используйте формат: ЧЧ:ММ:СС\n"
-            "Примеры: 01:25:30 или 1:25:30 или 25:15:45"
+            "Используйте формат: ЧЧ:ММ:СС или ММ:СС\n"
+            "Примеры:\n"
+            "• 45:30 (45 минут 30 секунд)\n"
+            "• 01:25:30 или 1:25:30 (1 час 25 минут)"
         )
         return
-    
+
     try:
         # Парсим время
-        hours, minutes, seconds = map(int, message.text.split(':'))
-        
+        parts = message.text.split(':')
+
+        if len(parts) == 2:
+            # Формат ММ:СС (без часов)
+            minutes, seconds = map(int, parts)
+            hours = 0
+        elif len(parts) == 3:
+            # Формат ЧЧ:ММ:СС
+            hours, minutes, seconds = map(int, parts)
+        else:
+            raise ValueError("Неверный формат")
+
         # Проверяем корректность минут и секунд
         if minutes > 59 or seconds > 59:
             await message.answer(
@@ -321,7 +336,7 @@ async def process_time(message: Message, state: FSMContext):
                 "Убедитесь, что минуты ≤ 59, секунды ≤ 59"
             )
             return
-        
+
         # Проверка на нулевое время
         if hours == 0 and minutes == 0 and seconds == 0:
             await message.answer(
@@ -330,13 +345,13 @@ async def process_time(message: Message, state: FSMContext):
                 "Введите корректное время тренировки."
             )
             return
-        
+
         # Форматируем в красивый вид с ведущими нулями
         formatted_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        
+
         # Переводим в минуты для совместимости с БД
         total_minutes = hours * 60 + minutes + (1 if seconds > 0 else 0)
-        
+
     except ValueError:
         await message.answer(
             "❌ Некорректное время!\n\n"
@@ -424,7 +439,7 @@ async def process_distance(message: Message, state: FSMContext):
         distance_km = distance_input
 
     await state.update_data(distance=distance_km)
-    
+
     # Получаем тип тренировки для адаптивного сообщения
     data = await state.get_data()
     training_type = data.get('training_type', 'кросс')
@@ -432,16 +447,25 @@ async def process_distance(message: Message, state: FSMContext):
     # Адаптивное сообщение в зависимости от типа с учетом единиц пользователя
     if training_type == 'плавание':
         distance_text = f"✅ Дистанция: {format_swimming_distance(distance_km, distance_unit)}"
+
+        # Для плавания переходим к выбору места
+        from bot.keyboards import get_swimming_location_keyboard
+        await message.answer(
+            f"{distance_text}\n\n"
+            "🏊 Где проходила тренировка?",
+            reply_markup=get_swimming_location_keyboard()
+        )
+        await state.set_state(AddTrainingStates.waiting_for_swimming_location)
     else:
         distance_text = f"✅ Дистанция: {format_distance(distance_km, distance_unit)}"
-    
-    await message.answer(
-        f"{distance_text}\n\n"
-        "❤️ Введите средний пульс (уд/мин)\n\n"
-        "Например: 145"
-    )
-    
-    await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
+
+        await message.answer(
+            f"{distance_text}\n\n"
+            "❤️ Введите средний пульс (уд/мин)\n\n"
+            "Например: 145",
+            reply_markup=get_cancel_keyboard()
+        )
+        await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
 
 @router.message(AddTrainingStates.waiting_for_avg_pulse)
 async def process_avg_pulse(message: Message, state: FSMContext):
@@ -498,10 +522,11 @@ async def process_exercises(message: Message, state: FSMContext):
     
     exercises = None if message.text == "⏭️ Пропустить" else message.text
     await state.update_data(exercises=exercises)
-    
+
     await message.answer(
         "❤️ Введите средний пульс (уд/мин)\n\n"
-        "Например: 130"
+        "Например: 130",
+        reply_markup=get_cancel_keyboard()
     )
     
     await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
@@ -529,7 +554,8 @@ async def process_intervals(message: Message, state: FSMContext):
         await message.answer(
             f"✅ Описание сохранено{volume_msg}\n\n"
             "❤️ Введите средний пульс (уд/мин)\n\n"
-            "Например: 165"
+            "Например: 165",
+            reply_markup=get_cancel_keyboard()
         )
     else:
         await message.answer(
@@ -537,10 +563,151 @@ async def process_intervals(message: Message, state: FSMContext):
             "⚠️ Не удалось рассчитать объём автоматически\n"
             "(Возможно, не все пункты пронумерованы)\n\n"
             "❤️ Введите средний пульс (уд/мин)\n\n"
-            "Например: 165"
+            "Например: 165",
+            reply_markup=get_cancel_keyboard()
         )
     
     await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
+
+
+# ===== ОБРАБОТЧИКИ ДЛЯ ПЛАВАНИЯ =====
+
+@router.callback_query(AddTrainingStates.waiting_for_swimming_location, F.data.startswith("swimming_location:"))
+async def process_swimming_location(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора места для плавания"""
+    location = callback.data.split(":")[1]
+    await state.update_data(swimming_location=location)
+
+    location_text = "🏊 Бассейн" if location == "pool" else "🌊 Открытая вода"
+
+    if location == "pool":
+        # Если бассейн - спрашиваем длину
+        from bot.keyboards import get_pool_length_keyboard
+        await callback.message.edit_text(
+            f"✅ Место: {location_text}\n\n"
+            "📏 Выберите длину бассейна:",
+            reply_markup=get_pool_length_keyboard()
+        )
+        await state.set_state(AddTrainingStates.waiting_for_pool_length)
+    else:
+        # Если открытая вода - переходим к стилям
+        from bot.keyboards import get_swimming_styles_keyboard
+        await callback.message.edit_text(
+            f"✅ Место: {location_text}\n\n"
+            "🏊 Выберите стили плавания:",
+            reply_markup=get_swimming_styles_keyboard()
+        )
+        # Инициализируем пустой список стилей
+        await state.update_data(selected_swimming_styles=[])
+        await state.set_state(AddTrainingStates.waiting_for_swimming_styles)
+
+    await callback.answer()
+
+
+@router.callback_query(AddTrainingStates.waiting_for_pool_length, F.data.startswith("pool_length:"))
+async def process_pool_length(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора длины бассейна"""
+    pool_length = int(callback.data.split(":")[1])
+    await state.update_data(pool_length=pool_length)
+
+    # Переходим к выбору стилей
+    from bot.keyboards import get_swimming_styles_keyboard
+    await callback.message.edit_text(
+        f"✅ Бассейн {pool_length}м\n\n"
+        "🏊 Выберите стили плавания:",
+        reply_markup=get_swimming_styles_keyboard()
+    )
+
+    # Инициализируем пустой список стилей
+    await state.update_data(selected_swimming_styles=[])
+    await state.set_state(AddTrainingStates.waiting_for_swimming_styles)
+    await callback.answer()
+
+
+@router.callback_query(AddTrainingStates.waiting_for_swimming_styles, F.data.startswith("swimming_style:"))
+async def process_swimming_style_toggle(callback: CallbackQuery, state: FSMContext):
+    """Обработка переключения стилей плавания (множественный выбор)"""
+    style = callback.data.split(":")[1]
+
+    # Получаем текущий список выбранных стилей
+    data = await state.get_data()
+    selected_styles = data.get('selected_swimming_styles', [])
+
+    # Переключаем стиль
+    if style in selected_styles:
+        selected_styles.remove(style)
+    else:
+        selected_styles.append(style)
+
+    await state.update_data(selected_swimming_styles=selected_styles)
+
+    # Обновляем клавиатуру с отметками
+    from bot.keyboards import update_swimming_styles_keyboard
+    await callback.message.edit_reply_markup(
+        reply_markup=update_swimming_styles_keyboard(selected_styles)
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(AddTrainingStates.waiting_for_swimming_styles, F.data == "swimming_styles:done")
+async def process_swimming_styles_done(callback: CallbackQuery, state: FSMContext):
+    """Завершение выбора стилей плавания"""
+    data = await state.get_data()
+    selected_styles = data.get('selected_swimming_styles', [])
+
+    if not selected_styles:
+        await callback.answer("⚠️ Выберите хотя бы один стиль!", show_alert=True)
+        return
+
+    # Форматируем для отображения
+    from utils.swimming_pace import format_swimming_styles
+    styles_text = format_swimming_styles(selected_styles)
+
+    await callback.message.edit_text(
+        f"✅ Стили: {styles_text}\n\n"
+        "📝 Опишите отрезки тренировки\n\n"
+        "Например:\n"
+        "1. Разминка - 400м вольный стиль\n"
+        "2. Основная часть:\n"
+        "   - 8x100м вольный (1:30 на 100м)\n"
+        "   - 4x200м брасс (3:20 на 200м)\n"
+        "3. Заминка - 200м вольный\n\n"
+        "Или нажмите ⏭️ Пропустить"
+    )
+
+    # Переключаемся на обычную клавиатуру
+    await callback.message.answer(
+        "Введите описание или пропустите:",
+        reply_markup=get_skip_keyboard()
+    )
+
+    await state.set_state(AddTrainingStates.waiting_for_swimming_sets)
+    await callback.answer()
+
+
+@router.message(AddTrainingStates.waiting_for_swimming_sets)
+async def process_swimming_sets(message: Message, state: FSMContext):
+    """Обработка описания отрезков для плавания"""
+    if message.text == "❌ Отменить":
+        await cancel_handler(message, state)
+        return
+
+    swimming_sets = None if message.text == "⏭️ Пропустить" else message.text
+    await state.update_data(swimming_sets=swimming_sets)
+
+    if swimming_sets:
+        await message.answer("✅ Описание отрезков сохранено")
+
+    # Переходим к среднему пульсу
+    await message.answer(
+        "❤️ Введите средний пульс (уд/мин)\n\n"
+        "Например: 130",
+        reply_markup=get_cancel_keyboard()
+    )
+
+    await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
+
 
 @router.message(AddTrainingStates.waiting_for_max_pulse)
 async def process_max_pulse(message: Message, state: FSMContext):
@@ -758,7 +925,25 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
             f"{distance_text}\n"
             f"{pace_emoji} {pace_label}: {avg_pace} {pace_unit}\n"
         )
-    
+
+        # Дополнительная информация для плавания
+        if training_type == 'плавание':
+            # Место тренировки
+            if data.get('swimming_location'):
+                from utils.swimming_pace import format_swimming_location
+                location_text = format_swimming_location(data['swimming_location'], data.get('pool_length'))
+                summary += f"📍 Место: {location_text}\n"
+
+            # Стили плавания
+            if data.get('selected_swimming_styles'):
+                from utils.swimming_pace import format_swimming_styles
+                styles_text = format_swimming_styles(data['selected_swimming_styles'])
+                summary += f"🏊 Стили: {styles_text}\n"
+
+            # Описание отрезков
+            if data.get('swimming_sets'):
+                summary += f"📝 Отрезки:\n{data['swimming_sets']}\n"
+
     # Пульс для всех типов тренировок
     if data.get('avg_pulse') and data.get('max_pulse'):
         summary += f"❤️ Средний пульс: {data['avg_pulse']} уд/мин\n"
@@ -783,9 +968,9 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
 @router.message(F.text == "❌ Отменить")
 @router.callback_query(F.data == "cancel")
 async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
-    """Отмена текущей операции"""
+    """Отмена текущей операции с контекстно-зависимой навигацией"""
     current_state = await state.get_state()
-    
+
     if current_state is None:
         if isinstance(message, Message):
             await message.answer(
@@ -793,20 +978,47 @@ async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
                 reply_markup=get_main_menu_keyboard()
             )
         return
-    
+
+    # Получаем user_id для определения статуса тренера
+    user_id = message.from_user.id if isinstance(message, Message) else message.from_user.id
+
     await state.clear()
-    
+
+    # Контекстно-зависимые сообщения и навигация
+    # current_state имеет формат: "AddTrainingStates:waiting_for_type"
+    if 'AddTrainingStates' in current_state:
+        cancel_text = "❌ Добавление тренировки отменено"
+    elif 'ExportPDFStates' in current_state:
+        cancel_text = "❌ Экспорт отменён"
+    elif 'SettingsStates' in current_state:
+        cancel_text = "❌ Изменение настроек отменено"
+    elif 'CompetitionStates' in current_state:
+        cancel_text = "❌ Операция с соревнованием отменена"
+    elif 'CoachStates' in current_state:
+        cancel_text = "❌ Операция отменена"
+    elif 'RegistrationStates' in current_state:
+        cancel_text = "❌ Регистрация отменена"
+    else:
+        cancel_text = "❌ Действие отменено"
+
+    # Проверяем, является ли пользователь тренером
+    from database.queries import is_user_coach
+    is_coach = await is_user_coach(user_id)
+
+    menu_text = "Вы в главном меню"
+    keyboard = get_main_menu_keyboard(is_coach=is_coach)
+
     if isinstance(message, CallbackQuery):
-        await message.message.edit_text("❌ Действие отменено")
+        await message.message.edit_text(cancel_text)
         await message.message.answer(
-            "Вы в главном меню",
-            reply_markup=get_main_menu_keyboard()
+            menu_text,
+            reply_markup=keyboard
         )
         await message.answer()
     else:
         await message.answer(
-            "❌ Действие отменено\n\nВы в главном меню",
-            reply_markup=get_main_menu_keyboard()
+            f"{cancel_text}\n\n{menu_text}",
+            reply_markup=keyboard
         )
 
 @router.message(F.text == "📊 Мои тренировки")
@@ -1339,7 +1551,33 @@ async def show_training_detail(callback: CallbackQuery):
                 detail_text += f"📏 *Дистанция:* {format_swimming_distance(training['distance'], distance_unit)}\n"
             else:
                 detail_text += f"📏 *Дистанция:* {format_distance(training['distance'], distance_unit)}\n"
-        
+
+        # Для плавания - дополнительная информация
+        if t_type == 'плавание':
+            # Место тренировки
+            if training.get('swimming_location'):
+                from utils.swimming_pace import format_swimming_location
+                location_text = format_swimming_location(
+                    training['swimming_location'],
+                    training.get('pool_length')
+                )
+                detail_text += f"📍 *Место:* {location_text}\n"
+
+            # Стили плавания
+            if training.get('swimming_styles'):
+                import json
+                try:
+                    styles = json.loads(training['swimming_styles'])
+                    from utils.swimming_pace import format_swimming_styles
+                    styles_text = format_swimming_styles(styles)
+                    detail_text += f"🏊 *Стили:* {styles_text}\n"
+                except:
+                    pass
+
+            # Описание отрезков
+            if training.get('swimming_sets'):
+                detail_text += f"\n📝 *Отрезки:*\n```\n{training['swimming_sets']}\n```\n"
+
         if training.get('avg_pace'):
             pace_unit = training.get('pace_unit', '')
             if t_type == 'велотренировка':
@@ -1977,8 +2215,11 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         await callback.message.answer(
             f"✅ Дата: {date_str}\n\n"
             "⏰ Введите время тренировки\n\n"
-            "Формат: ЧЧ:ММ:СС\n"
-            "Примеры: 01:25:30 или 25:15:45 (для ультрамарафонов)",
+            "Формат: ЧЧ:ММ:СС или ММ:СС (если меньше часа)\n"
+            "Примеры:\n"
+            "• 45:30 (45 минут 30 секунд)\n"
+            "• 01:25:30 или 1:25:30 (1 час 25 минут)\n"
+            "• 25:15:45 (для ультрамарафонов)",
             reply_markup=get_cancel_keyboard()
         )
 
