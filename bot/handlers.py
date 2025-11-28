@@ -43,6 +43,7 @@ from utils.date_formatter import DateFormatter, get_user_date_format
 from utils.goals_checker import check_weekly_goals
 from ratings.rating_updater import update_single_user_rating
 from database.level_queries import calculate_and_update_user_level
+from coach.coach_queries import is_user_coach
 
 router = Router()
 
@@ -998,20 +999,32 @@ async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
         cancel_text = "❌ Операция отменена"
     elif 'RegistrationStates' in current_state:
         cancel_text = "❌ Регистрация отменена"
+    elif 'HealthMetricsStates' in current_state or 'HealthExportStates' in current_state:
+        cancel_text = "❌ Действие отменено"
     else:
         cancel_text = "❌ Действие отменено"
 
     # Проверяем, является ли пользователь тренером
-    from database.queries import is_user_coach
     is_coach = await is_user_coach(user_id)
 
     menu_text = "Вы в главном меню"
     keyboard = get_main_menu_keyboard(is_coach=is_coach)
 
     if isinstance(message, CallbackQuery):
-        await message.message.edit_text(cancel_text)
+        try:
+            await message.message.edit_text(
+                f"{cancel_text}\n\n{menu_text}",
+                reply_markup=None
+            )
+        except Exception:
+            # Если не удалось отредактировать (сообщение удалено), отправляем новое
+            await message.message.answer(
+                f"{cancel_text}\n\n{menu_text}"
+            )
+
+        # Отправляем меню отдельным сообщением с клавиатурой
         await message.message.answer(
-            menu_text,
+            "Главное меню:",
             reply_markup=keyboard
         )
         await message.answer()

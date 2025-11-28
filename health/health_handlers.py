@@ -1121,19 +1121,7 @@ async def show_sleep_analysis(callback: CallbackQuery):
 
 # ============== Отмена ==============
 
-@router.message(F.text == "❌ Отменить", StateFilter("*"))
-async def cancel_handler(message: Message, state: FSMContext):
-    """Отмена текущего действия"""
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-
-    await state.clear()
-    await message.answer(
-        "Действие отменено.",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    await return_to_health_menu(message)
+# Обработчик отмены перенесен в bot/handlers.py (глобальный обработчик с контекстно-зависимой навигацией)
 
 
 # ============== Экспорт в PDF ==============

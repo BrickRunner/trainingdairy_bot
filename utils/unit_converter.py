@@ -4,6 +4,30 @@
 from typing import Tuple, Optional
 
 
+def pluralize(number: float, forms: Tuple[str, str, str]) -> str:
+    """
+    Склоняет слово в зависимости от числа
+
+    Args:
+        number: Число
+        forms: Кортеж из трех форм (1, 2, 5) - например ('метр', 'метра', 'метров')
+
+    Returns:
+        Правильная форма слова
+    """
+    number = abs(number)
+    # Берем целую часть для правильного склонения
+    n = int(number)
+
+    # Правила для русского языка
+    if n % 10 == 1 and n % 100 != 11:
+        return forms[0]
+    elif 2 <= n % 10 <= 4 and (n % 100 < 10 or n % 100 >= 20):
+        return forms[1]
+    else:
+        return forms[2]
+
+
 def km_to_miles(km: float) -> float:
     """
     Конвертирует километры в мили
@@ -69,9 +93,11 @@ def format_distance(distance_km: float, distance_unit: str = 'км') -> str:
     """
     if distance_unit == 'мили':
         distance = km_to_miles(distance_km)
-        return f"{distance:.1f} миль"
+        unit = pluralize(distance, ('миля', 'мили', 'миль'))
+        return f"{distance:.1f} {unit}"
     else:
-        return f"{distance_km:.1f} км"
+        unit = pluralize(distance_km, ('километр', 'километра', 'километров'))
+        return f"{distance_km:.1f} {unit}"
 
 
 def format_pace(distance_km: float, total_seconds: int, 
@@ -148,7 +174,30 @@ def format_swimming_distance(distance_km: float, distance_unit: str = 'км') ->
     if distance_unit == 'мили':
         distance_miles = km_to_miles(distance_km)
         distance_yards = distance_miles * 1760
-        return f"{distance_miles:.1f} миль ({int(distance_yards)} ярдов)"
+        unit_miles = pluralize(distance_miles, ('миля', 'мили', 'миль'))
+        unit_yards = pluralize(distance_yards, ('ярд', 'ярда', 'ярдов'))
+        return f"{distance_miles:.1f} {unit_miles} ({int(distance_yards)} {unit_yards})"
     else:
         distance_meters = distance_km * 1000
-        return f"{distance_km:.1f} км ({int(distance_meters)} м)"
+        unit_km = pluralize(distance_km, ('километр', 'километра', 'километров'))
+        unit_m = pluralize(distance_meters, ('метр', 'метра', 'метров'))
+        return f"{distance_km:.1f} {unit_km} ({int(distance_meters)} {unit_m})"
+
+
+def format_weight(weight: float, weight_unit: str = 'кг') -> str:
+    """
+    Форматирует вес с правильным склонением
+
+    Args:
+        weight: Вес (в кг если weight_unit='кг', в фунтах если weight_unit='фунты')
+        weight_unit: Единица измерения ('кг' или 'фунты')
+
+    Returns:
+        Отформатированная строка с весом
+    """
+    if weight_unit == 'фунты':
+        unit = pluralize(weight, ('фунт', 'фунта', 'фунтов'))
+        return f"{weight:.1f} {unit}"
+    else:
+        unit = pluralize(weight, ('килограмм', 'килограмма', 'килограммов'))
+        return f"{weight:.1f} {unit}"

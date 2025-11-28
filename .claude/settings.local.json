@@ -11,7 +11,12 @@
       "Bash(cmd /c taskkill /F /PID 6308)",
       "Bash(powershell \"Stop-Process -Id 8888 -Force; Stop-Process -Id 6308 -Force\")",
       "Bash(powershell \"Start-Sleep -Seconds 3\")",
-      "Bash(powershell \"Start-Sleep -Seconds 2\")"
+      "Bash(powershell \"Start-Sleep -Seconds 2\")",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile health/health_handlers.py)",
+      "Bash(findstr:*)",
+      "Bash(\"venv/Scripts/python.exe\" main.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics.py)",
+      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics_handlers.py)"
     ],
     "deny": [],
     "ask": []

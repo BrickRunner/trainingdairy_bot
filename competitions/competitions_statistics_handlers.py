@@ -20,8 +20,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from .competitions_queries import get_user_competitions_with_details
 from .competitions_statistics import calculate_competitions_statistics, format_statistics_message
 from .competitions_pdf_export import create_competitions_pdf
+from .competitions_graphs import generate_competitions_graphs
 from utils.date_formatter import DateFormatter, get_user_date_format
 from bot.calendar_keyboard import CalendarKeyboard
+from database.queries import get_user_settings
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -57,7 +59,7 @@ async def parse_user_date(date_str: str, user_id: int) -> date:
 
 @router.callback_query(F.data == "comp:stats:show")
 async def show_statistics(callback: CallbackQuery):
-    """Показать статистику соревнований"""
+    """Показать статистику соревнований с графиками"""
     user_id = callback.from_user.id
 
     await callback.answer("⏳ Рассчитываю статистику...")
@@ -93,6 +95,32 @@ async def show_statistics(callback: CallbackQuery):
         except Exception:
             # Если сообщение не изменилось - просто игнорируем
             pass
+
+        # Генерируем и отправляем графики
+        try:
+            # Получаем настройки единиц измерения
+            settings = await get_user_settings(user_id)
+            distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+            # Генерируем графики
+            graph_buffers = await generate_competitions_graphs(
+                participants,
+                stats,
+                "весь период",
+                distance_unit
+            )
+
+            # Отправляем графики
+            for i, buf in enumerate(graph_buffers):
+                await callback.message.answer_photo(
+                    photo=BufferedInputFile(buf.read(), filename=f"competitions_stats_{i+1}.png"),
+                    caption=f"📊 Графики статистики соревнований ({i+1}/{len(graph_buffers)})" if i == 0 else None
+                )
+                buf.close()
+
+        except Exception as graph_error:
+            logger.error(f"Ошибка при генерации графиков: {graph_error}")
+            # Продолжаем работу даже если графики не сгенерировались
 
     except Exception as e:
         logger.error(f"Ошибка при расчёте статистики: {e}")

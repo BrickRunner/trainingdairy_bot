@@ -285,15 +285,6 @@ def format_statistics_message(stats: Dict[str, Any]) -> str:
         for comp_type, count in sorted(stats['by_type'].items(), key=lambda x: x[1], reverse=True):
             msg += f"  • {comp_type}: {count}\n"
 
-    # Личные рекорды
-    if stats['personal_records']:
-        msg += "\n🏆 <b>Личные рекорды:</b>\n"
-        for distance in sorted(stats['personal_records'].keys()):
-            pr = stats['personal_records'][distance]
-            pace_info = f" ({pr['pace']} мин/км)" if pr.get('pace') else ""
-            qualification_info = f" - {pr['qualification']}" if pr.get('qualification') else ""
-            msg += f"  • {distance} км: {pr['time']}{pace_info}{qualification_info}\n"
-
     # Лучшие места
     if stats['best_places_overall']:
         msg += "\n🥇 <b>Топ-5 мест (общий зачёт):</b>\n"

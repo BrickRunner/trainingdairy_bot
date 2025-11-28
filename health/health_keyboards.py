@@ -5,6 +5,7 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from typing import Optional, Dict
+from utils.unit_converter import format_weight, pluralize
 
 
 def get_health_menu_keyboard() -> InlineKeyboardMarkup:
@@ -25,12 +26,16 @@ def get_health_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_quick_input_keyboard(today_metrics: Optional[Dict] = None) -> InlineKeyboardMarkup:
+def get_quick_input_keyboard(today_metrics: Optional[Dict] = None, weight_unit: str = 'кг') -> InlineKeyboardMarkup:
     """
     Клавиатура для быстрого ввода данных
 
     Если today_metrics заполнены, показывает текущие значения с кнопками для изменения
     Если нет - показывает кнопки для первичного ввода
+
+    Args:
+        today_metrics: Метрики пользователя за сегодня
+        weight_unit: Единица измерения веса ('кг' или 'фунты')
     """
     builder = InlineKeyboardBuilder()
 
@@ -40,7 +45,7 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None) -> InlineKeyb
         if today_metrics.get('morning_pulse'):
             builder.row(
                 InlineKeyboardButton(
-                    text=f"💗 Пульс: {today_metrics['morning_pulse']} уд/мин",
+                    text=f"💗 Пульс: {today_metrics['morning_pulse']} {pluralize(today_metrics['morning_pulse'], ('удар', 'удара', 'ударов'))}/мин",
                     callback_data="health:input_pulse"
                 )
             )
@@ -51,9 +56,13 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None) -> InlineKeyb
 
         # Вес
         if today_metrics.get('weight'):
+            # Вес в БД всегда в кг, конвертируем если нужно
+            from utils.unit_converter import kg_to_lbs
+            weight_display = kg_to_lbs(today_metrics['weight']) if weight_unit == 'фунты' else today_metrics['weight']
+            weight_text = format_weight(weight_display, weight_unit)
             builder.row(
                 InlineKeyboardButton(
-                    text=f"⚖️ Вес: {today_metrics['weight']} кг",
+                    text=f"⚖️ Вес: {weight_text}",
                     callback_data="health:input_weight"
                 )
             )
