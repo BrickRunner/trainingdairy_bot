@@ -57,26 +57,54 @@ async def parse_user_date(date_str: str, user_id: int) -> date:
     return DateFormatter.parse_date(date_str, user_format)
 
 
-@router.callback_query(F.data == "comp:stats:show")
-async def show_statistics(callback: CallbackQuery):
-    """Показать статистику соревнований с графиками"""
+async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all'):
+    """Показать статистику соревнований с графиками за определенный период
+
+    Args:
+        callback: Callback query
+        period: Период ('month', 'halfyear', 'year', 'all')
+    """
     user_id = callback.from_user.id
 
     await callback.answer("⏳ Рассчитываю статистику...")
 
     try:
-        # Получаем все соревнования пользователя
-        participants = await get_user_competitions_with_details(user_id)
+        # Получаем соревнования пользователя с фильтром по периоду
+        from datetime import datetime, timedelta
+
+        end_date = datetime.now().date()
+        if period == 'month':
+            start_date = end_date - timedelta(days=30)
+            period_text = "за последний месяц"
+        elif period == 'halfyear':
+            start_date = end_date - timedelta(days=180)
+            period_text = "за последние полгода"
+        elif period == 'year':
+            start_date = end_date - timedelta(days=365)
+            period_text = "за последний год"
+        else:  # 'all'
+            start_date = None
+            period_text = "весь период"
+
+        # Получаем все соревнования и фильтруем по дате
+        all_participants = await get_user_competitions_with_details(user_id)
+
+        if start_date:
+            participants = [
+                p for p in all_participants
+                if datetime.strptime(p['date'], '%Y-%m-%d').date() >= start_date
+            ]
+        else:
+            participants = all_participants
 
         if not participants:
             try:
                 await callback.message.edit_text(
-                    "📊 У вас пока нет соревнований\n\n"
-                    "Добавьте свои первые соревнования!",
-                    reply_markup=get_statistics_menu()
+                    f"📊 У вас нет соревнований {period_text}\n\n"
+                    "Выберите другой период или добавьте соревнования!",
+                    reply_markup=get_statistics_menu(period)
                 )
             except Exception:
-                # Если сообщение не изменилось - просто игнорируем
                 pass
             return
 
@@ -85,42 +113,50 @@ async def show_statistics(callback: CallbackQuery):
 
         # Форматируем сообщение
         message_text = format_statistics_message(stats)
+        message_text = f"📊 <b>СТАТИСТИКА {period_text.upper()}</b>\n\n" + message_text.split('\n\n', 1)[1]
 
         try:
             await callback.message.edit_text(
                 message_text,
-                reply_markup=get_statistics_menu(),
+                reply_markup=get_statistics_menu(period),
                 parse_mode="HTML"
             )
         except Exception:
-            # Если сообщение не изменилось - просто игнорируем
             pass
 
         # Генерируем и отправляем графики
         try:
-            # Получаем настройки единиц измерения
             settings = await get_user_settings(user_id)
             distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-            # Генерируем графики
             graph_buffers = await generate_competitions_graphs(
                 participants,
                 stats,
-                "весь период",
+                period_text,
                 distance_unit
             )
 
-            # Отправляем графики
+            # Отправляем графики без нумерации
             for i, buf in enumerate(graph_buffers):
+                caption = f"📊 Графики статистики соревнований {period_text}" if i == 0 else None
                 await callback.message.answer_photo(
                     photo=BufferedInputFile(buf.read(), filename=f"competitions_stats_{i+1}.png"),
-                    caption=f"📊 Графики статистики соревнований ({i+1}/{len(graph_buffers)})" if i == 0 else None
+                    caption=caption
                 )
                 buf.close()
 
+            # После графиков отправляем сообщение с кнопками навигации
+            builder = InlineKeyboardBuilder()
+            builder.row(
+                InlineKeyboardButton(text="◀️ Назад к статистике", callback_data="comp:menu")
+            )
+            await callback.message.answer(
+                "📊 Графики успешно сформированы!\n\nВыберите действие:",
+                reply_markup=builder.as_markup()
+            )
+
         except Exception as graph_error:
             logger.error(f"Ошибка при генерации графиков: {graph_error}")
-            # Продолжаем работу даже если графики не сгенерировались
 
     except Exception as e:
         logger.error(f"Ошибка при расчёте статистики: {e}")
@@ -128,11 +164,40 @@ async def show_statistics(callback: CallbackQuery):
             await callback.message.edit_text(
                 "❌ Произошла ошибка при расчёте статистики\n\n"
                 "Попробуйте позже",
-                reply_markup=get_statistics_menu()
+                reply_markup=get_statistics_menu(period)
             )
         except Exception:
-            # Если сообщение не изменилось - просто игнорируем
             pass
+
+
+@router.callback_query(F.data == "comp:stats:show")
+async def show_statistics(callback: CallbackQuery):
+    """Показать статистику соревнований с графиками (весь период по умолчанию)"""
+    await show_statistics_for_period(callback, 'all')
+
+
+@router.callback_query(F.data == "comp:stats:month")
+async def show_statistics_month(callback: CallbackQuery):
+    """Показать статистику за месяц"""
+    await show_statistics_for_period(callback, 'month')
+
+
+@router.callback_query(F.data == "comp:stats:halfyear")
+async def show_statistics_halfyear(callback: CallbackQuery):
+    """Показать статистику за полгода"""
+    await show_statistics_for_period(callback, 'halfyear')
+
+
+@router.callback_query(F.data == "comp:stats:year")
+async def show_statistics_year(callback: CallbackQuery):
+    """Показать статистику за год"""
+    await show_statistics_for_period(callback, 'year')
+
+
+@router.callback_query(F.data == "comp:stats:all")
+async def show_statistics_all(callback: CallbackQuery):
+    """Показать статистику за всё время"""
+    await show_statistics_for_period(callback, 'all')
 
 
 @router.callback_query(F.data == "comp:export:halfyear")

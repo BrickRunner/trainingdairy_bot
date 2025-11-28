@@ -25,18 +25,32 @@ async def get_user_distance_unit(user_id: int) -> str:
     return 'км'
 
 
-async def format_competition_distance(distance_km: float, user_id: int) -> str:
+async def format_competition_distance(distance_km: float, user_id: int, case: str = 'nominative') -> str:
     """
     Форматировать дистанцию соревнования согласно настройкам пользователя
 
     Args:
         distance_km: Дистанция в километрах
         user_id: ID пользователя
+        case: Падеж ('nominative' - именительный, 'genitive' - родительный, 'accusative' - винительный)
 
     Returns:
         Отформатированная строка (например: "42.2 км", "800 м" или "26.2 мили", "880 ярдов")
     """
     distance_unit = await get_user_distance_unit(user_id)
+
+    # Словари с падежами для специальных дистанций
+    marathon_cases = {
+        'nominative': 'Марафон',
+        'genitive': 'марафона',
+        'accusative': 'марафон'
+    }
+
+    half_marathon_cases = {
+        'nominative': 'Полумарафон',
+        'genitive': 'полумарафона',
+        'accusative': 'полумарафон'
+    }
 
     # Специальные названия дистанций
     if distance_unit == 'км':
@@ -45,9 +59,9 @@ async def format_competition_distance(distance_km: float, user_id: int) -> str:
             distance_meters = int(distance_km * 1000)
             return f"{distance_meters} м"
         elif 42.0 <= distance_km <= 42.3:
-            return "Марафон (42.2 км)"
+            return f"{marathon_cases.get(case, 'Марафон')} (42.2 км)"
         elif 21.0 <= distance_km <= 21.2:
-            return "Полумарафон (21.1 км)"
+            return f"{half_marathon_cases.get(case, 'Полумарафон')} (21.1 км)"
         elif distance_km == 10:
             return "10 км"
         elif distance_km == 5:
@@ -61,9 +75,9 @@ async def format_competition_distance(distance_km: float, user_id: int) -> str:
             distance_yards = int(distance_miles * 1760)
             return f"{distance_yards} ярдов"
         elif 42.0 <= distance_km <= 42.3:
-            return f"Марафон ({distance_miles:.1f} миль)"
+            return f"{marathon_cases.get(case, 'Марафон')} ({distance_miles:.1f} миль)"
         elif 21.0 <= distance_km <= 21.2:
-            return f"Полумарафон ({distance_miles:.1f} миль)"
+            return f"{half_marathon_cases.get(case, 'Полумарафон')} ({distance_miles:.1f} миль)"
         else:
             return f"{distance_miles:.1f} миль"
 

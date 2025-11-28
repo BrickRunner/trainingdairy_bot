@@ -1546,9 +1546,8 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         text += "\n✅ Соревнование добавлено в ваши результаты!"
 
         builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="◀️ Назад к моим результатам", callback_data="comp:my_results"))
         builder.row(InlineKeyboardButton(text="➕ Добавить ещё результат", callback_data="comp:add_past"))
-        builder.row(InlineKeyboardButton(text="🏅 Мои результаты", callback_data="comp:my_results"))
-        builder.row(InlineKeyboardButton(text="◀️ Главное меню", callback_data="comp:menu"))
 
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
 

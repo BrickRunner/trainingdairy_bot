@@ -27,6 +27,12 @@ SOURCES = {
         'name': 'Плавание',
         'federation': 'ФВВСР (Всероссийская Федерация плавания)',
         'file_url': 'https://www.russwimming.ru/upload/iblock/454/2p9mhknbbs3fltf01qc1d5lhn5ijb41c/plavanie_dejstvuyut_c_26_noyabrya_2024_g_197d4117d4.xls'
+    },
+    'cycling': {
+        'url': 'https://fvsr.ru/deyatelnost/sportivnaya-podgotovka/normativy-i-trebovaniya/',
+        'name': 'Велоспорт',
+        'federation': 'ФВСР (Федерация велосипедного спорта России)',
+        'file_url': 'https://fvsr.ru/wp-content/uploads/2024/11/velosport_dejstvuyut_c_26_noyabrya_2024_g.xls'
     }
 }
 

@@ -400,9 +400,35 @@ def get_month_selection_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_statistics_menu() -> InlineKeyboardMarkup:
-    """Меню статистики соревнований"""
+def get_statistics_menu(period: str = None) -> InlineKeyboardMarkup:
+    """Меню статистики соревнований с выбором периода
+
+    Args:
+        period: Текущий выбранный период ('month', 'halfyear', 'year', 'all')
+    """
     builder = InlineKeyboardBuilder()
+
+    # Кнопки выбора периода
+    builder.row(
+        InlineKeyboardButton(
+            text="✅ Месяц" if period == 'month' else "📅 Месяц",
+            callback_data="comp:stats:month"
+        ),
+        InlineKeyboardButton(
+            text="✅ Полгода" if period == 'halfyear' else "📅 Полгода",
+            callback_data="comp:stats:halfyear"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="✅ Год" if period == 'year' else "📅 Год",
+            callback_data="comp:stats:year"
+        ),
+        InlineKeyboardButton(
+            text="✅ Всё время" if period == 'all' or period is None else "📅 Всё время",
+            callback_data="comp:stats:all"
+        )
+    )
 
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
