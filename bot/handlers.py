@@ -401,9 +401,12 @@ async def process_time(message: Message, state: FSMContext):
         user_settings = await get_user_settings(user_id)
         distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
 
+        # Используем правильный падеж для "в километрах" / "в милях"
+        unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
+
         await message.answer(
             f"✅ Время: {formatted_time}\n\n"
-            f"🏃 Введите дистанцию в {distance_unit}\n\n"
+            f"🏃 Введите дистанцию в {unit_prepositional}\n\n"
             "Например: 10 или 10.5"
         )
         await state.set_state(AddTrainingStates.waiting_for_distance)

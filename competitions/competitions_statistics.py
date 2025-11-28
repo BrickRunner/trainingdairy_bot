@@ -252,16 +252,19 @@ def _compare_times(time1: str, time2: str) -> int:
     return 0
 
 
-def format_statistics_message(stats: Dict[str, Any]) -> str:
+def format_statistics_message(stats: Dict[str, Any], distance_unit: str = 'км') -> str:
     """
     Форматировать статистику в красивое сообщение
 
     Args:
         stats: Словарь со статистикой
+        distance_unit: Единица измерения дистанции ('км' или 'мили')
 
     Returns:
         Отформатированное сообщение
     """
+    from utils.unit_converter import format_distance, km_to_miles
+
     if stats['total_competitions'] == 0:
         return "📊 У вас пока нет соревнований"
 
@@ -277,7 +280,9 @@ def format_statistics_message(stats: Dict[str, Any]) -> str:
     if stats['dnf'] > 0:
         msg += f"⚠️ DNF: {stats['dnf']}\n"
 
-    msg += f"\n📏 <b>Суммарный километраж:</b> {stats['total_distance']:.1f} км\n"
+    # Суммарный километраж с правильным падежом (именительный падеж)
+    total_distance_formatted = format_distance(stats['total_distance'], distance_unit, case='nominative')
+    msg += f"\n📏 <b>Суммарный километраж:</b> {total_distance_formatted}\n"
 
     # По типам
     if stats['by_type']:
@@ -289,7 +294,13 @@ def format_statistics_message(stats: Dict[str, Any]) -> str:
     if stats['best_places_overall']:
         msg += "\n🥇 <b>Топ-5 мест (общий зачёт):</b>\n"
         for item in stats['best_places_overall'][:5]:
-            msg += f"  • {item['place']} место - {item['competition']} ({item['distance']} км)\n"
+            # Форматируем дистанцию с правильными единицами (в скобках - родительный падеж)
+            if distance_unit == 'мили':
+                distance_value = km_to_miles(item['distance'])
+                distance_text = f"{distance_value:.1f} миль"
+            else:
+                distance_text = f"{item['distance']} км"
+            msg += f"  • {item['place']} место - {item['competition']} ({distance_text})\n"
 
     # Достижение целей
     if stats['finished'] > 0:

@@ -1,22 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile:*)",
-      "Bash(tasklist:*)",
-      "Bash(taskkill:*)",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile coach/coach_competitions_handlers.py)",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile utils/unit_converter.py)",
-      "Bash(\"venv/Scripts/python.exe\" database/migrations/add_level_updated_field.py)",
-      "Bash(cmd /c taskkill /F /PID 8888)",
-      "Bash(cmd /c taskkill /F /PID 6308)",
-      "Bash(powershell \"Stop-Process -Id 8888 -Force; Stop-Process -Id 6308 -Force\")",
-      "Bash(powershell \"Start-Sleep -Seconds 3\")",
-      "Bash(powershell \"Start-Sleep -Seconds 2\")",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile health/health_handlers.py)",
-      "Bash(findstr:*)",
-      "Bash(\"venv/Scripts/python.exe\" main.py)",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics.py)",
-      "Bash(\"venv/Scripts/python.exe\" -m py_compile competitions/competitions_statistics_handlers.py)"
+      "Bash(venv\\Scripts\\python.exe:*)"
     ],
     "deny": [],
     "ask": []

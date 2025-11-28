@@ -101,6 +101,9 @@ class CompetitionStates(StatesGroup):
     waiting_for_result_comment = State()        # Комментарий к результату
     waiting_for_result_photo = State()          # Фото финишера
 
+    # Редактирование результата
+    editing_finish_time = State()               # Редактирование финишного времени
+
     # Поиск соревнований
     waiting_for_search_query = State()          # Поисковый запрос
     waiting_for_city = State()                  # Город

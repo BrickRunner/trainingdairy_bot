@@ -111,8 +111,12 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
         # Рассчитываем статистику
         stats = calculate_competitions_statistics(participants)
 
-        # Форматируем сообщение
-        message_text = format_statistics_message(stats)
+        # Получаем настройки единиц измерения
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+        # Форматируем сообщение с учетом единиц измерения
+        message_text = format_statistics_message(stats, distance_unit)
         message_text = f"📊 <b>СТАТИСТИКА {period_text.upper()}</b>\n\n" + message_text.split('\n\n', 1)[1]
 
         try:

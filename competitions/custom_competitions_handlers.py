@@ -156,16 +156,18 @@ async def process_comp_city(message: Message, state: FSMContext):
     )
 
     # Получаем формат даты пользователя для подсказки
-    from utils.date_formatter import get_user_date_format
+    from utils.date_formatter import get_user_date_format, DateFormatter
     user_id = message.from_user.id
     user_date_format = await get_user_date_format(user_id)
-    date_format_example = "ДД.ММ.ГГГГ" if user_date_format == "DD.MM.YYYY" else "ММ/ДД/ГГГГ"
+    date_format_desc = await get_date_format_description(user_id)
+    example_date = DateFormatter.format_date(datetime.now().date(), user_date_format)
 
     text = (
         f"✅ Город: <b>{comp_city}</b>\n\n"
         f"📝 <b>Шаг 3 из 6</b>\n\n"
         f"Выберите <b>дату</b> соревнования из календаря\n"
-        f"или введите вручную в формате {date_format_example}"
+        f"или введите вручную в формате: <b>{date_format_desc}</b>\n\n"
+        f"<i>Например: {example_date}</i>"
     )
 
     await message.answer(text, parse_mode="HTML", reply_markup=calendar)
@@ -884,12 +886,17 @@ async def process_past_comp_city(message: Message, state: FSMContext):
     user_id = message.from_user.id
     date_format_desc = await get_date_format_description(user_id)
 
+    # Получаем формат даты пользователя для примера
+    from utils.date_formatter import get_user_date_format, DateFormatter
+    user_date_format = await get_user_date_format(user_id)
+    example_date = DateFormatter.format_date(datetime.now().date(), user_date_format)
+
     text = (
         f"✅ Город: <b>{comp_city}</b>\n\n"
         f"📝 <b>Шаг 3 из 9</b>\n\n"
         f"Выберите <b>дату</b> соревнования из календаря\n"
         f"или введите вручную в формате: <b>{date_format_desc}</b>\n\n"
-        f"<i>Например: {datetime.now().strftime('%d.%m.%Y')}</i>"
+        f"<i>Например: {example_date}</i>"
     )
 
     await message.answer(text, parse_mode="HTML", reply_markup=calendar)

@@ -4,13 +4,22 @@
 from typing import Tuple, Optional
 
 
-def pluralize(number: float, forms: Tuple[str, str, str]) -> str:
+def pluralize(number: float, forms: Tuple[str, str, str], case: str = 'nominative') -> str:
     """
-    Склоняет слово в зависимости от числа
+    Склоняет слово в зависимости от числа и падежа
 
     Args:
         number: Число
-        forms: Кортеж из трех форм (1, 2, 5) - например ('метр', 'метра', 'метров')
+        forms: Кортеж из трех форм (1, 2, 5) для именительного падежа
+               например ('метр', 'метра', 'метров')
+               или словарь с падежами:
+               {
+                   'nominative': ('километр', 'километра', 'километров'),
+                   'genitive': ('километра', 'километров', 'километров'),
+                   'prepositional': ('километре', 'километрах', 'километрах')
+               }
+        case: Падеж ('nominative' - именительный, 'genitive' - родительный,
+                     'prepositional' - предложный)
 
     Returns:
         Правильная форма слова
@@ -19,13 +28,20 @@ def pluralize(number: float, forms: Tuple[str, str, str]) -> str:
     # Берем целую часть для правильного склонения
     n = int(number)
 
+    # Если forms - словарь, выбираем нужный падеж
+    if isinstance(forms, dict):
+        case_forms = forms.get(case, forms.get('nominative', ('', '', '')))
+    else:
+        # Если кортеж - используем его как есть (только для именительного падежа)
+        case_forms = forms
+
     # Правила для русского языка
     if n % 10 == 1 and n % 100 != 11:
-        return forms[0]
+        return case_forms[0]
     elif 2 <= n % 10 <= 4 and (n % 100 < 10 or n % 100 >= 20):
-        return forms[1]
+        return case_forms[1]
     else:
-        return forms[2]
+        return case_forms[2]
 
 
 def km_to_miles(km: float) -> float:
@@ -80,23 +96,37 @@ def lbs_to_kg(lbs: float) -> float:
     return lbs / 2.20462
 
 
-def format_distance(distance_km: float, distance_unit: str = 'км') -> str:
+def format_distance(distance_km: float, distance_unit: str = 'км', case: str = 'nominative') -> str:
     """
     Форматирует дистанцию в зависимости от единиц измерения
 
     Args:
         distance_km: Дистанция в километрах (всегда хранится в км в БД)
         distance_unit: Единица измерения ('км' или 'мили')
+        case: Падеж ('nominative', 'genitive', 'prepositional')
 
     Returns:
         Отформатированная строка с дистанцией
     """
+    # Словари склонений для каждой единицы
+    km_forms = {
+        'nominative': ('километр', 'километра', 'километров'),
+        'genitive': ('километра', 'километров', 'километров'),
+        'prepositional': ('километре', 'километрах', 'километрах')
+    }
+
+    miles_forms = {
+        'nominative': ('миля', 'мили', 'миль'),
+        'genitive': ('мили', 'миль', 'миль'),
+        'prepositional': ('миле', 'милях', 'милях')
+    }
+
     if distance_unit == 'мили':
         distance = km_to_miles(distance_km)
-        unit = pluralize(distance, ('миля', 'мили', 'миль'))
+        unit = pluralize(distance, miles_forms, case)
         return f"{distance:.1f} {unit}"
     else:
-        unit = pluralize(distance_km, ('километр', 'километра', 'километров'))
+        unit = pluralize(distance_km, km_forms, case)
         return f"{distance_km:.1f} {unit}"
 
 
@@ -184,20 +214,34 @@ def format_swimming_distance(distance_km: float, distance_unit: str = 'км') ->
         return f"{distance_km:.1f} {unit_km} ({int(distance_meters)} {unit_m})"
 
 
-def format_weight(weight: float, weight_unit: str = 'кг') -> str:
+def format_weight(weight: float, weight_unit: str = 'кг', case: str = 'nominative') -> str:
     """
     Форматирует вес с правильным склонением
 
     Args:
         weight: Вес (в кг если weight_unit='кг', в фунтах если weight_unit='фунты')
         weight_unit: Единица измерения ('кг' или 'фунты')
+        case: Падеж ('nominative', 'genitive', 'prepositional')
 
     Returns:
         Отформатированная строка с весом
     """
+    # Словари склонений
+    kg_forms = {
+        'nominative': ('килограмм', 'килограмма', 'килограммов'),
+        'genitive': ('килограмма', 'килограммов', 'килограммов'),
+        'prepositional': ('килограмме', 'килограммах', 'килограммах')
+    }
+
+    lbs_forms = {
+        'nominative': ('фунт', 'фунта', 'фунтов'),
+        'genitive': ('фунта', 'фунтов', 'фунтов'),
+        'prepositional': ('фунте', 'фунтах', 'фунтах')
+    }
+
     if weight_unit == 'фунты':
-        unit = pluralize(weight, ('фунт', 'фунта', 'фунтов'))
+        unit = pluralize(weight, lbs_forms, case)
         return f"{weight:.1f} {unit}"
     else:
-        unit = pluralize(weight, ('килограмм', 'килограмма', 'килограммов'))
+        unit = pluralize(weight, kg_forms, case)
         return f"{weight:.1f} {unit}"

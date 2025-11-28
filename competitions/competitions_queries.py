@@ -591,6 +591,74 @@ async def add_competition_result(
         return cursor.rowcount > 0
 
 
+async def update_competition_result(
+    user_id: int,
+    competition_id: int,
+    finish_time: str
+) -> bool:
+    """
+    Обновить результат соревнования (изменить только финишное время)
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования
+        finish_time: Новое финишное время
+
+    Returns:
+        True если обновление прошло успешно
+    """
+    # Нормализуем время перед сохранением
+    normalized_time = normalize_time(finish_time)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Получаем дистанцию, тип спорта соревнования и пол пользователя
+        cursor = await db.execute(
+            """
+            SELECT cp.distance, c.sport_type, us.gender
+            FROM competition_participants cp
+            JOIN competitions c ON c.id = cp.competition_id
+            LEFT JOIN user_settings us ON us.user_id = ?
+            WHERE cp.user_id = ? AND cp.competition_id = ?
+            """,
+            (user_id, user_id, competition_id)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return False
+
+        distance = row[0]
+        sport_type = row[1] if row[1] else 'бег'
+        gender = row[2] if row[2] else 'male'
+
+        # Рассчитываем разряд
+        qualification = None
+        try:
+            from utils.qualifications import get_qualification, time_to_seconds
+            time_seconds = time_to_seconds(normalized_time)
+            qualification = get_qualification(sport_type, distance, time_seconds, gender)
+        except Exception as e:
+            # Если не удалось рассчитать разряд, продолжаем без него
+            print(f"Ошибка расчета разряда: {e}")
+
+        # Обновляем только время и разряд
+        cursor = await db.execute(
+            """
+            UPDATE competition_participants
+            SET finish_time = ?,
+                qualification = ?
+            WHERE user_id = ? AND competition_id = ?
+            """,
+            (normalized_time, qualification, user_id, competition_id)
+        )
+        await db.commit()
+
+        # Проверяем и обновляем личный рекорд
+        if cursor.rowcount > 0:
+            await update_personal_record(user_id, distance, normalized_time, competition_id, qualification)
+
+        return cursor.rowcount > 0
+
+
 async def delete_competition_result(user_id: int, competition_id: int) -> bool:
     """
     Удалить результат соревнования (очистить поля результата)
