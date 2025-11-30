@@ -813,20 +813,15 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
                 reply_markup={"remove_keyboard": True}
             )
 
-            # Редирект к карточке соревнования
-            from aiogram.utils.keyboard import InlineKeyboardBuilder
-            builder = InlineKeyboardBuilder()
-            builder.row(
-                InlineKeyboardButton(text="📋 Просмотреть событие", callback_data=f"comp:my_view:{competition_id}:{distance}")
+            # Автоматический редирект к карточке соревнования
+            from types import SimpleNamespace
+            new_callback = SimpleNamespace(
+                message=message,
+                from_user=message.from_user,
+                data=f"comp:my_view:{competition_id}:{distance}",
+                answer=lambda text="", show_alert=False: None
             )
-            builder.row(
-                InlineKeyboardButton(text="◀️ К моим соревнованиям", callback_data="comp:my")
-            )
-
-            await message.answer(
-                "Выберите действие:",
-                reply_markup=builder.as_markup()
-            )
+            await view_my_competition(new_callback, None)
         else:
             await message.answer(
                 "✅ Результат обновлён, но не удалось найти регистрацию",

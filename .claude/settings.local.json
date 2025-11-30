@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(venv\\Scripts\\python.exe:*)"
+      "Bash(venv\\Scripts\\python.exe:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe main.py\")",
+      "Bash(powershell \"Start-Sleep -Seconds 3\")",
+      "Bash(cmd /c \"venv\\Scripts\\python.exe -c \"\"import sys; sys.path.insert(0, ''.''); import main\"\"\")",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell \"Start-Sleep -Seconds 5\")",
+      "Bash(cmd /c \"start /B cmd /c \"\"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe main.py > bot_output.log 2>&1\"\"\")",
+      "Bash(cmd /c \"start /MIN d:\\desktop\\coding\\trainingdairy_bot-1\\start_bot.bat\")"
     ],
     "deny": [],
     "ask": []
