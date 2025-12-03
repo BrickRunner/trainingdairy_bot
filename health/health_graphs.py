@@ -2,6 +2,12 @@
 Построение графиков для метрик здоровья
 """
 
+import os
+import tempfile
+
+# Устанавливаем переменную окружения для matplotlib перед импортом
+os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt

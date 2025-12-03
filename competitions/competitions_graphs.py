@@ -2,6 +2,13 @@
 Модуль для создания графиков статистики соревнований
 """
 
+import os
+import tempfile
+
+# Устанавливаем переменную окружения для matplotlib перед импортом
+# Это исправляет проблему с поиском исполняемых файлов на Windows
+os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -176,6 +183,7 @@ def _plot_single_distance_timeline(ax, distance: float, data: List[tuple], dista
 
     # Форматирование оси Y (время)
     y_ticks = ax.get_yticks()
+    ax.set_yticks(y_ticks)
     ax.set_yticklabels([_seconds_to_time(int(y)) for y in y_ticks])
 
     # Форматирование оси X (даты)

@@ -4,7 +4,7 @@
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
 import re
@@ -256,8 +256,14 @@ async def settings_menu(message: Message, state: FSMContext):
 
     info_text += "\nВыберите раздел для настройки:"
 
+    from aiogram.types import ReplyKeyboardRemove
     await message.answer(
         info_text,
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="Markdown"
+    )
+    await message.answer(
+        "Выберите раздел:",
         reply_markup=get_settings_menu_keyboard(is_coach),
         parse_mode="Markdown"
     )
@@ -369,7 +375,7 @@ async def process_name(message: Message, state: FSMContext):
     """Обработка ввода имени"""
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup={"remove_keyboard": True})
+        await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
         # Возврат в меню профиля
         await send_profile_menu(message, message.from_user.id)
         return
@@ -391,7 +397,7 @@ async def process_name(message: Message, state: FSMContext):
     
     await message.answer(
         f"✅ Имя успешно сохранено: {name}",
-        reply_markup={"remove_keyboard": True}
+        reply_markup=ReplyKeyboardRemove()
     )
     await state.clear()
     # Возврат в меню профиля
@@ -421,7 +427,7 @@ async def process_birth_date(message: Message, state: FSMContext):
     """Обработка ввода даты рождения"""
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Отменено", reply_markup={"remove_keyboard": True})
+        await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
         # Возврат в меню профиля
         await send_profile_menu(message, message.from_user.id)
         return
@@ -459,7 +465,7 @@ async def process_birth_date(message: Message, state: FSMContext):
         await message.answer(
             f"✅ Дата рождения сохранена: {day}.{month}.{year}\n"
             f"🎉 Ваш возраст: {age} лет",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         
@@ -579,7 +585,7 @@ async def process_weight(message: Message, state: FSMContext):
 
         await message.answer(
             f"✅ Вес сохранен: {weight} {weight_unit}",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
 
@@ -623,7 +629,7 @@ async def process_height(message: Message, state: FSMContext):
         
         await message.answer(
             f"✅ Рост сохранен: {height} см",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         # Возврат в подменю
@@ -858,7 +864,7 @@ async def process_max_pulse(message: Message, state: FSMContext):
             f"🟡 Зона 3: {settings['zone3_min']}-{settings['zone3_max']}\n"
             f"🟠 Зона 4: {settings['zone4_min']}-{settings['zone4_max']}\n"
             f"🔴 Зона 5: {settings['zone5_min']}-{settings['zone5_max']}\n",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         # Возврат в подменю пульсовых зон
@@ -978,7 +984,7 @@ async def process_weekly_volume(message: Message, state: FSMContext):
         await update_user_setting(user_id, 'weekly_volume_goal', None)
         await message.answer(
             "✅ Цель по недельному объёму удалена",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         await send_goals_menu(message, user_id)
@@ -998,7 +1004,7 @@ async def process_weekly_volume(message: Message, state: FSMContext):
         await update_user_setting(user_id, 'weekly_volume_goal', volume)
         await message.answer(
             f"✅ Целевой недельный объем сохранен: {volume} {distance_unit}",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         # Возврат в подменю
@@ -1046,7 +1052,7 @@ async def process_weekly_count(message: Message, state: FSMContext):
         await update_user_setting(user_id, 'weekly_trainings_goal', None)
         await message.answer(
             "✅ Цель по количеству тренировок удалена",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         await send_goals_menu(message, user_id)
@@ -1064,7 +1070,7 @@ async def process_weekly_count(message: Message, state: FSMContext):
         await update_user_setting(user_id, 'weekly_trainings_goal', count)
         await message.answer(
             f"✅ Целевое количество тренировок сохранено: {count} в неделю",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         # Возврат в подменю
@@ -1176,7 +1182,7 @@ async def process_type_goal(message: Message, state: FSMContext):
         await set_training_type_goal(user_id, training_type, None)
         await message.answer(
             f"✅ Цель для '{training_type}' удалена",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
 
         await state.clear()
@@ -1220,7 +1226,7 @@ async def process_type_goal(message: Message, state: FSMContext):
         await set_training_type_goal(user_id, training_type, goal)
         await message.answer(
             f"✅ Цель для '{training_type}' сохранена: {goal} {unit_text}",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
 
         await state.clear()
@@ -1280,7 +1286,7 @@ async def process_weight_goal(message: Message, state: FSMContext):
         await update_user_setting(user_id, 'weight_goal', None)
         await message.answer(
             "✅ Целевой вес удалён",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         await send_goals_menu(message, user_id)
@@ -1308,7 +1314,7 @@ async def process_weight_goal(message: Message, state: FSMContext):
         await update_user_setting(user_id, 'weight_goal', weight_goal)
         await message.answer(
             f"✅ Целевой вес сохранен: {weight_goal} {weight_unit}",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
         # Возврат в подменю
@@ -1578,7 +1584,7 @@ async def process_daily_time(message: Message, state: FSMContext):
 
     await message.answer(
         f"✅ Время ежедневного напоминания сохранено: {normalized_time}",
-        reply_markup={"remove_keyboard": True}
+        reply_markup=ReplyKeyboardRemove()
     )
     await state.clear()
     # Возврат в подменю
@@ -1647,7 +1653,7 @@ async def process_report_time(message: Message, state: FSMContext):
         f"✅ Недельный отчет настроен!\n\n"
         f"📅 День: {weekday}\n"
         f"⏰ Время: {normalized_time}",
-        reply_markup={"remove_keyboard": True}
+        reply_markup=ReplyKeyboardRemove()
     )
     await state.clear()
     # Возврат в подменю
@@ -1889,7 +1895,7 @@ async def process_reminder_time(message: Message, state: FSMContext):
 
     await message.answer(
         f"✅ Время напоминаний сохранено: {normalized_time}",
-        reply_markup={"remove_keyboard": True}
+        reply_markup=ReplyKeyboardRemove()
     )
     await state.clear()
     await send_notifications_menu(message, user_id)

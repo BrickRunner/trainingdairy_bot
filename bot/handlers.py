@@ -1040,18 +1040,35 @@ async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
 @router.message(F.text == "📊 Мои тренировки")
 async def show_my_trainings(message: Message):
     """Показать меню выбора периода для просмотра тренировок"""
+    # Скрываем reply-клавиатуру при показе inline-кнопок
     await message.answer(
         "📊 *Мои тренировки*\n\n"
         "Выберите период для просмотра:",
         parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    # Показываем inline-клавиатуру с периодами
+    await message.answer(
+        "Выберите период:",
         reply_markup=get_period_keyboard()
     )
 
 @router.callback_query(F.data.startswith("period:"))
-async def show_trainings_period(callback: CallbackQuery):
+async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     """Показать тренировки за выбранный период с детальной статистикой"""
     period = callback.data.split(":")[1]
-    
+
+    # Удаляем старые сообщения со статистикой, если они есть
+    data = await state.get_data()
+    old_message_ids = data.get('trainings_message_ids', [])
+    for msg_id in old_message_ids:
+        try:
+            await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
+        except Exception:
+            pass
+    # Очищаем список старых сообщений
+    await state.update_data(trainings_message_ids=[])
+
     # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
@@ -1180,10 +1197,7 @@ async def show_trainings_period(callback: CallbackQuery):
         'силовая': '💪',
         'интервальная': '⚡'
     }
-    
-    # НОВЫЙ КОД: Убираем кнопки удаления из списка, оставляем только "Назад"
-    builder = InlineKeyboardBuilder()
-    
+
     # Добавляем детали каждой тренировки
     for idx, training in enumerate(trainings[:15], 1):  # Показываем максимум 15
         # Парсим и форматируем дату согласно настройкам пользователя
@@ -1238,16 +1252,12 @@ async def show_trainings_period(callback: CallbackQuery):
     
     if len(trainings) > 15:
         message_text += f"_... и ещё {len(trainings) - 15} тренировок_\n"
-    
-    # НОВЫЙ КОД: Добавляем только кнопку "Назад"
-    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_periods"))
-    reply_markup = builder.as_markup()
-    
+
     try:
         await callback.message.edit_text(
             message_text,
             parse_mode="Markdown",
-            reply_markup=reply_markup
+            reply_markup=get_period_keyboard(period)
         )
     except Exception as e:
         # Если сообщение не изменилось - просто отвечаем на callback
@@ -1258,6 +1268,7 @@ async def show_trainings_period(callback: CallbackQuery):
             raise
     
     # Генерируем и отправляем графики для всех периодов (только если тренировок >= 2)
+    new_message_ids = []
     if len(trainings) >= 2:
         try:
             period_captions = {
@@ -1269,31 +1280,38 @@ async def show_trainings_period(callback: CallbackQuery):
 
             combined_graph = generate_graphs(trainings, period, days, distance_unit)
             logger.info(f"Отправка объединённого графика для периода {period}...")
-            
+
             if combined_graph:
-                await callback.message.answer_photo(
+                graph_msg = await callback.message.answer_photo(
                     photo=BufferedInputFile(combined_graph.read(), filename="statistics.png"),
                     caption=f"📊 Статистика тренировок {caption_suffix}"
                 )
+                new_message_ids.append(graph_msg.message_id)
                 logger.info("Объединённый график отправлен")
             else:
                 logger.warning("Не удалось создать графики")
-                await callback.message.answer("⚠️ Недостаточно данных для создания графиков")
-                
+                warning_msg = await callback.message.answer("⚠️ Недостаточно данных для создания графиков")
+                new_message_ids.append(warning_msg.message_id)
+
         except Exception as e:
             logger.error(f"Ошибка при отправке графика: {str(e)}", exc_info=True)
-            await callback.message.answer(f"❌ Ошибка при создания графиков: {str(e)}")
+            error_msg = await callback.message.answer(f"❌ Ошибка при создания графиков: {str(e)}")
+            new_message_ids.append(error_msg.message_id)
     else:
         logger.info(f"Недостаточно тренировок для графиков: {len(trainings)} (минимум 2)")
-    
+
     # Отправляем сообщение с кнопками для выбора тренировки
-    await callback.message.answer(
+    menu_msg = await callback.message.answer(
         "📋 *Выберите тренировку для просмотра деталей:*\n\n"
         "Нажмите на номер тренировки или выберите другой период",
         parse_mode="Markdown",
         reply_markup=get_trainings_list_keyboard(trainings, period, date_format)
     )
-    
+    new_message_ids.append(menu_msg.message_id)
+
+    # Сохраняем ID новых сообщений в state
+    await state.update_data(trainings_message_ids=new_message_ids)
+
     await callback.answer()
 
 # НОВЫЙ КОД: Обработчик кнопки удаления
@@ -1404,8 +1422,7 @@ async def confirm_delete(callback: CallbackQuery):
         message_text += "\n━━━━━━━━━━━━━━━━━━\n"
         message_text += "📝 *СПИСОК ТРЕНИРОВОК*\n"
         message_text += "━━━━━━━━━━━━━━━━━━\n\n"
-        
-        builder = InlineKeyboardBuilder()
+
         for idx, training in enumerate(trainings[:15], 1):
             date = DateFormatter.format_date(training['date'], date_format)
             t_type = training['type']
@@ -1438,14 +1455,12 @@ async def confirm_delete(callback: CallbackQuery):
             message_text += "\n"
         if len(trainings) > 15:
             message_text += f"_... и ещё {len(trainings) - 15} тренировок_\n"
-        builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_periods"))
-        reply_markup = builder.as_markup()
-        
+
         try:
             await callback.message.edit_text(
                 message_text,
                 parse_mode="Markdown",
-                reply_markup=reply_markup
+                reply_markup=get_period_keyboard(period)
             )
         except Exception as e:
             if "message is not modified" in str(e):
@@ -1730,6 +1745,11 @@ async def show_competitions(message: Message):
 
     await message.answer(
         text,
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="HTML"
+    )
+    await message.answer(
+        "Выберите действие:",
         reply_markup=get_competitions_main_menu(),
         parse_mode="HTML"
     )
@@ -1743,7 +1763,12 @@ async def export_pdf_menu(message: Message):
         "📥 <b>Экспорт в PDF</b>\n\n"
         "Выберите, что вы хотите экспортировать:",
         parse_mode="HTML",
-        reply_markup=get_export_type_keyboard()
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await message.answer(
+        "Выберите тип экспорта:",
+        reply_markup=get_export_type_keyboard(),
+        parse_mode="HTML"
     )
 
 
@@ -2382,6 +2407,11 @@ async def show_coach_section(message: Message):
         "👨‍🏫 <b>Раздел тренера</b>\n\n"
         "Здесь вы можете управлять своими учениками, "
         "просматривать их тренировки и прогресс.",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="HTML"
+    )
+    await message.answer(
+        "Выберите действие:",
         reply_markup=get_coach_main_menu(),
         parse_mode="HTML"
     )

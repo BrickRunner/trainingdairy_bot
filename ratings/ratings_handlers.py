@@ -60,6 +60,8 @@ def escape_markdown(text: str) -> str:
 @router.message(F.text == "🏆 Достижения")
 async def show_achievements_menu(message: Message):
     """Показать главное меню достижений"""
+    from aiogram.types import ReplyKeyboardRemove
+
     await message.answer(
         "🏆 **Достижения и рейтинги**\n\n"
         "Здесь вы можете посмотреть свой рейтинг и сравнить результаты с другими пользователями.\n\n"
@@ -67,6 +69,11 @@ async def show_achievements_menu(message: Message):
         "• Типов тренировок (бег, плавание и т.д.)\n"
         "• Общего времени тренировок\n"
         "• Результатов соревнований",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="Markdown"
+    )
+    await message.answer(
+        "Выберите действие:",
         reply_markup=get_achievements_menu_keyboard(),
         parse_mode="Markdown"
     )

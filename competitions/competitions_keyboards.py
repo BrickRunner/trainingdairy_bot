@@ -4,8 +4,33 @@
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, date
+
+
+def format_qualification(qualification: Optional[str]) -> str:
+    """
+    Форматирует разряд для отображения, заменяя старые обозначения на новые
+
+    Args:
+        qualification: Разряд из базы данных
+
+    Returns:
+        Отформатированный разряд
+    """
+    if not qualification:
+        return "-"
+
+    # Заменяем старые обозначения на новые
+    qual_lower = qualification.lower().strip()
+
+    if qual_lower == "бр":
+        return "Б/р"
+    elif qual_lower == "нет разряда":
+        return "Нет разряда"
+
+    # Возвращаем как есть для остальных разрядов
+    return qualification
 
 
 def get_competitions_main_menu() -> InlineKeyboardMarkup:
@@ -404,16 +429,18 @@ def get_statistics_menu(period: str = None) -> InlineKeyboardMarkup:
     """Меню статистики соревнований с выбором периода
 
     Args:
-        period: Текущий выбранный период ('month', 'halfyear', 'year', 'all')
+        period: Текущий выбранный период ('month', 'halfyear', 'year')
     """
     builder = InlineKeyboardBuilder()
 
-    # Кнопки выбора периода
+    # Кнопки выбора периода (только 3 варианта)
     builder.row(
         InlineKeyboardButton(
             text="✅ Месяц" if period == 'month' else "📅 Месяц",
             callback_data="comp:stats:month"
-        ),
+        )
+    )
+    builder.row(
         InlineKeyboardButton(
             text="✅ Полгода" if period == 'halfyear' else "📅 Полгода",
             callback_data="comp:stats:halfyear"
@@ -423,10 +450,6 @@ def get_statistics_menu(period: str = None) -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="✅ Год" if period == 'year' else "📅 Год",
             callback_data="comp:stats:year"
-        ),
-        InlineKeyboardButton(
-            text="✅ Всё время" if period == 'all' or period is None else "📅 Всё время",
-            callback_data="comp:stats:all"
         )
     )
 

@@ -58,13 +58,17 @@ async def format_competition_distance(distance_km: float, user_id: int, case: st
         if distance_km < 1.0:
             distance_meters = int(distance_km * 1000)
             return f"{distance_meters} м"
+        # Марафон: 42.0 - 42.3 км
         elif 42.0 <= distance_km <= 42.3:
             return f"{marathon_cases.get(case, 'Марафон')} (42.2 км)"
+        # Полумарафон: 21.0 - 21.2 км
         elif 21.0 <= distance_km <= 21.2:
             return f"{half_marathon_cases.get(case, 'Полумарафон')} (21.1 км)"
-        elif distance_km == 10:
+        # Точно 10 км (с учетом погрешности)
+        elif 9.9 <= distance_km <= 10.1:
             return "10 км"
-        elif distance_km == 5:
+        # Точно 5 км (с учетом погрешности)
+        elif 4.9 <= distance_km <= 5.1:
             return "5 км"
         else:
             return f"{distance_km:.1f} км"
@@ -74,10 +78,18 @@ async def format_competition_distance(distance_km: float, user_id: int, case: st
         if distance_miles < 1.0:
             distance_yards = int(distance_miles * 1760)
             return f"{distance_yards} ярдов"
+        # Марафон: 42.0 - 42.3 км (26.2 мили)
         elif 42.0 <= distance_km <= 42.3:
-            return f"{marathon_cases.get(case, 'Марафон')} ({distance_miles:.1f} миль)"
+            return f"{marathon_cases.get(case, 'Марафон')} (26.2 миль)"
+        # Полумарафон: 21.0 - 21.2 км (13.1 миль)
         elif 21.0 <= distance_km <= 21.2:
-            return f"{half_marathon_cases.get(case, 'Полумарафон')} ({distance_miles:.1f} миль)"
+            return f"{half_marathon_cases.get(case, 'Полумарафон')} (13.1 миль)"
+        # Точно 10 км -> 6.2 мили
+        elif 9.9 <= distance_km <= 10.1:
+            return "6.2 миль"
+        # Точно 5 км -> 3.1 мили
+        elif 4.9 <= distance_km <= 5.1:
+            return "3.1 миль"
         else:
             return f"{distance_miles:.1f} миль"
 
@@ -191,3 +203,19 @@ def determine_competition_type(distance_km: float) -> str:
         return "забег"
     else:
         return "забег"
+
+
+async def safe_edit_message(message, text: str, **kwargs):
+    """
+    Безопасное редактирование сообщения с обработкой ошибки "message is not modified"
+
+    Args:
+        message: Message object для редактирования
+        text: Новый текст сообщения
+        **kwargs: Дополнительные параметры (parse_mode, reply_markup и т.д.)
+    """
+    try:
+        await message.edit_text(text, **kwargs)
+    except Exception:
+        # Игнорируем ошибку если сообщение не изменилось
+        pass

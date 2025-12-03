@@ -246,23 +246,23 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
                 user_format
             ) if pr.get('date') else '-'
 
-            # Форматируем дистанцию с учетом единиц измерения
-            if distance_unit == 'мили':
-                distance_miles = km_to_miles(distance)
-                distance_str = f"{distance_miles:.1f} миль"
-            else:
-                distance_str = f"{distance} км"
+            # Форматируем дистанцию с учетом единиц измерения используя правильную функцию
+            distance_str = await format_competition_distance(distance, user_id)
+
+            # Форматируем разряд
+            from competitions.competitions_keyboards import format_qualification
+            qual = format_qualification(pr.get('qualification'))
 
             pr_data.append([
                 distance_str,
                 pr['time'],
                 pr.get('pace', '-'),
-                pr.get('qualification', '-'),
+                qual,
                 pr['competition'][:30],  # Ограничиваем длину
                 formatted_date
             ])
 
-        pr_table = Table(pr_data, colWidths=[2*cm, 2*cm, 2*cm, 1.5*cm, 5*cm, 2.5*cm])
+        pr_table = Table(pr_data, colWidths=[2*cm, 2*cm, 2*cm, 2.2*cm, 4.3*cm, 2.5*cm])
         pr_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -333,13 +333,9 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
 
         name = p.get('name', 'Без названия')[:40]  # Ограничиваем длину
 
-        # Форматируем дистанцию с учетом единиц измерения
+        # Форматируем дистанцию с учетом единиц измерения используя правильную функцию
         if p.get('distance'):
-            if distance_unit == 'мили':
-                distance_miles = km_to_miles(p.get('distance'))
-                distance = f"{distance_miles:.1f} миль"
-            else:
-                distance = f"{p.get('distance')} км"
+            distance = await format_competition_distance(p.get('distance'), user_id)
         else:
             distance = '-'
 
@@ -367,7 +363,8 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             place_str = '-'
 
         # Разряд
-        qualification_str = p.get('qualification', '-')
+        from competitions.competitions_keyboards import format_qualification
+        qualification_str = format_qualification(p.get('qualification'))
 
         # Статус
         status_map = {
@@ -393,7 +390,7 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     # Общая доступная ширина: ~17см (A4 минус отступы)
     competitions_table = Table(
         competitions_data,
-        colWidths=[1.5*cm, 4.5*cm, 1.6*cm, 1.6*cm, 1.6*cm, 1.3*cm, 2.8*cm, 1.3*cm]
+        colWidths=[1.5*cm, 3.8*cm, 1.6*cm, 1.6*cm, 1.6*cm, 2*cm, 2.8*cm, 1.3*cm]
     )
     competitions_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2ecc71')),

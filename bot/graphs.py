@@ -2,6 +2,12 @@
 Модуль для генерации графиков тренировок
 """
 
+import os
+import tempfile
+
+# Устанавливаем переменную окружения для matplotlib перед импортом
+os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
+
 import matplotlib
 matplotlib.use('Agg')  # Используем Agg backend для серверов
 import matplotlib.pyplot as plt

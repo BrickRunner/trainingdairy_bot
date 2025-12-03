@@ -57,34 +57,52 @@ async def parse_user_date(date_str: str, user_id: int) -> date:
     return DateFormatter.parse_date(date_str, user_format)
 
 
-async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all'):
+async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all', state: FSMContext = None):
     """Показать статистику соревнований с графиками за определенный период
 
     Args:
         callback: Callback query
         period: Период ('month', 'halfyear', 'year', 'all')
+        state: FSM контекст для сохранения ID сообщений
     """
     user_id = callback.from_user.id
 
     await callback.answer("⏳ Рассчитываю статистику...")
 
+    # Удаляем старые сообщения со статистикой, если они есть
+    if state:
+        data = await state.get_data()
+        old_message_ids = data.get('statistics_message_ids', [])
+        for msg_id in old_message_ids:
+            try:
+                await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
+            except Exception:
+                pass
+        # Очищаем список старых сообщений
+        await state.update_data(statistics_message_ids=[])
+
     try:
         # Получаем соревнования пользователя с фильтром по периоду
         from datetime import datetime, timedelta
 
-        end_date = datetime.now().date()
+        today = datetime.now().date()
         if period == 'month':
-            start_date = end_date - timedelta(days=30)
-            period_text = "за последний месяц"
+            # С первого числа текущего месяца
+            start_date = today.replace(day=1)
+            period_text = "за текущий месяц"
         elif period == 'halfyear':
-            start_date = end_date - timedelta(days=180)
+            # Последние 6 месяцев
+            start_date = today - timedelta(days=180)
             period_text = "за последние полгода"
         elif period == 'year':
-            start_date = end_date - timedelta(days=365)
-            period_text = "за последний год"
+            # С 01.01 текущего года до конца года (или до сегодня)
+            start_date = today.replace(month=1, day=1)
+            period_text = "за текущий год"
         else:  # 'all'
             start_date = None
             period_text = "весь период"
+
+        end_date = today
 
         # Получаем все соревнования и фильтруем по дате
         all_participants = await get_user_competitions_with_details(user_id)
@@ -106,6 +124,18 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
                 )
             except Exception:
                 pass
+
+            # Возврат в главное меню соревнований
+            menu_msg = await callback.message.answer(
+                "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+                "Выберите раздел:",
+                parse_mode="HTML",
+                reply_markup=get_competitions_main_menu()
+            )
+
+            # Сохраняем ID сообщения с меню
+            if state:
+                await state.update_data(statistics_message_ids=[menu_msg.message_id])
             return
 
         # Рассчитываем статистику
@@ -129,6 +159,7 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
             pass
 
         # Генерируем и отправляем графики
+        new_message_ids = []
         try:
             settings = await get_user_settings(user_id)
             distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
@@ -140,27 +171,31 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
                 distance_unit
             )
 
-            # Отправляем графики без нумерации
+            # Отправляем графики без нумерации и сохраняем их ID
             for i, buf in enumerate(graph_buffers):
                 caption = f"📊 Графики статистики соревнований {period_text}" if i == 0 else None
-                await callback.message.answer_photo(
+                sent_msg = await callback.message.answer_photo(
                     photo=BufferedInputFile(buf.read(), filename=f"competitions_stats_{i+1}.png"),
                     caption=caption
                 )
+                new_message_ids.append(sent_msg.message_id)
                 buf.close()
-
-            # После графиков отправляем сообщение с кнопками навигации
-            builder = InlineKeyboardBuilder()
-            builder.row(
-                InlineKeyboardButton(text="◀️ Назад к статистике", callback_data="comp:menu")
-            )
-            await callback.message.answer(
-                "📊 Графики успешно сформированы!\n\nВыберите действие:",
-                reply_markup=builder.as_markup()
-            )
 
         except Exception as graph_error:
             logger.error(f"Ошибка при генерации графиков: {graph_error}")
+
+        # Возврат в главное меню соревнований
+        menu_msg = await callback.message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+        new_message_ids.append(menu_msg.message_id)
+
+        # Сохраняем ID новых сообщений в state
+        if state:
+            await state.update_data(statistics_message_ids=new_message_ids)
 
     except Exception as e:
         logger.error(f"Ошибка при расчёте статистики: {e}")
@@ -173,35 +208,50 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
         except Exception:
             pass
 
+        # Возврат в главное меню соревнований при ошибке
+        menu_msg = await callback.message.answer(
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
+        )
+
+        # Сохраняем ID сообщения с меню
+        if state:
+            await state.update_data(statistics_message_ids=[menu_msg.message_id])
+
 
 @router.callback_query(F.data == "comp:stats:show")
 async def show_statistics(callback: CallbackQuery):
-    """Показать статистику соревнований с графиками (весь период по умолчанию)"""
-    await show_statistics_for_period(callback, 'all')
+    """Показать меню выбора периода для статистики соревнований (месяц, полгода, год)"""
+    await callback.message.edit_text(
+        "📊 <b>СТАТИСТИКА СОРЕВНОВАНИЙ</b>\n\n"
+        "Выберите период для просмотра статистики:\n\n"
+        "📅 <b>Месяц</b> - текущий месяц\n"
+        "📅 <b>Полгода</b> - последние 6 месяцев\n"
+        "📅 <b>Год</b> - текущий год",
+        reply_markup=get_statistics_menu(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "comp:stats:month")
-async def show_statistics_month(callback: CallbackQuery):
+async def show_statistics_month(callback: CallbackQuery, state: FSMContext):
     """Показать статистику за месяц"""
-    await show_statistics_for_period(callback, 'month')
+    await show_statistics_for_period(callback, 'month', state)
 
 
 @router.callback_query(F.data == "comp:stats:halfyear")
-async def show_statistics_halfyear(callback: CallbackQuery):
+async def show_statistics_halfyear(callback: CallbackQuery, state: FSMContext):
     """Показать статистику за полгода"""
-    await show_statistics_for_period(callback, 'halfyear')
+    await show_statistics_for_period(callback, 'halfyear', state)
 
 
 @router.callback_query(F.data == "comp:stats:year")
-async def show_statistics_year(callback: CallbackQuery):
+async def show_statistics_year(callback: CallbackQuery, state: FSMContext):
     """Показать статистику за год"""
-    await show_statistics_for_period(callback, 'year')
-
-
-@router.callback_query(F.data == "comp:stats:all")
-async def show_statistics_all(callback: CallbackQuery):
-    """Показать статистику за всё время"""
-    await show_statistics_for_period(callback, 'all')
+    await show_statistics_for_period(callback, 'year', state)
 
 
 @router.callback_query(F.data == "comp:export:halfyear")

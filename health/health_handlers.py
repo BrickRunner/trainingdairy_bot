@@ -106,6 +106,11 @@ async def health_menu(message: Message, state: FSMContext):
         f"❤️ <b>Здоровье и метрики</b>\n\n"
         f"{status_text}\n"
         f"Выберите действие:",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="HTML"
+    )
+    await message.answer(
+        "Выберите действие:",
         reply_markup=get_health_menu_keyboard(),
         parse_mode="HTML"
     )

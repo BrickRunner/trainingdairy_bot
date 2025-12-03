@@ -121,17 +121,30 @@ def get_fatigue_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_period_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора периода для просмотра тренировок"""
+def get_period_keyboard(period: str = None) -> InlineKeyboardMarkup:
+    """Клавиатура выбора периода для просмотра тренировок
+
+    Args:
+        period: Текущий выбранный период ('week', '2weeks', 'month')
+    """
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="📅 Неделя", callback_data="period:week")
+        InlineKeyboardButton(
+            text="✅ Неделя" if period == 'week' else "📅 Неделя",
+            callback_data="period:week"
+        )
     )
     builder.row(
-        InlineKeyboardButton(text="📅 2 недели", callback_data="period:2weeks")
+        InlineKeyboardButton(
+            text="✅ 2 недели" if period == '2weeks' else "📅 2 недели",
+            callback_data="period:2weeks"
+        )
     )
     builder.row(
-        InlineKeyboardButton(text="📅 Месяц", callback_data="period:month")
+        InlineKeyboardButton(
+            text="✅ Месяц" if period == 'month' else "📅 Месяц",
+            callback_data="period:month"
+        )
     )
     builder.row(
         InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")

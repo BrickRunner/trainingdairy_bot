@@ -1,16 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(venv\\Scripts\\python.exe:*)",
-      "Bash(tasklist:*)",
-      "Bash(findstr:*)",
-      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe main.py\")",
-      "Bash(powershell \"Start-Sleep -Seconds 3\")",
-      "Bash(cmd /c \"venv\\Scripts\\python.exe -c \"\"import sys; sys.path.insert(0, ''.''); import main\"\"\")",
-      "Bash(powershell -Command:*)",
-      "Bash(powershell \"Start-Sleep -Seconds 5\")",
-      "Bash(cmd /c \"start /B cmd /c \"\"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe main.py > bot_output.log 2>&1\"\"\")",
-      "Bash(cmd /c \"start /MIN d:\\desktop\\coding\\trainingdairy_bot-1\\start_bot.bat\")"
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile health\\health_handlers.py\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile ratings\\ratings_handlers.py\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile settings\\settings_handlers_full.py\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\competitions_handlers.py\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\competitions_utils.py\")",
+      "Bash(cmd /c \"if exist d:\\desktop\\coding\\trainingdairy_bot-1\\bot_output.log (type d:\\desktop\\coding\\trainingdairy_bot-1\\bot_output.log) else (echo File not found)\")"
     ],
     "deny": [],
     "ask": []

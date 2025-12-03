@@ -5,7 +5,7 @@
 import logging
 from datetime import datetime, timedelta
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
 from bot.fsm import CoachStates
@@ -136,7 +136,7 @@ async def process_training_duration(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "❌ Добавление тренировки отменено",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         # Возврат в меню тренера
         from coach.coach_keyboards import get_coach_main_menu
@@ -167,8 +167,16 @@ async def process_training_duration(message: Message, state: FSMContext):
 
     # Для кросса, плавания, велотренировки нужна дистанция
     if training_type in ['кросс', 'плавание', 'велотренировка']:
+        # Получаем единицы измерения тренера (не ученика!)
+        from database.queries import get_user_settings
+        coach_settings = await get_user_settings(message.from_user.id)
+        distance_unit = coach_settings.get('distance_unit', 'км') if coach_settings else 'км'
+
+        # Используем предложный падеж для "в километрах" / "в милях"
+        unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
+
         await message.answer(
-            f"Введите дистанцию в км:",
+            f"Введите дистанцию в {unit_prepositional}:",
             reply_markup=get_skip_keyboard()
         )
         await state.set_state(CoachStates.waiting_for_student_training_distance)

@@ -2,6 +2,12 @@
 Модуль для генерации графиков для PDF экспорта
 """
 
+import os
+import tempfile
+
+# Устанавливаем переменную окружения для matplotlib перед импортом
+os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
+
 import matplotlib
 matplotlib.use('Agg')  # Без GUI
 import matplotlib.pyplot as plt

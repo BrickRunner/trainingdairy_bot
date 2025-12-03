@@ -647,14 +647,14 @@ def get_qualification_running(distance_km: float, time_seconds: float, gender: s
         gender: Пол ('male' или 'female')
 
     Returns:
-        Строка с разрядом (МСМК, МС, КМС, I, II, III, 1ю, 2ю, 3ю, бр)
-        или "нет разряда" если дистанция отсутствует в ЕВСК
+        Строка с разрядом (МСМК, МС, КМС, I, II, III, 1ю, 2ю, 3ю, Б/р)
+        или "Нет разряда" если дистанция отсутствует в ЕВСК
     """
     gender_key = 'men' if gender.lower() in ['male', 'м', 'мужской'] else 'women'
 
     # Проверяем, есть ли нормативы для данной дистанции
     if distance_km not in RUNNING_STANDARDS[gender_key]:
-        return "нет разряда"
+        return "Нет разряда"
 
     standards = RUNNING_STANDARDS[gender_key][distance_km]
 
@@ -664,7 +664,7 @@ def get_qualification_running(distance_km: float, time_seconds: float, gender: s
             return rank
 
     # Если результат медленнее самого низкого разряда - без разряда
-    return 'бр'
+    return 'Б/р'
 
 
 def get_qualification_swimming(distance_km: float, time_seconds: float, gender: str, pool_length: int = 50) -> Optional[str]:
@@ -678,7 +678,7 @@ def get_qualification_swimming(distance_km: float, time_seconds: float, gender: 
         pool_length: Длина бассейна (25 или 50 метров)
 
     Returns:
-        Строка с разрядом (МСМК, МС, КМС, I, II, III, 1ю, 2ю, 3ю, бр) или None
+        Строка с разрядом (МСМК, МС, КМС, I, II, III, 1ю, 2ю, 3ю, Б/р) или None
     """
     gender_key = 'men' if gender.lower() in ['male', 'м', 'мужской'] else 'women'
 
@@ -697,7 +697,7 @@ def get_qualification_swimming(distance_km: float, time_seconds: float, gender: 
             return rank
 
     # Если результат медленнее самого низкого разряда - без разряда
-    return 'бр'
+    return 'Б/р'
 
 
 def get_qualification(sport_type: str, distance_km: float, time_seconds: float, gender: str, **kwargs) -> Optional[str]:

@@ -933,7 +933,7 @@ async def get_user_competitions_with_details(
                 c.organizer, c.registration_status, c.status,
                 cp.distance, cp.target_time, cp.finish_time,
                 cp.place_overall, cp.place_age_category, cp.age_category,
-                cp.result_comment, cp.result_photo, cp.status as participant_status
+                cp.qualification, cp.result_comment, cp.result_photo, cp.status as participant_status
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
             WHERE {where_clause}

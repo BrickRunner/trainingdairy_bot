@@ -385,10 +385,13 @@ async def process_comp_type(message: Message, state: FSMContext):
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
+    # Используем предложный падеж для "в километрах" / "в милях"
+    unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
+
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
         f"📝 <b>Шаг 5 из 6</b>\n\n"
-        f"Введите <b>дистанцию</b> в <b>{distance_unit}</b>:\n"
+        f"Введите <b>дистанцию</b> в <b>{unit_prepositional}</b>:\n"
     )
 
     if distance_unit == 'км':
@@ -715,13 +718,20 @@ async def show_competition_statistics(callback: CallbackQuery):
 
 # ========== ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ ==========
 
-@router.callback_query(F.data == "comp:add_past")
+@router.callback_query(F.data.startswith("comp:add_past"))
 async def start_add_past_competition(callback: CallbackQuery, state: FSMContext):
     """Начать добавление прошедшего соревнования - сначала показываем соревнования без результатов"""
     from competitions.competitions_queries import get_user_competitions
     from competitions.competitions_utils import format_competition_date, format_competition_distance
 
     user_id = callback.from_user.id
+
+    # Извлекаем период из callback_data если он есть
+    parts = callback.data.split(":")
+    period = parts[2] if len(parts) > 2 else "all"
+
+    # Сохраняем период в состоянии для возврата
+    await state.update_data(return_period=period)
 
     # Получаем завершенные соревнования пользователя
     all_comps = await get_user_competitions(user_id, status_filter='finished')
@@ -763,7 +773,8 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
             InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results")
         )
 
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        from competitions.competitions_utils import safe_edit_message
+        await safe_edit_message(callback.message, text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
     else:
         # Если нет соревнований без результатов, сразу переходим к ручному вводу
@@ -785,8 +796,14 @@ async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMC
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
+    # Сначала удаляем старое сообщение, затем отправляем новое через бота
     await callback.message.delete()
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=reply_builder.as_markup(resize_keyboard=True))
+    await callback.bot.send_message(
+        chat_id=callback.message.chat.id,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=reply_builder.as_markup(resize_keyboard=True)
+    )
     await state.set_state(CompetitionStates.waiting_for_past_comp_name)
     await callback.answer()
 
@@ -1133,10 +1150,13 @@ async def process_past_comp_type(message: Message, state: FSMContext):
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
+    # Используем предложный падеж для "в километрах" / "в милях"
+    unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
+
     text = (
         f"✅ Вид спорта: <b>{comp_type}</b>\n\n"
         f"📝 <b>Шаг 5 из 9</b>\n\n"
-        f"Введите <b>дистанцию</b> в {distance_unit}:\n"
+        f"Введите <b>дистанцию</b> в {unit_prepositional}:\n"
         f"<i>Например: 42.195, 21.1, 10, 5</i>"
     )
 
@@ -1546,17 +1566,44 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
             if data.get('place_age'):
                 text += f"🏅 Место в категории: {data['place_age']}\n"
             if qualification:
-                text += f"🎖️ Разряд: {qualification}\n"
+                from competitions.competitions_keyboards import format_qualification
+                text += f"🎖️ Разряд: {format_qualification(qualification)}\n"
             if data.get('heart_rate'):
                 text += f"❤️ Средний пульс: {data['heart_rate']} уд/мин\n"
 
         text += "\n✅ Соревнование добавлено в ваши результаты!"
 
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="◀️ Назад к моим результатам", callback_data="comp:my_results"))
-        builder.row(InlineKeyboardButton(text="➕ Добавить ещё результат", callback_data="comp:add_past"))
+        # Показываем сообщение об успехе
+        from aiogram.types import ReplyKeyboardRemove
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
 
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        # Определяем период на основе даты соревнования
+        from datetime import datetime, timedelta
+        comp_date = datetime.strptime(data['comp_date'], '%Y-%m-%d')
+        now = datetime.now()
+
+        # Определяем период
+        if comp_date >= datetime(now.year, now.month, 1):
+            period = "month"  # Текущий месяц
+        elif comp_date >= datetime(now.year, now.month - 2 if now.month > 2 else 1, 1):
+            period = "3months"  # Последние 3 месяца
+        else:
+            period = "all"  # Всё время
+
+        # Автоматически переходим к результатам с нужным периодом
+        from competitions.competitions_handlers import show_my_results_with_period
+        temp_msg = await callback.message.answer("⏳ Загрузка результатов...")
+
+        # Создаем объект callback для show_my_results_with_period
+        class CallbackProxy:
+            def __init__(self, message, user):
+                self.message = message
+                self.from_user = user
+            async def answer(self):
+                pass
+
+        proxy_callback = CallbackProxy(temp_msg, callback.from_user)
+        await show_my_results_with_period(proxy_callback, state, period)
 
     except Exception as e:
         logger.error(f"Error adding past competition: {e}")

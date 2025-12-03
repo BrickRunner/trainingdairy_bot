@@ -5,7 +5,7 @@
 import logging
 from datetime import datetime, date
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
 from bot.fsm import CompetitionStates
@@ -18,7 +18,8 @@ from competitions.competitions_keyboards import (
     get_cancel_keyboard,
     get_result_input_keyboard,
     format_competition_distance,
-    format_time_until_competition
+    format_time_until_competition,
+    format_qualification
 )
 from competitions.competitions_queries import (
     get_upcoming_competitions,
@@ -29,7 +30,8 @@ from competitions.competitions_queries import (
     get_user_competitions,
     add_competition_result,
     get_competition_participants_count,
-    get_user_personal_records
+    get_user_personal_records,
+    get_user_competition_registration
 )
 from bot.keyboards import get_main_menu_keyboard
 from utils.time_formatter import normalize_time
@@ -698,7 +700,7 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
     if comp.get('place_age_category'):
         text += f"🏅 Место в категории: {comp['place_age_category']}\n"
     if comp.get('qualification'):
-        text += f"🎖️ Разряд: {comp['qualification']}\n"
+        text += f"🎖️ Разряд: {format_qualification(comp['qualification'])}\n"
     if comp.get('heart_rate'):
         text += f"❤️ Средний пульс: {comp['heart_rate']} уд/мин\n"
 
@@ -762,7 +764,7 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "❌ Изменение результата отменено",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         # Возврат в меню соревнований
         await message.answer(
@@ -810,7 +812,7 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
 
             await message.answer(
                 f"✅ Результат обновлён: {normalized_time}",
-                reply_markup={"remove_keyboard": True}
+                reply_markup=ReplyKeyboardRemove()
             )
 
             # Автоматический редирект к карточке соревнования
@@ -885,7 +887,7 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "❌ Изменение целевого времени отменено",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         # Возврат в меню соревнований
         await message.answer(
@@ -925,7 +927,7 @@ async def process_target_time_edit(message: Message, state: FSMContext):
     if success:
         await message.answer(
             f"✅ Целевое время обновлено: {normalized_time}",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
 
         # Возвращаемся к карточке соревнования (меню события)
@@ -933,9 +935,12 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         from aiogram.types import InlineKeyboardButton
 
         # Показываем карточку соревнования с обновленными данными
-        user_comp = await get_user_competitions(user_id, competition_id=competition_id)
-        if user_comp:
-            comp = user_comp[0]
+        competition = await get_competition(competition_id)
+        participant = await get_user_competition_registration(user_id, competition_id)
+
+        if competition and participant:
+            # Объединяем данные соревнования и участника
+            comp = {**competition, **participant}
             from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
 
             distance_str = await format_dist_with_units(distance, user_id)
@@ -1199,7 +1204,7 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                             pass
 
                     if qualification:
-                        result_line += f"\n   🎖️ Разряд: {qualification}"
+                        result_line += f"\n   🎖️ Разряд: {format_qualification(qualification)}"
 
                     # Добавляем пульс
                     if comp.get('heart_rate'):
@@ -1212,9 +1217,9 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
-    # Кнопка добавления прошедшего соревнования
+    # Кнопка добавления прошедшего соревнования с сохранением периода
     builder.row(
-        InlineKeyboardButton(text="➕ Добавить прошедшее соревнование", callback_data="comp:add_past")
+        InlineKeyboardButton(text="➕ Добавить прошедшее соревнование", callback_data=f"comp:add_past:{period}")
     )
 
     # Если есть результаты, добавляем кнопку удаления
@@ -1257,13 +1262,15 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
 
         # Получаем формат даты пользователя
         from utils.date_formatter import get_user_date_format, DateFormatter
+        from competitions.competitions_utils import format_competition_distance as format_dist_with_units
         user_date_format = await get_user_date_format(user_id)
 
         # Сортируем по дистанции
         sorted_records = sorted(records.items(), key=lambda x: x[0])
 
         for distance, record in sorted_records:
-            dist_name = format_competition_distance(distance)
+            # Форматируем дистанцию с учетом единиц измерения пользователя
+            dist_name = await format_dist_with_units(distance, user_id)
             normalized_time = normalize_time(record['best_time'])
             text += f"🏃 <b>{dist_name}</b>\n"
             text += f"⏱️ Время: {normalized_time}\n"
@@ -1276,7 +1283,7 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
 
             # Добавляем разряд
             if record.get('qualification'):
-                text += f"🎖️ Разряд: {record['qualification']}\n"
+                text += f"🎖️ Разряд: {format_qualification(record['qualification'])}\n"
 
             if record.get('competition_name'):
                 comp_name_short = record['competition_name'][:30] + "..." if len(record['competition_name']) > 30 else record['competition_name']
@@ -1392,7 +1399,7 @@ async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
         text += f"⏱️ Время: {normalize_time(user_comp['finish_time'])}\n"
 
     if user_comp.get('qualification'):
-        text += f"🎖️ Разряд: {user_comp['qualification']}\n"
+        text += f"🎖️ Разряд: {format_qualification(user_comp['qualification'])}\n"
 
     text += "\n❗️ <i>Результат будет удалён, но регистрация сохранится</i>"
 
@@ -1466,8 +1473,10 @@ async def start_add_result(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Сохраняем ID соревнования в состоянии
-    await state.update_data(result_competition_id=competition_id)
+    # Сохраняем ID соревнования в состоянии (не очищаем return_period!)
+    data = await state.get_data()
+    return_period = data.get('return_period', 'all')
+    await state.update_data(result_competition_id=competition_id, return_period=return_period)
 
     # Запрашиваем время
     text = (
@@ -1496,18 +1505,71 @@ async def process_finish_time(message: Message, state: FSMContext):
     from utils.time_formatter import validate_time_format
 
     if message.text == "❌ Отмена":
+        # Получаем сохраненный period для возврата
+        data = await state.get_data()
+        return_period = data.get('return_period', 'all')
+
         await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
-        # Возврат в меню соревнований
-        await message.answer(
-            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
-            "Выберите раздел:",
-            parse_mode="HTML",
-            reply_markup=get_competitions_main_menu()
-        )
+
+        # Возврат к списку прошедших соревнований
+        from competitions.competitions_queries import get_user_competitions
+        from competitions.competitions_utils import format_competition_date, format_competition_distance
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+        user_id = message.from_user.id
+
+        # Получаем завершенные соревнования пользователя
+        all_comps = await get_user_competitions(user_id, status_filter='finished')
+
+        # Фильтруем только те, где нет результата
+        comps_without_results = [comp for comp in all_comps if not comp.get('finish_time')]
+
+        if comps_without_results:
+            # Показываем список соревнований без результатов
+            text = (
+                "🏁 <b>ДОБАВЛЕНИЕ РЕЗУЛЬТАТА</b>\n\n"
+                "У вас есть соревнования без результатов:\n\n"
+            )
+
+            builder = InlineKeyboardBuilder()
+
+            for i, comp in enumerate(comps_without_results[:10], 1):
+                formatted_date = await format_competition_date(comp['date'], user_id)
+                dist_str = await format_competition_distance(comp['distance'], user_id)
+
+                short_name = comp['name'][:30] + "..." if len(comp['name']) > 30 else comp['name']
+                button_text = f"{short_name} • {dist_str}"
+
+                text += f"{i}. <b>{comp['name']}</b>\n   📏 {dist_str} • 📅 {formatted_date}\n\n"
+
+                builder.row(
+                    InlineKeyboardButton(
+                        text=button_text,
+                        callback_data=f"comp:add_result:{comp['id']}"
+                    )
+                )
+
+            # Кнопка для создания нового соревнования
+            builder.row(
+                InlineKeyboardButton(text="➕ Добавить новое соревнование", callback_data="comp:add_past_manual")
+            )
+            builder.row(
+                InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results")
+            )
+
+            await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        else:
+            # Если нет соревнований без результатов, показываем сообщение
+            await message.answer(
+                "У вас нет соревнований без результатов.\n\n"
+                "Используйте кнопку ниже для добавления нового соревнования:",
+                parse_mode="HTML"
+            )
+
         return
 
     time_text = message.text.strip()
@@ -1542,7 +1604,7 @@ async def process_place_overall(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         # Возврат в меню соревнований
         await message.answer(
@@ -1585,7 +1647,7 @@ async def process_place_age_category(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         # Возврат в меню соревнований
         await message.answer(
@@ -1641,7 +1703,7 @@ async def process_heart_rate(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "❌ Добавление результата отменено",
-            reply_markup={"remove_keyboard": True}
+            reply_markup=ReplyKeyboardRemove()
         )
         # Возврат в меню соревнований
         await message.answer(
@@ -1751,28 +1813,40 @@ async def process_heart_rate(message: Message, state: FSMContext):
         if data.get('result_place_age'):
             text += f"🏅 Место в категории: {data['result_place_age']}\n"
         if qualification:
-            text += f"🎖️ Разряд: {qualification}\n"
+            text += f"🎖️ Разряд: {format_qualification(qualification)}\n"
         if data.get('result_heart_rate'):
             text += f"❤️ Средний пульс: {data['result_heart_rate']} уд/мин\n"
 
-        # Создаём клавиатуру с кнопкой возврата к карточке соревнования
-        from aiogram.utils.keyboard import InlineKeyboardBuilder
-        builder = InlineKeyboardBuilder()
-        builder.row(
-            InlineKeyboardButton(text="📋 Просмотреть событие", callback_data=f"comp:my_view:{competition_id}:{distance}")
-        )
-        builder.row(
-            InlineKeyboardButton(text="➕ Добавить ещё результат", callback_data="comp:add_past")
-        )
-        builder.row(
-            InlineKeyboardButton(text="◀️ К моим соревнованиям", callback_data="comp:my")
-        )
+        # Показываем сообщение об успехе
+        from aiogram.types import ReplyKeyboardRemove
+        await message.answer(text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
 
-        await message.answer(
-            text,
-            parse_mode="HTML",
-            reply_markup=builder.as_markup()
-        )
+        # Определяем период на основе даты соревнования
+        from datetime import datetime, timedelta
+        comp_date = datetime.strptime(comp['date'], '%Y-%m-%d')
+        now = datetime.now()
+
+        # Определяем период
+        if comp_date >= datetime(now.year, now.month, 1):
+            period = "month"  # Текущий месяц
+        elif comp_date >= datetime(now.year, now.month - 2 if now.month > 2 else 1, 1):
+            period = "3months"  # Последние 3 месяца
+        else:
+            period = "all"  # Всё время
+
+        # Автоматически переходим к результатам с нужным периодом
+        temp_msg = await message.answer("⏳ Загрузка результатов...")
+
+        # Создаем объект callback для show_my_results_with_period
+        class CallbackProxy:
+            def __init__(self, message, user):
+                self.message = message
+                self.from_user = user
+            async def answer(self):
+                pass
+
+        proxy_callback = CallbackProxy(temp_msg, message.from_user)
+        await show_my_results_with_period(proxy_callback, state, period)
     else:
         await message.answer(
             "❌ Ошибка при добавлении результата",
