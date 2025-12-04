@@ -1505,7 +1505,7 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         comp_id = await add_competition(comp_data)
 
         # Регистрируем пользователя на это соревнование
-        user_id = callback.message.chat.id if hasattr(callback.message, 'chat') else callback.message.from_user.id
+        user_id = callback.from_user.id
         await register_for_competition(user_id, comp_id, data['comp_distance'])
 
         # Если есть результат, добавляем его

@@ -1465,7 +1465,7 @@ async def delete_result_confirmed(callback: CallbackQuery, state: FSMContext):
 async def start_add_result(callback: CallbackQuery, state: FSMContext):
     """Начать процесс добавления результата"""
     competition_id = int(callback.data.split(":")[-1])
-    user_id = callback.message.chat.id
+    user_id = callback.from_user.id
 
     # Получаем информацию о соревновании
     comp = await get_competition(competition_id)
