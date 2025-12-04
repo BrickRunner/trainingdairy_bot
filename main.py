@@ -20,6 +20,7 @@ from competitions.competitions_handlers import router as competitions_router
 from competitions.custom_competitions_handlers import router as custom_competitions_router
 from competitions.search_competitions_handlers import router as search_competitions_router
 from competitions.competitions_statistics_handlers import router as competitions_statistics_router
+from competitions.upcoming_competitions_handlers import router as upcoming_competitions_router
 from coach.coach_handlers import router as coach_router
 from coach.coach_add_training_handlers import router as coach_add_training_router
 from coach.coach_competitions_handlers import router as coach_competitions_router
@@ -60,6 +61,7 @@ async def main():
     dp.include_router(registration_router)  # Роутер регистрации
     dp.include_router(settings_router)  # settings_router содержит специфичные обработчики (cal_birth_)
     dp.include_router(competitions_statistics_router)  # Роутер статистики и экспорта соревнований
+    dp.include_router(upcoming_competitions_router)  # Роутер предстоящих соревнований (новый)
     dp.include_router(competitions_router)  # Роутер соревнований
     dp.include_router(custom_competitions_router)  # Роутер пользовательских соревнований
     dp.include_router(search_competitions_router)  # Роутер поиска соревнований

@@ -5,9 +5,13 @@
 import aiosqlite
 import os
 import json
+import logging
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from utils.time_formatter import normalize_time
+
+# Логгер
+logger = logging.getLogger(__name__)
 
 # Путь к базе данных
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
@@ -588,6 +592,13 @@ async def add_competition_result(
         if cursor.rowcount > 0:
             await update_personal_record(user_id, distance, normalized_time, competition_id, qualification)
 
+            # Обновляем рейтинг пользователя после добавления результата
+            try:
+                from ratings.rating_updater import update_single_user_rating
+                await update_single_user_rating(user_id)
+            except Exception as e:
+                logger.error(f"Error updating user rating after competition result: {e}")
+
         return cursor.rowcount > 0
 
 
@@ -656,6 +667,13 @@ async def update_competition_result(
         if cursor.rowcount > 0:
             await update_personal_record(user_id, distance, normalized_time, competition_id, qualification)
 
+            # Обновляем рейтинг пользователя после обновления результата
+            try:
+                from ratings.rating_updater import update_single_user_rating
+                await update_single_user_rating(user_id)
+            except Exception as e:
+                logger.error(f"Error updating user rating after competition result update: {e}")
+
         return cursor.rowcount > 0
 
 
@@ -688,6 +706,15 @@ async def delete_competition_result(user_id: int, competition_id: int) -> bool:
             (user_id, competition_id)
         )
         await db.commit()
+
+        # Обновляем рейтинг пользователя после удаления результата
+        if cursor.rowcount > 0:
+            try:
+                from ratings.rating_updater import update_single_user_rating
+                await update_single_user_rating(user_id)
+            except Exception as e:
+                logger.error(f"Error updating user rating after competition result deletion: {e}")
+
         return cursor.rowcount > 0
 
 

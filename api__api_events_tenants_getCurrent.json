@@ -1,0 +1,27 @@
+{
+  "organizedId": "default",
+  "theme": null,
+  "languages": [
+    "ru",
+    "en"
+  ],
+  "links": {
+    "loginUrl": "https://russiarunning.com",
+    "championshipsUrl": "https://champs.russiarunning.com",
+    "mediaUrl": "https://mysport.photo",
+    "liveUrl": "https://live.russiarunning.com",
+    "clubsUrl": "https://clubs.russiarunning.com",
+    "eventEventsUrlTemplate": null,
+    "raceRegistrationUrlTemplate": null,
+    "raceEventsUrlTemplate": null,
+    "corpUrl": "https://corp.russiarunning.com",
+    "adminUrl": "https://admin.russiarunning.com",
+    "resultsUrl": "https://results.russiarunning.com"
+  },
+  "featureFlags": [
+    {
+      "id": "ShowLkCorp",
+      "enabled": false
+    }
+  ]
+}

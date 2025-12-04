@@ -718,6 +718,33 @@ async def show_competition_statistics(callback: CallbackQuery):
 
 # ========== ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ ==========
 
+@router.callback_query(F.data == "comp:add_past_manual")
+async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMContext):
+    """Начать ручное добавление прошедшего соревнования"""
+
+    text = (
+        "🏁 <b>ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ</b>\n\n"
+        "Вы можете добавить соревнование, в котором уже участвовали.\n\n"
+        "📝 <b>Шаг 1 из 9</b>\n\n"
+        "Введите <b>название</b> соревнования:\n"
+        "<i>Например: Московский марафон 2024</i>"
+    )
+
+    reply_builder = ReplyKeyboardBuilder()
+    reply_builder.row(KeyboardButton(text="❌ Отменить"))
+
+    # Сначала удаляем старое сообщение, затем отправляем новое через бота
+    await callback.message.delete()
+    await callback.bot.send_message(
+        chat_id=callback.message.chat.id,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=reply_builder.as_markup(resize_keyboard=True)
+    )
+    await state.set_state(CompetitionStates.waiting_for_past_comp_name)
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("comp:add_past"))
 async def start_add_past_competition(callback: CallbackQuery, state: FSMContext):
     """Начать добавление прошедшего соревнования - сначала показываем соревнования без результатов"""
@@ -779,33 +806,6 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
     else:
         # Если нет соревнований без результатов, сразу переходим к ручному вводу
         await start_add_past_competition_manual(callback, state)
-
-
-@router.callback_query(F.data == "comp:add_past_manual")
-async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMContext):
-    """Начать ручное добавление прошедшего соревнования"""
-
-    text = (
-        "🏁 <b>ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ</b>\n\n"
-        "Вы можете добавить соревнование, в котором уже участвовали.\n\n"
-        "📝 <b>Шаг 1 из 9</b>\n\n"
-        "Введите <b>название</b> соревнования:\n"
-        "<i>Например: Московский марафон 2024</i>"
-    )
-
-    reply_builder = ReplyKeyboardBuilder()
-    reply_builder.row(KeyboardButton(text="❌ Отменить"))
-
-    # Сначала удаляем старое сообщение, затем отправляем новое через бота
-    await callback.message.delete()
-    await callback.bot.send_message(
-        chat_id=callback.message.chat.id,
-        text=text,
-        parse_mode="HTML",
-        reply_markup=reply_builder.as_markup(resize_keyboard=True)
-    )
-    await state.set_state(CompetitionStates.waiting_for_past_comp_name)
-    await callback.answer()
 
 
 @router.message(CompetitionStates.waiting_for_past_comp_name)
@@ -1485,6 +1485,15 @@ async def process_past_comp_heart_rate(message: Message, state: FSMContext):
 async def finalize_past_competition(callback, state: FSMContext, has_result: bool):
     """Завершить добавление прошедшего соревнования"""
 
+    # Определяем тип объекта (Message или CallbackQuery) для правильной отправки сообщений
+    from aiogram.types import Message, CallbackQuery
+    if isinstance(callback, Message):
+        message_obj = callback
+        user_id = callback.from_user.id
+    else:  # CallbackQuery
+        message_obj = callback.message
+        user_id = callback.from_user.id
+
     data = await state.get_data()
 
     # Создаём соревнование в БД
@@ -1505,7 +1514,6 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         comp_id = await add_competition(comp_data)
 
         # Регистрируем пользователя на это соревнование
-        user_id = callback.from_user.id
         await register_for_competition(user_id, comp_id, data['comp_distance'])
 
         # Если есть результат, добавляем его
@@ -1575,7 +1583,7 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
 
         # Показываем сообщение об успехе
         from aiogram.types import ReplyKeyboardRemove
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        await message_obj.answer(text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
 
         # Определяем период на основе даты соревнования
         from datetime import datetime, timedelta
@@ -1585,14 +1593,16 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         # Определяем период
         if comp_date >= datetime(now.year, now.month, 1):
             period = "month"  # Текущий месяц
-        elif comp_date >= datetime(now.year, now.month - 2 if now.month > 2 else 1, 1):
-            period = "3months"  # Последние 3 месяца
+        elif comp_date >= datetime(now.year - 1 if now.month <= 6 else now.year, now.month - 5 if now.month > 6 else now.month + 7, 1):
+            period = "6months"  # Последние полгода
+        elif comp_date >= datetime(now.year - 1, now.month, 1):
+            period = "year"  # Последний год
         else:
-            period = "all"  # Всё время
+            period = "year"  # По умолчанию показываем год
 
         # Автоматически переходим к результатам с нужным периодом
         from competitions.competitions_handlers import show_my_results_with_period
-        temp_msg = await callback.message.answer("⏳ Загрузка результатов...")
+        temp_msg = await message_obj.answer("⏳ Загрузка результатов...")
 
         # Создаем объект callback для show_my_results_with_period
         class CallbackProxy:
@@ -1602,12 +1612,15 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
             async def answer(self):
                 pass
 
-        proxy_callback = CallbackProxy(temp_msg, callback.from_user)
+        # Используем user_id который мы определили в начале функции
+        from aiogram.types import User
+        user = User(id=user_id, is_bot=False, first_name="User")
+        proxy_callback = CallbackProxy(temp_msg, user)
         await show_my_results_with_period(proxy_callback, state, period)
 
     except Exception as e:
         logger.error(f"Error adding past competition: {e}")
-        await callback.message.answer(
+        await message_obj.answer(
             "❌ Ошибка при добавлении соревнования. Попробуйте снова."
         )
 

@@ -1076,11 +1076,11 @@ async def show_my_results(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
 
     builder.row(
-        InlineKeyboardButton(text="📅 Всё время", callback_data="comp:my_results:all")
+        InlineKeyboardButton(text="📅 За месяц", callback_data="comp:my_results:month")
     )
     builder.row(
-        InlineKeyboardButton(text="📅 За месяц", callback_data="comp:my_results:month"),
-        InlineKeyboardButton(text="📅 За 3 месяца", callback_data="comp:my_results:3months")
+        InlineKeyboardButton(text="📅 За полгода", callback_data="comp:my_results:6months"),
+        InlineKeyboardButton(text="📅 За год", callback_data="comp:my_results:year")
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
@@ -1106,7 +1106,7 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     Показать завершенные соревнования за выбранный период
 
     Args:
-        period: "all", "3months", "month"
+        period: "all", "year", "6months", "month"
     """
     user_id = callback.from_user.id
     from competitions.competitions_queries import get_user_competitions_by_period
@@ -1122,16 +1122,22 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
         now = datetime.now()
         date_from = datetime(now.year, now.month, 1)
         period_name = "За месяц"
-    elif period == "3months":
-        # 3 месяца - с 1-го числа 3 месяца назад
+    elif period == "6months":
+        # 6 месяцев - с 1-го числа 6 месяцев назад
         now = datetime.now()
-        month = now.month - 2  # -2 потому что текущий месяц + 2 назад = 3 месяца
+        month = now.month - 5  # -5 потому что текущий месяц + 5 назад = 6 месяцев
         year = now.year
         if month <= 0:
             month += 12
             year -= 1
         date_from = datetime(year, month, 1)
-        period_name = "За 3 месяца"
+        period_name = "За полгода"
+    elif period == "year":
+        # Год - с 1-го числа 12 месяцев назад
+        now = datetime.now()
+        year = now.year - 1
+        date_from = datetime(year, now.month, 1)
+        period_name = "За год"
 
     # Получаем завершенные соревнования с учетом периода
     if period == "all":
@@ -1352,7 +1358,7 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
         )
 
     builder.row(
-        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results:all")
+        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my_results")
     )
 
     await callback.message.edit_text(
@@ -1564,10 +1570,18 @@ async def process_finish_time(message: Message, state: FSMContext):
             await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
         else:
             # Если нет соревнований без результатов, показываем сообщение
+            builder = InlineKeyboardBuilder()
+            builder.row(
+                InlineKeyboardButton(text="➕ Добавить новое соревнование", callback_data="comp:add_past_manual")
+            )
+            builder.row(
+                InlineKeyboardButton(text="◀️ К моим результатам", callback_data="comp:my_results")
+            )
             await message.answer(
                 "У вас нет соревнований без результатов.\n\n"
                 "Используйте кнопку ниже для добавления нового соревнования:",
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=builder.as_markup()
             )
 
         return
@@ -1829,10 +1843,12 @@ async def process_heart_rate(message: Message, state: FSMContext):
         # Определяем период
         if comp_date >= datetime(now.year, now.month, 1):
             period = "month"  # Текущий месяц
-        elif comp_date >= datetime(now.year, now.month - 2 if now.month > 2 else 1, 1):
-            period = "3months"  # Последние 3 месяца
+        elif comp_date >= datetime(now.year - 1 if now.month <= 6 else now.year, now.month - 5 if now.month > 6 else now.month + 7, 1):
+            period = "6months"  # Последние полгода
+        elif comp_date >= datetime(now.year - 1, now.month, 1):
+            period = "year"  # Последний год
         else:
-            period = "all"  # Всё время
+            period = "year"  # По умолчанию показываем год
 
         # Автоматически переходим к результатам с нужным периодом
         temp_msg = await message.answer("⏳ Загрузка результатов...")

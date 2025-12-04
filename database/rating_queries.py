@@ -324,7 +324,7 @@ async def get_user_competitions_by_period(user_id: int, start_date: datetime = N
             # Все соревнования
             async with db.execute(
                 """
-                SELECT cp.place_overall
+                SELECT cp.place_overall as place
                 FROM competition_participants cp
                 JOIN competitions c ON cp.competition_id = c.id
                 WHERE cp.user_id = ? AND cp.place_overall IS NOT NULL
@@ -336,7 +336,7 @@ async def get_user_competitions_by_period(user_id: int, start_date: datetime = N
             # За период
             async with db.execute(
                 """
-                SELECT cp.place_overall
+                SELECT cp.place_overall as place
                 FROM competition_participants cp
                 JOIN competitions c ON cp.competition_id = c.id
                 WHERE cp.user_id = ?

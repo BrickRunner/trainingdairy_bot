@@ -1,12 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile health\\health_handlers.py\")",
-      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile ratings\\ratings_handlers.py\")",
-      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile settings\\settings_handlers_full.py\")",
-      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\competitions_handlers.py\")",
-      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\competitions_utils.py\")",
-      "Bash(cmd /c \"if exist d:\\desktop\\coding\\trainingdairy_bot-1\\bot_output.log (type d:\\desktop\\coding\\trainingdairy_bot-1\\bot_output.log) else (echo File not found)\")"
+      "Bash(cmd /c \"d:\\desktop\\coding\\trainingdairy_bot-1\\venv\\Scripts\\python.exe d:\\desktop\\coding\\trainingdairy_bot-1\\test_parser.py\")",
+      "Bash(cmd /c \"d:\\desktop\\coding\\trainingdairy_bot-1\\venv\\Scripts\\python.exe -c \"\"import bs4; import lxml; print(''OK'')\"\"\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && type main_app.js | findstr /C:\"\"/api/\"\" | more\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\upcoming_competitions_handlers.py competitions\\parser.py competitions\\competitions_fsm.py\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\upcoming_competitions_handlers.py\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\parser.py\")",
+      "Bash(cmd /c \"cd /d d:\\desktop\\coding\\trainingdairy_bot-1 && venv\\Scripts\\python.exe -m py_compile competitions\\competitions_fsm.py\")",
+      "Bash(cmd /c \"d:\\desktop\\coding\\trainingdairy_bot-1\\venv\\Scripts\\python.exe d:\\desktop\\coding\\trainingdairy_bot-1\\test_period_filtering.py\")",
+      "Bash(cmd /c \"d:\\desktop\\coding\\trainingdairy_bot-1\\venv\\Scripts\\python.exe d:\\desktop\\coding\\trainingdairy_bot-1\\test_period_debug.py\")"
     ],
     "deny": [],
     "ask": []
