@@ -245,3 +245,22 @@ def format_weight(weight: float, weight_unit: str = 'кг', case: str = 'nominat
     else:
         unit = pluralize(weight, kg_forms, case)
         return f"{weight:.1f} {unit}"
+
+
+async def format_distance_for_user(distance_km: float, user_id: int) -> str:
+    """
+    Форматировать дистанцию согласно настройкам пользователя
+
+    Args:
+        distance_km: Дистанция в километрах
+        user_id: ID пользователя
+
+    Returns:
+        Отформатированная строка с дистанцией
+    """
+    from database.queries import get_user_settings
+
+    settings = await get_user_settings(user_id)
+    distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+    return format_distance(distance_km, distance_unit)

@@ -4,6 +4,7 @@
 
 import aiosqlite
 import os
+import json
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -899,3 +900,161 @@ async def get_all_users_with_birthdays():
                         continue
 
             return users
+
+
+# ========== ФУНКЦИИ ДЛЯ РАБОТЫ С УЧАСТНИКАМИ СОРЕВНОВАНИЙ ==========
+
+async def add_competition_participant(
+    user_id: int,
+    competition_id: str,
+    comp_data: Dict[str, Any],
+    target_time: str = None,
+    distance: float = None
+) -> None:
+    """
+    Добавить пользователя как участника соревнования
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования из API
+        comp_data: Полные данные о соревновании
+        target_time: Целевое время (опционально)
+        distance: Выбранная дистанция в км (опционально)
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Сначала проверим, есть ли уже такое соревнование в БД
+        cursor = await db.execute(
+            "SELECT id FROM competitions WHERE source_url = ?",
+            (comp_data.get('url', ''),)
+        )
+        row = await cursor.fetchone()
+
+        if row:
+            # Соревнование уже существует
+            comp_db_id = row[0]
+        else:
+            # Добавляем новое соревнование
+            distances_json = json.dumps(comp_data.get('distances', []))
+
+            await db.execute(
+                """
+                INSERT INTO competitions (
+                    name, date, city, location, distances,
+                    type, sport_type, description, official_url,
+                    organizer, status, is_official, source_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    comp_data['title'],
+                    comp_data['begin_date'].split('T')[0],  # Только дата
+                    comp_data.get('city', ''),
+                    comp_data.get('place', ''),
+                    distances_json,
+                    comp_data.get('sport_code', 'run'),
+                    comp_data.get('sport_code', 'run'),
+                    '',  # description
+                    comp_data.get('url', ''),
+                    comp_data.get('organizer', ''),
+                    'upcoming',
+                    1,  # is_official
+                    comp_data.get('url', '')
+                )
+            )
+            comp_db_id = cursor.lastrowid
+
+        # Проверим, не добавлен ли уже пользователь как участник
+        cursor = await db.execute(
+            """
+            SELECT id FROM competition_participants
+            WHERE competition_id = ? AND user_id = ?
+            """,
+            (comp_db_id, user_id)
+        )
+        exists = await cursor.fetchone()
+
+        if not exists:
+            # Добавляем участника
+            await db.execute(
+                """
+                INSERT INTO competition_participants (
+                    competition_id, user_id, status, target_time, distance
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (comp_db_id, user_id, 'registered', target_time, distance)
+            )
+
+        await db.commit()
+
+
+async def is_user_participant(user_id: int, competition_id: str) -> bool:
+    """
+    Проверить, является ли пользователь участником соревнования
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования (URL из API)
+
+    Returns:
+        True если пользователь уже участник
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            SELECT cp.id
+            FROM competition_participants cp
+            JOIN competitions c ON cp.competition_id = c.id
+            WHERE c.source_url = ? AND cp.user_id = ?
+            """,
+            (competition_id, user_id)
+        )
+        row = await cursor.fetchone()
+        return row is not None
+
+
+async def remove_competition_participant(user_id: int, competition_id: str) -> bool:
+    """
+    Удалить пользователя из участников соревнования
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования (URL из API)
+
+    Returns:
+        True если удаление успешно
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            DELETE FROM competition_participants
+            WHERE competition_id IN (
+                SELECT id FROM competitions WHERE source_url = ?
+            ) AND user_id = ?
+            """,
+            (competition_id, user_id)
+        )
+        await db.commit()
+        return True
+
+
+async def get_user_participant_competition_urls(user_id: int) -> list:
+    """
+    Получить список URL соревнований, в которых пользователь участвует
+
+    Args:
+        user_id: ID пользователя
+
+    Returns:
+        Список URL соревнований
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            SELECT c.source_url
+            FROM competition_participants cp
+            JOIN competitions c ON cp.competition_id = c.id
+            WHERE cp.user_id = ?
+            """,
+            (user_id,)
+        )
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
