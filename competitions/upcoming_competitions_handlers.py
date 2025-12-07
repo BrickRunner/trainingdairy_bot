@@ -665,6 +665,7 @@ async def cancel_participation(callback: CallbackQuery, state: FSMContext):
 async def skip_target_time(callback: CallbackQuery, state: FSMContext):
     """Пропустить ввод целевого времени и добавить без него"""
     from database.queries import add_competition_participant
+    from competitions.competitions_handlers import show_my_competitions
 
     comp_id = callback.data.split(":", 2)[2]
     user_id = callback.from_user.id
@@ -696,11 +697,11 @@ async def skip_target_time(callback: CallbackQuery, state: FSMContext):
             show_alert=True
         )
 
-        # Возвращаем в состояние просмотра результатов
-        await state.set_state(UpcomingCompetitionsStates.showing_results)
+        # Очищаем state и переходим в раздел "Мои соревнования"
+        await state.clear()
 
-        # Обновляем отображение (кнопка изменится на "Отменить участие")
-        await show_competition_detail(callback, state)
+        # Показываем раздел "Мои соревнования"
+        await show_my_competitions(callback, state)
 
     except Exception as e:
         logger.error(f"Error adding participant without target time: {e}")
@@ -716,9 +717,9 @@ async def process_target_time(message: Message, state: FSMContext):
     user_id = message.from_user.id
     target_time_text = message.text.strip()
 
-    # Валидация формата времени (HH:MM:SS или MM:SS)
-    pattern_hhmmss = re.compile(r'^(\d{1,2}):([0-5]\d):([0-5]\d)$')
-    pattern_mmss = re.compile(r'^([0-5]?\d):([0-5]\d)$')
+    # Валидация формата времени (HH:MM:SS или MM:SS или H:M:S)
+    pattern_hhmmss = re.compile(r'^(\d{1,2}):(\d{1,2}):(\d{1,2})$')
+    pattern_mmss = re.compile(r'^(\d{1,2}):(\d{1,2})$')
 
     match_hhmmss = pattern_hhmmss.match(target_time_text)
     match_mmss = pattern_mmss.match(target_time_text)
@@ -726,11 +727,25 @@ async def process_target_time(message: Message, state: FSMContext):
     if match_hhmmss:
         # Формат ЧЧ:ММ:СС
         hours, minutes, seconds = match_hhmmss.groups()
-        target_time = f"{int(hours):02d}:{minutes}:{seconds}"
+        # Валидация диапазонов
+        if int(minutes) > 59 or int(seconds) > 59:
+            await message.answer(
+                "❌ Неверный формат времени!\n\n"
+                "Минуты и секунды должны быть от 0 до 59"
+            )
+            return
+        target_time = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
     elif match_mmss:
         # Формат ММ:СС - добавляем часы
         minutes, seconds = match_mmss.groups()
-        target_time = f"00:{int(minutes):02d}:{seconds}"
+        # Валидация диапазонов
+        if int(minutes) > 59 or int(seconds) > 59:
+            await message.answer(
+                "❌ Неверный формат времени!\n\n"
+                "Минуты и секунды должны быть от 0 до 59"
+            )
+            return
+        target_time = f"00:{int(minutes):02d}:{int(seconds):02d}"
     else:
         # Неверный формат
         await message.answer(
@@ -767,20 +782,54 @@ async def process_target_time(message: Message, state: FSMContext):
             distance=selected_distance
         )
 
-        # Формируем сообщение
+        # Очищаем state
+        await state.clear()
+
+        # Показываем уведомление об успехе
         success_msg = f"✅ Соревнование добавлено в 'Мои соревнования'!\n"
         if selected_distance_name:
             success_msg += f"📏 Дистанция: {selected_distance_name}\n"
-        success_msg += f"⏱ Целевое время: {target_time}"
+        success_msg += f"⏱ Целевое время: {target_time}\n\n"
 
-        # Возвращаем в состояние просмотра результатов
-        await state.set_state(UpcomingCompetitionsStates.showing_results)
+        # Получаем список соревнований пользователя для отображения
+        from database.queries import get_user_competitions
+        from utils.time_formatter import format_time_until_competition
+        from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
 
-        # Показываем кнопку для возврата к списку
+        competitions = await get_user_competitions(user_id, status_filter='upcoming')
+
+        if competitions:
+            success_msg += "📋 <b>МОИ СОРЕВНОВАНИЯ:</b>\n\n"
+
+            for i, comp in enumerate(competitions[:5], 1):  # Показываем первые 5
+                time_until = format_time_until_competition(comp['date'])
+                dist_str = await format_dist_with_units(comp['distance'], user_id)
+                date_str = await format_competition_date(comp['date'], user_id)
+
+                # Форматируем целевое время
+                comp_target_time = comp.get('target_time')
+                if comp_target_time and comp_target_time != 'None' and comp_target_time != '':
+                    target_time_str = comp_target_time
+                    from utils.time_formatter import calculate_pace_with_unit
+                    target_pace = await calculate_pace_with_unit(comp_target_time, comp['distance'], user_id)
+                    target_pace_str = f" ({target_pace})" if target_pace else ''
+                else:
+                    target_time_str = 'Нет цели'
+                    target_pace_str = ''
+
+                success_msg += (
+                    f"{i}. <b>{comp['name']}</b>\n"
+                    f"   📏 {dist_str}\n"
+                    f"   📅 {date_str} ({time_until})\n"
+                    f"   🎯 Цель: {target_time_str}{target_pace_str}\n\n"
+                )
+
+        # Создаем кнопки для перехода
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="◀️ Назад к списку", callback_data="upc:back_to_list"))
+        builder.row(InlineKeyboardButton(text="📋 Все мои соревнования", callback_data="comp:my"))
+        builder.row(InlineKeyboardButton(text="◀️ Меню соревнований", callback_data="comp:menu"))
 
-        await message.answer(success_msg, reply_markup=builder.as_markup())
+        await message.answer(success_msg, reply_markup=builder.as_markup(), parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error processing target time: {e}")
