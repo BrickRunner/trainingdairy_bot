@@ -264,3 +264,108 @@ async def format_distance_for_user(distance_km: float, user_id: int) -> str:
     distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
     return format_distance(distance_km, distance_unit)
+
+
+def convert_distance_name(distance_name: str, target_unit: str = 'км') -> str:
+    """
+    Конвертировать комплексные названия дистанций в другие единицы измерения
+
+    Args:
+        distance_name: Название дистанции (например, "500м плавание + 3000м бег")
+        target_unit: Целевая единица измерения ('км' или 'мили')
+
+    Returns:
+        Сконвертированное название дистанции
+
+    Examples:
+        "500м плавание + 3000м бег" (км) -> "500м плавание + 3000м бег"
+        "500м плавание + 3000м бег" (мили) -> "547 ярдов плавание + 1.9 мили бег"
+        "10 км" (км) -> "10 км"
+        "10 км" (мили) -> "6.2 мили"
+    """
+    import re
+
+    if target_unit == 'км' or not distance_name:
+        return distance_name
+
+    # Очищаем запятые из чисел (21,0 км -> 21.0 км)
+    distance_name = re.sub(r'(\d+),(\d+)', r'\1.\2', distance_name)
+
+    # Паттерн для поиска чисел с единицами измерения
+    # Ищем: число + пробелы (опционально) + единица измерения (км, м, метр и т.д.)
+    pattern = r'(\d+(?:\.\d+)?)\s*(км|м|метр|метра|метров|километр|километра|километров)(?![а-яё])'
+
+    def replace_distance(match):
+        value_str = match.group(1)
+        value = float(value_str)
+        unit = match.group(2).lower()
+
+        # Конвертируем в километры
+        if unit == 'км' or 'километр' in unit:
+            km_value = value
+        else:  # метры
+            km_value = value / 1000
+
+        # Конвертируем в мили или ярды
+        if km_value >= 1.0:
+            # Для больших дистанций используем мили
+            miles = km_to_miles(km_value)
+            # Форматируем: если целое число - без десятичных, иначе с одним знаком
+            if abs(miles - round(miles)) < 0.01:  # Практически целое
+                formatted_miles = str(int(round(miles)))
+            else:
+                formatted_miles = f"{miles:.1f}"
+            # Правильное склонение
+            miles_word = pluralize(miles, ('миля', 'мили', 'миль'))
+            return f"{formatted_miles} {miles_word}"
+        else:
+            # Для маленьких дистанций (меньше 1 км) используем ярды
+            yards = km_value * 1093.61  # 1 км = 1093.61 ярдов
+            yards_word = pluralize(yards, ('ярд', 'ярда', 'ярдов'))
+            return f"{int(round(yards))} {yards_word}"
+
+    converted = re.sub(pattern, replace_distance, distance_name, flags=re.IGNORECASE)
+    return converted
+
+
+async def convert_distance_name_for_user(distance_name: str, user_id: int) -> str:
+    """
+    Конвертировать название дистанции согласно настройкам пользователя
+    Если конвертация не удалась, возвращает оригинальное название
+
+    Args:
+        distance_name: Название дистанции
+        user_id: ID пользователя
+
+    Returns:
+        Сконвертированное название дистанции или оригинал при ошибке
+    """
+    try:
+        from database.queries import get_user_settings
+
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+        return convert_distance_name(distance_name, distance_unit)
+    except Exception:
+        # Если что-то пошло не так, возвращаем оригинал
+        return distance_name
+
+
+def safe_convert_distance_name(distance_name: str, distance_unit: str = 'км') -> str:
+    """
+    Безопасная конвертация названия дистанции
+    Если конвертация не удалась, возвращает оригинальное название
+
+    Args:
+        distance_name: Название дистанции
+        distance_unit: Единица измерения ('км' или 'мили')
+
+    Returns:
+        Сконвертированное название дистанции или оригинал при ошибке
+    """
+    try:
+        return convert_distance_name(distance_name, distance_unit)
+    except Exception:
+        # Если что-то пошло не так, возвращаем оригинал
+        return distance_name

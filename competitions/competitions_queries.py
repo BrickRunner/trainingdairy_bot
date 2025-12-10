@@ -958,7 +958,7 @@ async def get_user_competitions_with_details(
                 c.id, c.name, c.date, c.city, c.country, c.location,
                 c.distances, c.type, c.sport_type, c.description, c.official_url,
                 c.organizer, c.registration_status, c.status,
-                cp.distance, cp.target_time, cp.finish_time,
+                cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
                 cp.place_overall, cp.place_age_category, cp.age_category,
                 cp.qualification, cp.result_comment, cp.result_photo, cp.status as participant_status
             FROM competitions c

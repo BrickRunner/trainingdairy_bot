@@ -909,7 +909,8 @@ async def add_competition_participant(
     competition_id: str,
     comp_data: Dict[str, Any],
     target_time: str = None,
-    distance: float = None
+    distance: float = None,
+    distance_name: str = None
 ) -> None:
     """
     Добавить пользователя как участника соревнования
@@ -920,7 +921,11 @@ async def add_competition_participant(
         comp_data: Полные данные о соревновании
         target_time: Целевое время (опционально)
         distance: Выбранная дистанция в км (опционально)
+        distance_name: Название дистанции (опционально, для комплексных дистанций)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     async with aiosqlite.connect(DB_PATH) as db:
         # Сначала проверим, есть ли уже такое соревнование в БД
         cursor = await db.execute(
@@ -932,11 +937,12 @@ async def add_competition_participant(
         if row:
             # Соревнование уже существует
             comp_db_id = row[0]
+            logger.info(f"Competition already exists with id={comp_db_id}")
         else:
             # Добавляем новое соревнование
             distances_json = json.dumps(comp_data.get('distances', []))
 
-            await db.execute(
+            insert_cursor = await db.execute(
                 """
                 INSERT INTO competitions (
                     name, date, city, location, distances,
@@ -960,15 +966,18 @@ async def add_competition_participant(
                     comp_data.get('url', '')
                 )
             )
-            comp_db_id = cursor.lastrowid
+            comp_db_id = insert_cursor.lastrowid
+            logger.info(f"Added new competition with id={comp_db_id}, date={comp_data['begin_date'].split('T')[0]}")
 
-        # Проверим, не добавлен ли уже пользователь как участник
+        # Проверим, не добавлен ли уже пользователь как участник на ЭТОЙ дистанции
         cursor = await db.execute(
             """
             SELECT id FROM competition_participants
             WHERE competition_id = ? AND user_id = ?
+            AND (distance IS ? OR (distance = ? AND distance IS NOT NULL))
+            AND (distance_name IS ? OR (distance_name = ? AND distance_name IS NOT NULL))
             """,
-            (comp_db_id, user_id)
+            (comp_db_id, user_id, distance, distance, distance_name, distance_name)
         )
         exists = await cursor.fetchone()
 
@@ -977,13 +986,17 @@ async def add_competition_participant(
             await db.execute(
                 """
                 INSERT INTO competition_participants (
-                    competition_id, user_id, status, target_time, distance
-                ) VALUES (?, ?, ?, ?, ?)
+                    competition_id, user_id, status, target_time, distance, distance_name
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (comp_db_id, user_id, 'registered', target_time, distance)
+                (comp_db_id, user_id, 'registered', target_time, distance, distance_name)
             )
+            logger.info(f"Added participant: user_id={user_id}, comp_id={comp_db_id}, distance={distance}, distance_name={distance_name}, target_time={target_time}")
+        else:
+            logger.info(f"User {user_id} already participant of competition {comp_db_id} on distance {distance_name or distance}")
 
         await db.commit()
+        logger.info(f"Successfully committed changes for user {user_id}")
 
 
 async def is_user_participant(user_id: int, competition_id: str) -> bool:
@@ -1009,6 +1022,34 @@ async def is_user_participant(user_id: int, competition_id: str) -> bool:
         )
         row = await cursor.fetchone()
         return row is not None
+
+
+async def is_user_registered_all_distances(user_id: int, competition_id: str, total_distances: int) -> bool:
+    """
+    Проверить, зарегистрирован ли пользователь на ВСЕ дистанции соревнования
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования (URL из API)
+        total_distances: Общее количество дистанций в соревновании
+
+    Returns:
+        True если пользователь зарегистрирован на все дистанции
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            SELECT COUNT(cp.id)
+            FROM competition_participants cp
+            JOIN competitions c ON cp.competition_id = c.id
+            WHERE c.source_url = ? AND cp.user_id = ?
+            """,
+            (competition_id, user_id)
+        )
+        row = await cursor.fetchone()
+        registered_count = row[0] if row else 0
+
+        return registered_count >= total_distances
 
 
 async def remove_competition_participant(user_id: int, competition_id: str) -> bool:

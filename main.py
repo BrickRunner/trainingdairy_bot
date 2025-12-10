@@ -58,10 +58,10 @@ async def main():
     
     # Подключение роутеров
     # ВАЖНО: Порядок имеет значение - более специфичные роутеры должны быть первыми
+    dp.include_router(upcoming_competitions_router)  # Роутер предстоящих соревнований (ПЕРВЫМ!)
     dp.include_router(registration_router)  # Роутер регистрации
     dp.include_router(settings_router)  # settings_router содержит специфичные обработчики (cal_birth_)
     dp.include_router(competitions_statistics_router)  # Роутер статистики и экспорта соревнований
-    dp.include_router(upcoming_competitions_router)  # Роутер предстоящих соревнований (новый)
     dp.include_router(competitions_router)  # Роутер соревнований
     dp.include_router(custom_competitions_router)  # Роутер пользовательских соревнований
     dp.include_router(search_competitions_router)  # Роутер поиска соревнований

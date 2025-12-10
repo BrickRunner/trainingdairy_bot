@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS competition_participants (
 
     -- Выбор дистанции и цели
     distance REAL,  -- выбранная дистанция (42.195, 21.1, 10, 5 и т.д.)
+    distance_name TEXT,  -- название дистанции (для комплексных дистанций типа акватлон)
     target_time TEXT,  -- целевое время (HH:MM:SS)
 
     -- Результат после забега
@@ -93,6 +94,7 @@ CREATE TABLE IF NOT EXISTS competition_participants (
     place_overall INTEGER,  -- место в общем зачёте
     place_age_category INTEGER,  -- место в возрастной категории
     age_category TEXT,  -- возрастная категория (например M30-39)
+    heart_rate INTEGER,  -- средний пульс во время забега
     qualification TEXT,  -- выполненный разряд (КМС, МС, МСМК и т.д.)
     result_comment TEXT,  -- впечатления
     result_photo TEXT,  -- путь к фото финишера
@@ -106,7 +108,7 @@ CREATE TABLE IF NOT EXISTS competition_participants (
 
     FOREIGN KEY (competition_id) REFERENCES competitions(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
-    UNIQUE(competition_id, user_id, distance)
+    UNIQUE(competition_id, user_id, distance, distance_name)
 )
 """
 

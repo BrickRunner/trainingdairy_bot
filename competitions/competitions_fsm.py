@@ -11,7 +11,8 @@ class UpcomingCompetitionsStates(StatesGroup):
     waiting_for_period = State()
     waiting_for_sport = State()
     showing_results = State()
-    waiting_for_distance = State()
+    waiting_for_distance = State()  # Старое: выбор одной дистанции
+    selecting_multiple_distances = State()  # Новое: выбор нескольких дистанций с чекбоксами
     waiting_for_target_time = State()
 
 

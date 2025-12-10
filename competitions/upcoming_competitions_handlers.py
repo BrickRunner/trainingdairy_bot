@@ -278,13 +278,29 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
 
         logger.info(f"Received {len(all_competitions)} competitions after filtering")
 
-        # Фильтруем соревнования, в которых пользователь уже участвует
-        participant_urls = await get_user_participant_competition_urls(user_id)
-        all_competitions = [
-            comp for comp in all_competitions
-            if comp.get('url', '') not in participant_urls
-        ]
+        # Фильтруем соревнования:
+        # - Если 1 дистанция И пользователь участвует -> скрываем
+        # - Если >1 дистанции И пользователь зарегистрирован на ВСЕ -> скрываем
+        # - Иначе показываем
+        from database.queries import is_user_registered_all_distances
 
+        filtered_competitions = []
+        for comp in all_competitions:
+            comp_url = comp.get('url', '')
+            distances_count = len(comp.get('distances', []))
+
+            if distances_count <= 1:
+                # Одна дистанция или нет дистанций - скрываем если участвует
+                participant_urls = await get_user_participant_competition_urls(user_id)
+                if comp_url not in participant_urls:
+                    filtered_competitions.append(comp)
+            else:
+                # Несколько дистанций - скрываем только если зарегистрирован на все
+                is_all_registered = await is_user_registered_all_distances(user_id, comp_url, distances_count)
+                if not is_all_registered:
+                    filtered_competitions.append(comp)
+
+        all_competitions = filtered_competitions
         logger.info(f"After filtering participant competitions: {len(all_competitions)} competitions")
 
         # Сохраняем все соревнования в state для пагинации
@@ -442,15 +458,20 @@ async def show_competition_detail(callback: CallbackQuery, state: FSMContext):
 
         # Дистанции
         if comp['distances']:
+            from utils.unit_converter import safe_convert_distance_name
+
             text += f"\n<b>📏 Дистанции:</b>\n"
             for dist in comp['distances'][:10]:
                 # Форматируем дистанцию с учетом настроек пользователя
                 distance_km = dist.get('distance', 0)
-                if distance_km > 0:
-                    distance_formatted = format_distance(distance_km, distance_unit)
-                    text += f"  • {dist['name']} ({distance_formatted})\n"
-                else:
-                    text += f"  • {dist['name']}\n"
+                distance_name = dist.get('name', 'Дистанция')
+
+                # Конвертируем название дистанции (безопасно, с fallback)
+                converted_name = safe_convert_distance_name(distance_name, distance_unit)
+
+                # Показываем только сконвертированное название
+                # Не дублируем информацию о дистанции
+                text += f"  • {converted_name}\n"
 
         if comp['url']:
             text += f"\n🔗 <a href=\"{comp['url']}\">Подробнее на сайте</a>"
@@ -511,36 +532,50 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
         distances = comp.get('distances', [])
 
         if len(distances) > 1:
-            # Если несколько дистанций - показываем выбор
+            # Если несколько дистанций - показываем множественный выбор с чекбоксами
             user_id = callback.from_user.id
             settings = await get_user_settings(user_id)
             distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
+            # Инициализируем список выбранных дистанций если его нет
+            await state.update_data(selected_distances=[])
+
             builder = InlineKeyboardBuilder()
 
-            # Добавляем кнопки для каждой дистанции (максимум 15 для избежания лимита Telegram)
+            # Добавляем кнопки для каждой дистанции с чекбоксами (максимум 15)
+            from utils.unit_converter import safe_convert_distance_name
+
             for i, dist in enumerate(distances[:15]):
                 distance_km = dist.get('distance', 0)
-                if distance_km > 0:
-                    distance_formatted = format_distance(distance_km, distance_unit)
-                    button_text = f"{dist.get('name', 'Дистанция')} - {distance_formatted}"
-                else:
-                    button_text = dist.get('name', 'Дистанция')
+                distance_name = dist.get('name', 'Дистанция')
 
-                # Сохраняем индекс дистанции в callback_data
+                # Конвертируем название дистанции (безопасно, с fallback)
+                converted_name = safe_convert_distance_name(distance_name, distance_unit)
+
+                # Показываем только сконвертированное название, без дублирования
+                button_text = f"☐ {converted_name}"
+
+                # Чекбокс: toggle выбора дистанции
                 builder.row(InlineKeyboardButton(
                     text=button_text,
-                    callback_data=f"comp:select_dist:{comp_id}:{i}"
+                    callback_data=f"comp:toggle_dist:{comp_id}:{i}"
                 ))
 
+            # Кнопка продолжить (будет активна когда выбрана хотя бы одна дистанция)
+            builder.row(InlineKeyboardButton(
+                text="✅ Продолжить",
+                callback_data=f"comp:confirm_distances:{comp_id}"
+            ))
             builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"comp:detail:{comp_id}"))
 
-            # Переводим в состояние ожидания выбора дистанции
-            await state.set_state(UpcomingCompetitionsStates.waiting_for_distance)
+            # Переводим в состояние выбора нескольких дистанций
+            await state.set_state(UpcomingCompetitionsStates.selecting_multiple_distances)
 
             await callback.message.edit_text(
-                "📏 <b>Выберите дистанцию:</b>\n\n"
-                "Выберите дистанцию, на которой вы планируете участвовать.",
+                "📏 <b>Выберите дистанции:</b>\n\n"
+                "Выберите одну или несколько дистанций, на которых вы планируете участвовать.\n"
+                "Нажмите на дистанцию чтобы выбрать/отменить выбор.\n\n"
+                "После выбора нажмите ✅ Продолжить",
                 parse_mode="HTML",
                 reply_markup=builder.as_markup()
             )
@@ -562,6 +597,330 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
     except Exception as e:
         logger.error(f"Error starting participation: {e}")
         await callback.answer("❌ Ошибка", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("comp:toggle_dist:"))
+async def toggle_distance_selection(callback: CallbackQuery, state: FSMContext):
+    """Toggle distance selection (checkbox)"""
+    try:
+        parts = callback.data.split(":", 3)
+        comp_id = parts[2]
+        distance_idx = int(parts[3])
+
+        # Get current selections and competition data
+        data = await state.get_data()
+        selected_distances = data.get('selected_distances', [])
+        all_competitions = data.get('all_competitions', [])
+
+        # Find competition
+        competition = None
+        for comp in all_competitions:
+            if comp.get('id') == comp_id:
+                competition = comp
+                break
+
+        if not competition:
+            await callback.answer("❌ Соревнование не найдено", show_alert=True)
+            return
+
+        distances = competition.get('distances', [])
+
+        # Toggle selection
+        if distance_idx in selected_distances:
+            selected_distances.remove(distance_idx)
+        else:
+            selected_distances.append(distance_idx)
+
+        await state.update_data(selected_distances=selected_distances)
+
+        # Rebuild keyboard with updated checkmarks
+        user_id = callback.from_user.id
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+        builder = InlineKeyboardBuilder()
+
+        from utils.unit_converter import safe_convert_distance_name
+
+        for i, dist in enumerate(distances[:15]):
+            distance_km = dist.get('distance', 0)
+            distance_name = dist.get('name', 'Дистанция')
+            converted_name = safe_convert_distance_name(distance_name, distance_unit)
+
+            # Show checkmark if selected
+            checkbox = "✓" if i in selected_distances else "☐"
+
+            # Показываем только сконвертированное название, без дублирования
+            button_text = f"{checkbox} {converted_name}"
+
+            builder.row(InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"comp:toggle_dist:{comp_id}:{i}"
+            ))
+
+        # Continue button
+        builder.row(InlineKeyboardButton(
+            text="✅ Продолжить",
+            callback_data=f"comp:confirm_distances:{comp_id}"
+        ))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"comp:detail:{comp_id}"))
+
+        await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error toggling distance: {e}")
+        await callback.answer("❌ Ошибка", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("comp:confirm_distances:"))
+async def confirm_distances_selection(callback: CallbackQuery, state: FSMContext):
+    """Confirm distance selection and start sequential time input"""
+    try:
+        comp_id = callback.data.split(":", 2)[2]
+
+        # Get selected distances
+        data = await state.get_data()
+        selected_distances = data.get('selected_distances', [])
+
+        if not selected_distances:
+            await callback.answer("⚠️ Выберите хотя бы одну дистанцию", show_alert=True)
+            return
+
+        all_competitions = data.get('all_competitions', [])
+
+        # Find competition
+        competition = None
+        for comp in all_competitions:
+            if comp.get('id') == comp_id:
+                competition = comp
+                break
+
+        if not competition:
+            await callback.answer("❌ Соревнование не найдено", show_alert=True)
+            return
+
+        distances = competition.get('distances', [])
+
+        # Store info about distances to process
+        distances_to_process = []
+        for idx in selected_distances:
+            if idx < len(distances):
+                distances_to_process.append({
+                    'index': idx,
+                    'distance_km': distances[idx].get('distance', 0),
+                    'name': distances[idx].get('name', '')
+                })
+
+        await state.update_data(
+            distances_to_process=distances_to_process,
+            current_distance_index=0,
+            competition_id=comp_id,
+            current_competition=competition  # Save full competition object
+        )
+
+        # Start with first distance
+        await prompt_for_distance_time(callback, state, 0)
+
+    except Exception as e:
+        logger.error(f"Error confirming distances: {e}")
+        await callback.answer("❌ Ошибка", show_alert=True)
+
+
+async def prompt_for_distance_time(callback: CallbackQuery, state: FSMContext, index: int):
+    """Prompt for target time for specific distance"""
+    logger.info(f"prompt_for_distance_time called for index {index}")
+
+    data = await state.get_data()
+    distances_to_process = data.get('distances_to_process', [])
+    comp_id = data.get('competition_id')
+
+    logger.info(f"Found {len(distances_to_process)} distances to process")
+
+    if index >= len(distances_to_process):
+        # All distances processed - save and redirect
+        logger.info("Index >= length, calling save_all_distances_and_redirect")
+        await save_all_distances_and_redirect(callback, state)
+        return
+
+    distance_info = distances_to_process[index]
+    distance_name = distance_info['name']
+    distance_km = distance_info['distance_km']
+
+    logger.info(f"Prompting for distance: {distance_name} ({distance_km}km)")
+
+    # Get user settings for unit conversion
+    user_id = callback.from_user.id
+    settings = await get_user_settings(user_id)
+    distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+    from utils.unit_converter import safe_convert_distance_name
+    converted_name = safe_convert_distance_name(distance_name, distance_unit)
+
+    # Показываем только сконвертированное название, без дублирования
+    display_name = converted_name
+
+    # Create keyboard
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(
+        text="⏭ Пропустить",
+        callback_data=f"comp:skip_dist_time:{index}"
+    ))
+
+    # Умная кнопка "Назад"
+    if index > 0:
+        # Если это не первая дистанция - возвращаемся к предыдущей
+        builder.row(InlineKeyboardButton(
+            text="◀️ К предыдущей дистанции",
+            callback_data=f"comp:back_dist_time:{index-1}"
+        ))
+    elif len(distances_to_process) > 1:
+        # Если первая дистанция и их несколько - возвращаемся к выбору дистанций
+        builder.row(InlineKeyboardButton(
+            text="◀️ К выбору дистанций",
+            callback_data=f"comp:participate:{comp_id}"
+        ))
+    else:
+        # Если одна дистанция - возвращаемся к деталям соревнования
+        builder.row(InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data=f"compdetail:{comp_id}"
+        ))
+
+    logger.info(f"Setting FSM state to waiting_for_target_time")
+    await state.set_state(UpcomingCompetitionsStates.waiting_for_target_time)
+
+    # Verify state was set
+    current_state = await state.get_state()
+    logger.info(f"Current FSM state after setting: {current_state}")
+
+    total = len(distances_to_process)
+    progress = f"[{index + 1}/{total}]"
+
+    await callback.message.edit_text(
+        f"⏱ <b>Целевое время {progress}</b>\n\n"
+        f"Дистанция: <b>{display_name}</b>\n\n"
+        f"Введите целевое время в формате:\n"
+        f"• ЧЧ:ММ:СС (например, 01:30:00)\n"
+        f"• ММ:СС (например, 45:30)\n\n"
+        f"Или нажмите ⏭ Пропустить",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+
+async def save_all_distances_and_redirect(callback_or_message, state: FSMContext):
+    """Save all distances with their times to database and redirect"""
+    try:
+        logger.info(f"save_all_distances_and_redirect called with type: {type(callback_or_message)}")
+
+        data = await state.get_data()
+        logger.info(f"State data keys: {list(data.keys())}")
+
+        distances_to_process = data.get('distances_to_process', [])
+        comp_id = data.get('competition_id')
+        competition = data.get('current_competition')  # Get saved competition object
+        distance_times = data.get('distance_times', {})
+
+        logger.info(f"Processing {len(distances_to_process)} distances")
+        logger.info(f"comp_id: {comp_id}, competition exists: {competition is not None}")
+        logger.info(f"distance_times: {distance_times}")
+
+        # Determine if it's a callback or message
+        if hasattr(callback_or_message, 'message'):
+            # It's a CallbackQuery
+            logger.info("Detected as CallbackQuery")
+            user_id = callback_or_message.from_user.id
+            message_obj = callback_or_message.message
+        else:
+            # It's a Message
+            logger.info("Detected as Message")
+            user_id = callback_or_message.from_user.id
+            message_obj = callback_or_message
+
+        if not competition:
+            if hasattr(callback_or_message, 'message'):
+                await callback_or_message.answer("❌ Соревнование не найдено", show_alert=True)
+            else:
+                await callback_or_message.answer("❌ Соревнование не найдено")
+            return
+
+        # Save each distance
+        logger.info(f"Saving {len(distances_to_process)} distances to database...")
+        for dist_info in distances_to_process:
+            idx = dist_info['index']
+            distance_km = dist_info['distance_km']
+            distance_name = dist_info['name']
+            target_time = distance_times.get(idx)
+
+            logger.info(f"Saving distance {idx}: {distance_name} ({distance_km}km) - time: {target_time}")
+
+            await add_competition_participant(
+                user_id=user_id,
+                competition_id=comp_id,
+                comp_data=competition,
+                target_time=target_time,
+                distance=distance_km,
+                distance_name=distance_name
+            )
+
+        logger.info("All distances saved successfully")
+
+        # Show success message and redirect
+        count = len(distances_to_process)
+        logger.info(f"Showing success message for {count} distances")
+
+        # Show success alert and immediately redirect to "Мои соревнования"
+        if hasattr(callback_or_message, 'message'):
+            # It's CallbackQuery
+            logger.info("Sending success alert and redirecting via CallbackQuery")
+            await callback_or_message.answer(
+                f"✅ Зарегистрированы на {count} дистанций!",
+                show_alert=True
+            )
+        else:
+            # It's Message - show quick notification
+            logger.info("Sending success message and redirecting via Message")
+            await message_obj.answer(f"✅ Зарегистрированы на {count} дистанций!")
+
+        # Clear state
+        await state.clear()
+
+        # Redirect to "Мои соревнования" by simulating callback
+        from competitions.competitions_handlers import show_my_competitions
+
+        # Create a fake callback query with the message
+        if hasattr(callback_or_message, 'message'):
+            # It's already a CallbackQuery - use it directly
+            await show_my_competitions(callback_or_message, state)
+        else:
+            # It's a Message - create a pseudo callback to use the original handler
+            class PseudoCallbackQuery:
+                """Wrapper to make Message look like CallbackQuery for show_my_competitions"""
+                def __init__(self, message):
+                    self.message = message
+                    self.from_user = message.from_user
+
+                async def answer(self, text="", show_alert=False):
+                    # Ignore callback answers for message-based flow
+                    pass
+
+            # Send a placeholder message to edit
+            placeholder_message = await message_obj.answer("Загрузка...")
+
+            # Create pseudo callback with the placeholder message
+            pseudo_callback = PseudoCallbackQuery(placeholder_message)
+
+            # Use the original handler
+            await show_my_competitions(pseudo_callback, state)
+
+    except Exception as e:
+        logger.error(f"Error saving distances: {e}")
+        if hasattr(callback_or_message, 'message'):
+            await callback_or_message.answer("❌ Ошибка при сохранении", show_alert=True)
+        else:
+            await callback_or_message.answer("❌ Ошибка при сохранении")
 
 
 async def prompt_for_target_time(callback: CallbackQuery, state: FSMContext, comp_id: str):
@@ -661,6 +1020,43 @@ async def cancel_participation(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Ошибка при отмене", show_alert=True)
 
 
+@router.callback_query(F.data.startswith("comp:skip_dist_time:"))
+async def skip_distance_target_time(callback: CallbackQuery, state: FSMContext):
+    """Skip target time for current distance in multi-distance flow"""
+    try:
+        index = int(callback.data.split(":", 2)[2])
+        logger.info(f"Skipping distance time at index {index}")
+
+        data = await state.get_data()
+        distance_times = data.get('distance_times', {})
+        distances_to_process = data.get('distances_to_process', [])
+
+        logger.info(f"State has {len(distances_to_process)} distances to process")
+        logger.info(f"State keys before update: {list(data.keys())}")
+
+        # Store None for this distance (skipped)
+        distance_times[index] = None
+        await state.update_data(distance_times=distance_times, current_distance_index=index)
+
+        # Move to next distance
+        next_index = index + 1
+        logger.info(f"Next index: {next_index}, total distances: {len(distances_to_process)}")
+
+        # Check if there are more distances
+        if next_index >= len(distances_to_process):
+            # All distances processed - save and redirect
+            logger.info("All distances processed, calling save_all_distances_and_redirect")
+            await save_all_distances_and_redirect(callback, state)
+        else:
+            # Move to next distance
+            logger.info(f"Moving to next distance at index {next_index}")
+            await prompt_for_distance_time(callback, state, next_index)
+
+    except Exception as e:
+        logger.error(f"Error skipping distance time: {e}")
+        await callback.answer("❌ Ошибка", show_alert=True)
+
+
 @router.callback_query(F.data.startswith("comp:skip_time:"))
 async def skip_target_time(callback: CallbackQuery, state: FSMContext):
     """Пропустить ввод целевого времени и добавить без него"""
@@ -675,6 +1071,7 @@ async def skip_target_time(callback: CallbackQuery, state: FSMContext):
         data = await state.get_data()
         all_competitions = data.get('all_competitions', [])
         selected_distance = data.get('selected_distance')
+        selected_distance_name = data.get('selected_distance_name')
 
         # Ищем соревнование в сохраненных данных
         comp = next((c for c in all_competitions if c['id'] == comp_id), None)
@@ -689,7 +1086,8 @@ async def skip_target_time(callback: CallbackQuery, state: FSMContext):
             comp_id,
             comp,
             target_time=None,
-            distance=selected_distance
+            distance=selected_distance,
+            distance_name=selected_distance_name
         )
 
         await callback.answer(
@@ -697,7 +1095,7 @@ async def skip_target_time(callback: CallbackQuery, state: FSMContext):
             show_alert=True
         )
 
-        # Очищаем state и переходим в раздел "Мои соревнования"
+        # Очищаем state
         await state.clear()
 
         # Показываем раздел "Мои соревнования"
@@ -712,124 +1110,181 @@ async def skip_target_time(callback: CallbackQuery, state: FSMContext):
 async def process_target_time(message: Message, state: FSMContext):
     """Обработать введенное целевое время"""
     from database.queries import add_competition_participant
-    import re
+    from utils.time_formatter import validate_time_format, normalize_time
+
+    logger.info(f"process_target_time handler called! message.text={message.text}")
 
     user_id = message.from_user.id
+
+    if not message.text:
+        logger.warning("message.text is None or empty!")
+        await message.answer("❌ Пожалуйста, введите время в текстовом формате")
+        return
+
     target_time_text = message.text.strip()
 
-    # Валидация формата времени (HH:MM:SS или MM:SS или H:M:S)
-    pattern_hhmmss = re.compile(r'^(\d{1,2}):(\d{1,2}):(\d{1,2})$')
-    pattern_mmss = re.compile(r'^(\d{1,2}):(\d{1,2})$')
+    logger.info(f"Processing target time: {target_time_text}")
 
-    match_hhmmss = pattern_hhmmss.match(target_time_text)
-    match_mmss = pattern_mmss.match(target_time_text)
-
-    if match_hhmmss:
-        # Формат ЧЧ:ММ:СС
-        hours, minutes, seconds = match_hhmmss.groups()
-        # Валидация диапазонов
-        if int(minutes) > 59 or int(seconds) > 59:
-            await message.answer(
-                "❌ Неверный формат времени!\n\n"
-                "Минуты и секунды должны быть от 0 до 59"
-            )
-            return
-        target_time = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
-    elif match_mmss:
-        # Формат ММ:СС - добавляем часы
-        minutes, seconds = match_mmss.groups()
-        # Валидация диапазонов
-        if int(minutes) > 59 or int(seconds) > 59:
-            await message.answer(
-                "❌ Неверный формат времени!\n\n"
-                "Минуты и секунды должны быть от 0 до 59"
-            )
-            return
-        target_time = f"00:{int(minutes):02d}:{int(seconds):02d}"
-    else:
-        # Неверный формат
+    # Валидация формата времени используя общую функцию
+    if not validate_time_format(target_time_text):
         await message.answer(
             "❌ Неверный формат времени!\n\n"
-            "Используйте формат ЧЧ:ММ:СС (например, 01:30:00) или ММ:СС (например, 45:30)"
+            "Используйте формат ЧЧ:ММ:СС или ММ:СС или Ч:М:С\n"
+            "Можно указать сотые: ЧЧ:ММ:СС.сс\n\n"
+            "Примеры:\n"
+            "• 1:30:05 или 1:30:5 (1 час 30 минут 5 секунд)\n"
+            "• 45:30 (45 минут 30 секунд)\n"
+            "• 1:23:45.50 (с сотыми)"
         )
         return
+
+    # Нормализуем время (убираем ведущие нули из часов)
+    target_time = normalize_time(target_time_text)
 
     try:
         # Получаем данные из state
         data = await state.get_data()
-        comp_id = data.get('pending_competition_id')
-        all_competitions = data.get('all_competitions', [])
-        selected_distance = data.get('selected_distance')
-        selected_distance_name = data.get('selected_distance_name', '')
+        distances_to_process = data.get('distances_to_process')
 
-        if not comp_id:
-            await message.answer("❌ Ошибка: соревнование не найдено")
-            return
+        logger.info(f"State keys: {list(data.keys())}")
+        logger.info(f"distances_to_process exists: {distances_to_process is not None}")
 
-        # Ищем соревнование в сохраненных данных
-        comp = next((c for c in all_competitions if c['id'] == comp_id), None)
+        # Check if this is multi-distance flow
+        if distances_to_process:
+            # Multi-distance flow
+            logger.info(f"Multi-distance flow: {len(distances_to_process)} distances")
+            current_index = data.get('current_distance_index', 0)
+            distance_times = data.get('distance_times', {})
 
-        if not comp:
-            await message.answer("❌ Соревнование не найдено")
-            return
+            logger.info(f"Current index: {current_index}, distance_times: {distance_times}")
 
-        # Добавляем пользователя как участника с целевым временем и дистанцией
-        await add_competition_participant(
-            user_id,
-            comp_id,
-            comp,
-            target_time=target_time,
-            distance=selected_distance
-        )
+            # Store time for current distance
+            distance_times[current_index] = target_time
 
-        # Очищаем state
-        await state.clear()
+            # Move to next distance FIRST
+            next_index = current_index + 1
 
-        # Показываем уведомление об успехе
-        success_msg = f"✅ Соревнование добавлено в 'Мои соревнования'!\n"
-        if selected_distance_name:
-            success_msg += f"📏 Дистанция: {selected_distance_name}\n"
-        success_msg += f"⏱ Целевое время: {target_time}\n\n"
+            # Update both distance_times AND current_distance_index in one call
+            await state.update_data(
+                distance_times=distance_times,
+                current_distance_index=next_index
+            )
 
-        # Получаем список соревнований пользователя для отображения
-        from database.queries import get_user_competitions
-        from utils.time_formatter import format_time_until_competition
-        from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+            await message.answer(f"✅ Целевое время {target_time} сохранено!")
 
-        competitions = await get_user_competitions(user_id, status_filter='upcoming')
+            # Check if there are more distances to process
+            if next_index >= len(distances_to_process):
+                # All distances processed - save and redirect
+                logger.info(f"All {len(distances_to_process)} distances have times, saving...")
+                await save_all_distances_and_redirect(message, state)
+            else:
+                # Prompt for next distance
+                logger.info(f"Moving to next distance at index {next_index}")
+                distance_info = distances_to_process[next_index]
+                distance_name = distance_info['name']
+                distance_km = distance_info['distance_km']
 
-        if competitions:
-            success_msg += "📋 <b>МОИ СОРЕВНОВАНИЯ:</b>\n\n"
+                user_id = message.from_user.id
+                settings = await get_user_settings(user_id)
+                distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-            for i, comp in enumerate(competitions[:5], 1):  # Показываем первые 5
-                time_until = format_time_until_competition(comp['date'])
-                dist_str = await format_dist_with_units(comp['distance'], user_id)
-                date_str = await format_competition_date(comp['date'], user_id)
+                from utils.unit_converter import safe_convert_distance_name
+                converted_name = safe_convert_distance_name(distance_name, distance_unit)
 
-                # Форматируем целевое время
-                comp_target_time = comp.get('target_time')
-                if comp_target_time and comp_target_time != 'None' and comp_target_time != '':
-                    target_time_str = comp_target_time
-                    from utils.time_formatter import calculate_pace_with_unit
-                    target_pace = await calculate_pace_with_unit(comp_target_time, comp['distance'], user_id)
-                    target_pace_str = f" ({target_pace})" if target_pace else ''
-                else:
-                    target_time_str = 'Нет цели'
-                    target_pace_str = ''
+                # Показываем только сконвертированное название, без дублирования
+                display_name = converted_name
 
-                success_msg += (
-                    f"{i}. <b>{comp['name']}</b>\n"
-                    f"   📏 {dist_str}\n"
-                    f"   📅 {date_str} ({time_until})\n"
-                    f"   🎯 Цель: {target_time_str}{target_pace_str}\n\n"
+                total = len(distances_to_process)
+                progress = f"[{next_index + 1}/{total}]"
+
+                builder = InlineKeyboardBuilder()
+                builder.row(InlineKeyboardButton(
+                    text="⏭ Пропустить",
+                    callback_data=f"comp:skip_dist_time:{next_index}"
+                ))
+                comp_id_val = data.get('competition_id')
+                builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"comp:detail:{comp_id_val}"))
+
+                # IMPORTANT: Keep FSM state for next input
+                logger.info("Keeping FSM state as waiting_for_target_time for next distance")
+
+                # Set state BEFORE sending message
+                await state.set_state(UpcomingCompetitionsStates.waiting_for_target_time)
+
+                # Verify state
+                check_state = await state.get_state()
+                logger.info(f"State before sending message: {check_state}")
+
+                # Send message with keyboard
+                sent_msg = await message.answer(
+                    f"⏱ <b>Целевое время {progress}</b>\n\n"
+                    f"Дистанция: <b>{display_name}</b>\n\n"
+                    f"Введите целевое время в формате:\n"
+                    f"• ЧЧ:ММ:СС (например, 01:30:00)\n"
+                    f"• ММ:СС (например, 45:30)\n\n"
+                    f"Или нажмите ⏭ Пропустить",
+                    parse_mode="HTML",
+                    reply_markup=builder.as_markup()
                 )
+                logger.info(f"Sent prompt for distance {next_index + 1}/{total}, message_id={sent_msg.message_id}")
 
-        # Создаем кнопки для перехода
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="📋 Все мои соревнования", callback_data="comp:my"))
-        builder.row(InlineKeyboardButton(text="◀️ Меню соревнований", callback_data="comp:menu"))
+                # Verify state AGAIN after sending
+                final_check_state = await state.get_state()
+                logger.info(f"State after sending message: {final_check_state}")
 
-        await message.answer(success_msg, reply_markup=builder.as_markup(), parse_mode="HTML")
+                # Get all state data to verify it's not cleared
+                final_data = await state.get_data()
+                logger.info(f"State data after sending: keys={list(final_data.keys())}, distances_to_process exists={('distances_to_process' in final_data)}")
+
+        else:
+            # Single distance flow (original behavior)
+            comp_id = data.get('pending_competition_id')
+            all_competitions = data.get('all_competitions', [])
+            selected_distance = data.get('selected_distance')
+            selected_distance_name = data.get('selected_distance_name', '')
+
+            if not comp_id:
+                await message.answer("❌ Ошибка: соревнование не найдено")
+                return
+
+            # Ищем соревнование в сохраненных данных
+            comp = next((c for c in all_competitions if c['id'] == comp_id), None)
+
+            if not comp:
+                await message.answer("❌ Соревнование не найдено")
+                return
+
+            # Добавляем пользователя как участника с целевым временем и дистанцией
+            await add_competition_participant(
+                user_id,
+                comp_id,
+                comp,
+                target_time=target_time,
+                distance=selected_distance,
+                distance_name=selected_distance_name
+            )
+
+            # Отправляем подтверждение
+            await message.answer("✅ Соревнование добавлено в 'Мои соревнования'!")
+
+            # Автоматически показываем раздел "Мои соревнования"
+            from competitions.competitions_handlers import show_my_competitions
+
+            class FakeCallback:
+                def __init__(self, msg):
+                    self.message = msg
+                    self.from_user = msg.from_user
+
+                async def answer(self, text="", show_alert=False):
+                    pass
+
+            placeholder_msg = await message.answer("Загрузка...")
+            fake_callback = FakeCallback(placeholder_msg)
+
+            await show_my_competitions(fake_callback, state)
+
+            # Очищаем state ПОСЛЕ показа ТОЛЬКО для single-distance flow
+            await state.clear()
 
     except Exception as e:
         logger.error(f"Error processing target time: {e}")

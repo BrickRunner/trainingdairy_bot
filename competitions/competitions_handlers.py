@@ -456,12 +456,46 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext):
 
         # Импортируем утилиты для форматирования с учетом настроек пользователя
         from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+        from database.queries import get_user_settings
+        from utils.unit_converter import safe_convert_distance_name
+
+        # Получаем настройки пользователя один раз
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км')
 
         for i, comp in enumerate(competitions[:10], 1):
             time_until = format_time_until_competition(comp['date'])
 
-            # Форматируем дистанцию с учетом единиц измерения пользователя
-            dist_str = await format_dist_with_units(comp['distance'], user_id)
+            # Получаем название дистанции и конвертируем его
+            distance_value = comp.get('distance', 0)
+            distance_name = comp.get('distance_name')  # Сначала пробуем получить из БД
+
+            # Если distance_name нет в БД, ищем в массиве distances
+            if not distance_name and comp.get('distances') and isinstance(comp['distances'], list):
+                for dist_obj in comp['distances']:
+                    # Проверяем, что dist_obj - это словарь
+                    if isinstance(dist_obj, dict):
+                        if dist_obj.get('distance') == distance_value:
+                            distance_name = dist_obj.get('name', '')
+                            break
+
+                # Если не нашли по значению и distance_value = 0, берем первую дистанцию
+                if not distance_name and distance_value == 0:
+                    for dist_obj in comp['distances']:
+                        if isinstance(dist_obj, dict):
+                            distance_name = dist_obj.get('name', '')
+                            distance_value = dist_obj.get('distance', 0)
+                            break
+
+            # Если название найдено и содержит сложную дистанцию, конвертируем его
+            if distance_name:
+                dist_str = safe_convert_distance_name(distance_name, distance_unit)
+            elif distance_value > 0:
+                # Если есть числовое значение, форматируем его
+                dist_str = await format_dist_with_units(distance_value, user_id)
+            else:
+                # Если ничего нет, показываем "Не указана"
+                dist_str = "Не указана"
 
             # Форматируем дату с учетом настроек пользователя
             date_str = await format_competition_date(comp['date'], user_id)
