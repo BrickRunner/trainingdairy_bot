@@ -282,23 +282,35 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
         # - Если 1 дистанция И пользователь участвует -> скрываем
         # - Если >1 дистанции И пользователь зарегистрирован на ВСЕ -> скрываем
         # - Иначе показываем
-        from database.queries import is_user_registered_all_distances
+        from database.queries import is_user_registered_all_distances, get_user_participant_competition_urls
+
+        # Получаем список URL соревнований, где пользователь участвует (оптимизация - один запрос)
+        participant_urls = await get_user_participant_competition_urls(user_id)
+        logger.info(f"User is participant in {len(participant_urls)} competitions")
 
         filtered_competitions = []
         for comp in all_competitions:
             comp_url = comp.get('url', '')
             distances_count = len(comp.get('distances', []))
 
+            # Пропускаем соревнования без URL
+            if not comp_url:
+                filtered_competitions.append(comp)
+                continue
+
             if distances_count <= 1:
                 # Одна дистанция или нет дистанций - скрываем если участвует
-                participant_urls = await get_user_participant_competition_urls(user_id)
                 if comp_url not in participant_urls:
                     filtered_competitions.append(comp)
+                else:
+                    logger.info(f"Hiding competition (single distance, registered): {comp.get('name', 'Unknown')}")
             else:
                 # Несколько дистанций - скрываем только если зарегистрирован на все
                 is_all_registered = await is_user_registered_all_distances(user_id, comp_url, distances_count)
                 if not is_all_registered:
                     filtered_competitions.append(comp)
+                else:
+                    logger.info(f"Hiding competition (all distances registered): {comp.get('name', 'Unknown')}")
 
         all_competitions = filtered_competitions
         logger.info(f"After filtering participant competitions: {len(all_competitions)} competitions")
@@ -478,16 +490,55 @@ async def show_competition_detail(callback: CallbackQuery, state: FSMContext):
 
         # Проверяем, уже участвует ли пользователь
         is_participant = await is_user_participant(user_id, comp.get('url', comp_id))
+        distances = comp.get('distances', [])
+        distances_count = len(distances)
+
+        logger.info(f"Button logic: is_participant={is_participant}, distances_count={distances_count}")
 
         builder = InlineKeyboardBuilder()
-        if is_participant:
-            builder.row(
-                InlineKeyboardButton(text="❌ Отменить участие", callback_data=f"comp:cancel:{comp_id}")
-            )
+
+        # Логика кнопок зависит от количества дистанций
+        if distances_count > 1:
+            # Если несколько дистанций - проверяем зарегистрирован ли на все
+            from database.queries import is_user_registered_all_distances, get_user_registered_distances
+            is_all_registered = await is_user_registered_all_distances(user_id, comp.get('url', comp_id), distances_count)
+
+            # Для отладки: получаем список зарегистрированных дистанций
+            registered_indices = await get_user_registered_distances(user_id, comp.get('url', comp_id), distances)
+            logger.info(f"Registered on {len(registered_indices)} out of {distances_count} distances")
+            logger.info(f"is_all_registered={is_all_registered}, is_participant={is_participant}")
+
+            if is_all_registered:
+                # Зарегистрирован на все дистанции - показываем "Отменить участие"
+                logger.info("Showing: ❌ Отменить участие (registered on all)")
+                builder.row(
+                    InlineKeyboardButton(text="❌ Отменить участие", callback_data=f"comp:cancel:{comp_id}")
+                )
+            elif is_participant:
+                # Зарегистрирован на некоторые дистанции - показываем "Добавить дистанцию"
+                logger.info("Showing: ➕ Добавить дистанцию (registered on some)")
+                builder.row(
+                    InlineKeyboardButton(text="➕ Добавить дистанцию", callback_data=f"comp:participate:{comp_id}")
+                )
+            else:
+                # Не зарегистрирован вообще - показываем "Я участвую"
+                logger.info("Showing: ✅ Я участвую (not registered)")
+                builder.row(
+                    InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
+                )
         else:
-            builder.row(
-                InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
-            )
+            # Одна дистанция или нет дистанций - старая логика
+            if is_participant:
+                logger.info("Showing: ❌ Отменить участие (single distance, registered)")
+                builder.row(
+                    InlineKeyboardButton(text="❌ Отменить участие", callback_data=f"comp:cancel:{comp_id}")
+                )
+            else:
+                logger.info("Showing: ✅ Я участвую (single distance, not registered)")
+                builder.row(
+                    InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
+                )
+
         builder.row(
             InlineKeyboardButton(text="◀️ К списку", callback_data="upc:page:1")
         )
@@ -537,8 +588,12 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
             settings = await get_user_settings(user_id)
             distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
+            # Получаем список уже зарегистрированных дистанций
+            from database.queries import get_user_registered_distances
+            registered_indices = await get_user_registered_distances(user_id, comp.get('url', comp_id), distances)
+
             # Инициализируем список выбранных дистанций если его нет
-            await state.update_data(selected_distances=[])
+            await state.update_data(selected_distances=[], registered_distances=registered_indices)
 
             builder = InlineKeyboardBuilder()
 
@@ -552,13 +607,20 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
                 # Конвертируем название дистанции (безопасно, с fallback)
                 converted_name = safe_convert_distance_name(distance_name, distance_unit)
 
-                # Показываем только сконвертированное название, без дублирования
-                button_text = f"☐ {converted_name}"
+                # Проверяем, зарегистрирован ли пользователь на эту дистанцию
+                if i in registered_indices:
+                    # Уже зарегистрирован - показываем с замком (нельзя снять)
+                    button_text = f"🔒 {converted_name} (зарегистрирован)"
+                    # Используем специальный callback который ничего не делает
+                    callback_data = f"comp:already_registered:{i}"
+                else:
+                    # Не зарегистрирован - показываем обычный чекбокс
+                    button_text = f"☐ {converted_name}"
+                    callback_data = f"comp:toggle_dist:{comp_id}:{i}"
 
-                # Чекбокс: toggle выбора дистанции
                 builder.row(InlineKeyboardButton(
                     text=button_text,
-                    callback_data=f"comp:toggle_dist:{comp_id}:{i}"
+                    callback_data=callback_data
                 ))
 
             # Кнопка продолжить (будет активна когда выбрана хотя бы одна дистанция)
@@ -566,16 +628,22 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
                 text="✅ Продолжить",
                 callback_data=f"comp:confirm_distances:{comp_id}"
             ))
-            builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"comp:detail:{comp_id}"))
+            builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"compdetail:{comp_id}"))
 
             # Переводим в состояние выбора нескольких дистанций
             await state.set_state(UpcomingCompetitionsStates.selecting_multiple_distances)
 
+            message_text = "📏 <b>Выберите дистанции:</b>\n\n"
+            if registered_indices:
+                message_text += "🔒 Вы уже зарегистрированы на некоторые дистанции (отмечены замком).\n"
+                message_text += "Выберите дополнительные дистанции для регистрации.\n\n"
+            else:
+                message_text += "Выберите одну или несколько дистанций, на которых вы планируете участвовать.\n"
+                message_text += "Нажмите на дистанцию чтобы выбрать/отменить выбор.\n\n"
+            message_text += "После выбора нажмите ✅ Продолжить"
+
             await callback.message.edit_text(
-                "📏 <b>Выберите дистанции:</b>\n\n"
-                "Выберите одну или несколько дистанций, на которых вы планируете участвовать.\n"
-                "Нажмите на дистанцию чтобы выбрать/отменить выбор.\n\n"
-                "После выбора нажмите ✅ Продолжить",
+                message_text,
                 parse_mode="HTML",
                 reply_markup=builder.as_markup()
             )
@@ -599,6 +667,16 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
         await callback.answer("❌ Ошибка", show_alert=True)
 
 
+@router.callback_query(F.data.startswith("comp:already_registered:"))
+async def already_registered_distance(callback: CallbackQuery, state: FSMContext):
+    """Обработка нажатия на уже зарегистрированную дистанцию"""
+    await callback.answer(
+        "⚠️ Вы уже зарегистрированы на эту дистанцию.\n"
+        "Для отмены участия используйте кнопку 'Отменить участие' на странице соревнования.",
+        show_alert=True
+    )
+
+
 @router.callback_query(F.data.startswith("comp:toggle_dist:"))
 async def toggle_distance_selection(callback: CallbackQuery, state: FSMContext):
     """Toggle distance selection (checkbox)"""
@@ -610,6 +688,7 @@ async def toggle_distance_selection(callback: CallbackQuery, state: FSMContext):
         # Get current selections and competition data
         data = await state.get_data()
         selected_distances = data.get('selected_distances', [])
+        registered_distances = data.get('registered_distances', [])
         all_competitions = data.get('all_competitions', [])
 
         # Find competition
@@ -647,15 +726,20 @@ async def toggle_distance_selection(callback: CallbackQuery, state: FSMContext):
             distance_name = dist.get('name', 'Дистанция')
             converted_name = safe_convert_distance_name(distance_name, distance_unit)
 
-            # Show checkmark if selected
-            checkbox = "✓" if i in selected_distances else "☐"
-
-            # Показываем только сконвертированное название, без дублирования
-            button_text = f"{checkbox} {converted_name}"
+            # Проверяем, зарегистрирован ли пользователь на эту дистанцию
+            if i in registered_distances:
+                # Уже зарегистрирован - показываем с замком
+                button_text = f"🔒 {converted_name} (зарегистрирован)"
+                callback_data = f"comp:already_registered:{i}"
+            else:
+                # Не зарегистрирован - показываем чекбокс
+                checkbox = "✓" if i in selected_distances else "☐"
+                button_text = f"{checkbox} {converted_name}"
+                callback_data = f"comp:toggle_dist:{comp_id}:{i}"
 
             builder.row(InlineKeyboardButton(
                 text=button_text,
-                callback_data=f"comp:toggle_dist:{comp_id}:{i}"
+                callback_data=callback_data
             ))
 
         # Continue button
@@ -887,33 +971,39 @@ async def save_all_distances_and_redirect(callback_or_message, state: FSMContext
         # Clear state
         await state.clear()
 
-        # Redirect to "Мои соревнования" by simulating callback
-        from competitions.competitions_handlers import show_my_competitions
+        # Redirect to "Мои соревнования" section
+        # We need to send a NEW message instead of editing (to avoid "message can't be edited" error)
+        from aiogram.types import CallbackQuery as CQ
 
-        # Create a fake callback query with the message
+        # Create a synthetic callback query that simulates clicking "comp:my" button
+        class SyntheticCallback:
+            """Synthetic callback to properly trigger comp:my handler"""
+            def __init__(self, message, user):
+                self.message = message
+                self.from_user = user
+                self.data = "comp:my"
+
+            async def answer(self, text="", show_alert=False):
+                # Callback answers are optional for synthetic callbacks
+                pass
+
+        # Get the user
         if hasattr(callback_or_message, 'message'):
-            # It's already a CallbackQuery - use it directly
-            await show_my_competitions(callback_or_message, state)
+            user = callback_or_message.from_user
+            original_msg = callback_or_message.message
         else:
-            # It's a Message - create a pseudo callback to use the original handler
-            class PseudoCallbackQuery:
-                """Wrapper to make Message look like CallbackQuery for show_my_competitions"""
-                def __init__(self, message):
-                    self.message = message
-                    self.from_user = message.from_user
+            user = message_obj.from_user
+            original_msg = message_obj
 
-                async def answer(self, text="", show_alert=False):
-                    # Ignore callback answers for message-based flow
-                    pass
+        # Send a new message with loading text, then replace it with "My Competitions"
+        new_msg = await original_msg.answer("⏳ Загрузка...")
 
-            # Send a placeholder message to edit
-            placeholder_message = await message_obj.answer("Загрузка...")
+        # Create synthetic callback with the new message
+        synthetic_callback = SyntheticCallback(new_msg, user)
 
-            # Create pseudo callback with the placeholder message
-            pseudo_callback = PseudoCallbackQuery(placeholder_message)
-
-            # Use the original handler
-            await show_my_competitions(pseudo_callback, state)
+        # Import and call the handler directly with synthetic callback
+        from competitions.competitions_handlers import show_my_competitions
+        await show_my_competitions(synthetic_callback, state)
 
     except Exception as e:
         logger.error(f"Error saving distances: {e}")
@@ -1054,6 +1144,34 @@ async def skip_distance_target_time(callback: CallbackQuery, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Error skipping distance time: {e}")
+        await callback.answer("❌ Ошибка", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("comp:back_dist_time:"))
+async def back_to_previous_distance_time(callback: CallbackQuery, state: FSMContext):
+    """Вернуться к предыдущей дистанции для изменения целевого времени"""
+    try:
+        index = int(callback.data.split(":", 2)[2])
+        logger.info(f"Going back to distance at index {index}")
+
+        data = await state.get_data()
+        distances_to_process = data.get('distances_to_process', [])
+        distance_times = data.get('distance_times', {})
+
+        logger.info(f"Current distance_times before going back: {distance_times}")
+
+        # Удаляем время для текущей дистанции (на которую возвращаемся),
+        # чтобы пользователь мог его перезаписать
+        if index in distance_times:
+            del distance_times[index]
+            await state.update_data(distance_times=distance_times, current_distance_index=index)
+            logger.info(f"Cleared time for distance {index}, updated state")
+
+        # Показываем запрос времени для этой дистанции
+        await prompt_for_distance_time(callback, state, index)
+
+    except Exception as e:
+        logger.error(f"Error going back to previous distance: {e}")
         await callback.answer("❌ Ошибка", show_alert=True)
 
 
@@ -1202,8 +1320,27 @@ async def process_target_time(message: Message, state: FSMContext):
                     text="⏭ Пропустить",
                     callback_data=f"comp:skip_dist_time:{next_index}"
                 ))
+
+                # Умная кнопка "Назад"
                 comp_id_val = data.get('competition_id')
-                builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"comp:detail:{comp_id_val}"))
+                if next_index > 0:
+                    # Если это не первая дистанция - возвращаемся к предыдущей
+                    builder.row(InlineKeyboardButton(
+                        text="◀️ К предыдущей дистанции",
+                        callback_data=f"comp:back_dist_time:{next_index-1}"
+                    ))
+                elif len(distances_to_process) > 1:
+                    # Если первая дистанция и их несколько - возвращаемся к выбору дистанций
+                    builder.row(InlineKeyboardButton(
+                        text="◀️ К выбору дистанций",
+                        callback_data=f"comp:participate:{comp_id_val}"
+                    ))
+                else:
+                    # Если одна дистанция - возвращаемся к деталям соревнования
+                    builder.row(InlineKeyboardButton(
+                        text="◀️ Назад",
+                        callback_data=f"compdetail:{comp_id_val}"
+                    ))
 
                 # IMPORTANT: Keep FSM state for next input
                 logger.info("Keeping FSM state as waiting_for_target_time for next distance")

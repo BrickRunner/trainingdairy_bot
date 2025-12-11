@@ -390,7 +390,7 @@ async def get_user_competitions(
 
         async with db.execute(
             f"""
-            SELECT c.*, cp.distance, cp.target_time, cp.finish_time,
+            SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
                    cp.place_overall, cp.place_age_category, cp.age_category,
                    cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
                    cp.registered_at, cp.result_added_at
@@ -448,7 +448,7 @@ async def get_user_competitions_by_period(
 
         async with db.execute(
             f"""
-            SELECT c.*, cp.distance, cp.target_time, cp.finish_time,
+            SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
                    cp.place_overall, cp.place_age_category, cp.age_category,
                    cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
                    cp.registered_at, cp.result_added_at

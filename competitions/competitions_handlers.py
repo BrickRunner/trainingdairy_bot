@@ -575,9 +575,23 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
 
     # Форматируем информацию с учетом настроек пользователя
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
 
     time_until = format_time_until_competition(competition['date'])
-    dist_str = await format_dist_with_units(distance, user_id)
+
+    # Получаем distance_name из регистрации (для мультиспортивных событий)
+    distance_name = registration.get('distance_name')
+
+    if distance_name:
+        # Если есть название дистанции (для мультиспортивных), конвертируем его
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+        dist_str = safe_convert_distance_name(distance_name, distance_unit)
+    else:
+        # Если только числовое значение, форматируем его
+        dist_str = await format_dist_with_units(distance, user_id)
+
     date_str = await format_competition_date(competition['date'], user_id)
 
     # Форматируем целевое время
@@ -710,9 +724,23 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
     # Форматируем результат
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
     from utils.date_formatter import get_user_date_format, DateFormatter
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
 
     user_date_format = await get_user_date_format(user_id)
-    dist_str = await format_dist_with_units(comp['distance'], user_id)
+
+    # Получаем distance_name из результата (для мультиспортивных событий)
+    distance_name = comp.get('distance_name')
+
+    if distance_name:
+        # Если есть название дистанции (для мультиспортивных), конвертируем его
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+        dist_str = safe_convert_distance_name(distance_name, distance_unit)
+    else:
+        # Если только числовое значение, форматируем его
+        dist_str = await format_dist_with_units(comp['distance'], user_id)
+
     date_str = await format_competition_date(comp['date'], user_id)
 
     # Рассчитываем темп
@@ -884,6 +912,17 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
+    # Получаем регистрацию пользователя для получения distance_name
+    user_id = callback.from_user.id
+    from competitions.competitions_queries import get_user_competitions
+    user_comps = await get_user_competitions(user_id)
+
+    registration = None
+    for comp in user_comps:
+        if comp['id'] == competition_id and comp.get('distance') == distance:
+            registration = comp
+            break
+
     # Сохраняем данные в состоянии
     await state.update_data(
         edit_target_comp_id=competition_id,
@@ -891,7 +930,17 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
     )
 
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units
-    dist_str = await format_dist_with_units(distance, callback.from_user.id)
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
+
+    # Используем distance_name если есть, иначе форматируем числовое значение
+    distance_name = registration.get('distance_name') if registration else None
+    if distance_name:
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+        dist_str = safe_convert_distance_name(distance_name, distance_unit)
+    else:
+        dist_str = await format_dist_with_units(distance, user_id)
 
     text = (
         f"🏃 <b>{competition['name']}</b>\n"
@@ -1039,8 +1088,28 @@ async def cancel_registration(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
+    # Получаем регистрацию пользователя для получения distance_name
+    from competitions.competitions_queries import get_user_competitions
+    user_comps = await get_user_competitions(user_id)
+
+    registration = None
+    for comp in user_comps:
+        if comp['id'] == competition_id and comp.get('distance') == distance:
+            registration = comp
+            break
+
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units
-    dist_str = await format_dist_with_units(distance, user_id)
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
+
+    # Используем distance_name если есть, иначе форматируем числовое значение
+    distance_name = registration.get('distance_name') if registration else None
+    if distance_name:
+        settings = await get_user_settings(user_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+        dist_str = safe_convert_distance_name(distance_name, distance_unit)
+    else:
+        dist_str = await format_dist_with_units(distance, user_id)
 
     # Показываем подтверждение
     from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -1196,10 +1265,20 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
             # Получаем формат даты пользователя
             from utils.date_formatter import get_user_date_format, DateFormatter
             from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+            from database.queries import get_user_settings
+            from utils.unit_converter import safe_convert_distance_name
+
             user_date_format = await get_user_date_format(user_id)
+            settings = await get_user_settings(user_id)
+            distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
             for i, comp in enumerate(finished_comps, 1):
-                dist_str = await format_dist_with_units(comp['distance'], user_id)
+                # Используем distance_name если есть, иначе форматируем числовое значение
+                distance_name = comp.get('distance_name')
+                if distance_name:
+                    dist_str = safe_convert_distance_name(distance_name, distance_unit)
+                else:
+                    dist_str = await format_dist_with_units(comp['distance'], user_id)
 
                 # Форматируем дату согласно настройкам пользователя
                 formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
@@ -1370,14 +1449,24 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
     # Получаем формат даты пользователя
     from utils.date_formatter import get_user_date_format, DateFormatter
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
+
     user_date_format = await get_user_date_format(user_id)
+    settings = await get_user_settings(user_id)
+    distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
     # Кнопки для удаления - показываем название и дату
     for comp in finished_comps[:10]:
-        dist_str = await format_dist_with_units(comp['distance'], user_id)
+        # Используем distance_name если есть, иначе форматируем числовое значение
+        distance_name = comp.get('distance_name')
+        if distance_name:
+            dist_str = safe_convert_distance_name(distance_name, distance_unit)
+        else:
+            dist_str = await format_dist_with_units(comp['distance'], user_id)
         formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
 
         # Формируем короткое название для кнопки
@@ -1577,9 +1666,21 @@ async def process_finish_time(message: Message, state: FSMContext):
 
             builder = InlineKeyboardBuilder()
 
+            # Получаем настройки пользователя
+            from database.queries import get_user_settings
+            from utils.unit_converter import safe_convert_distance_name
+            settings = await get_user_settings(user_id)
+            distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
             for i, comp in enumerate(comps_without_results[:10], 1):
                 formatted_date = await format_competition_date(comp['date'], user_id)
-                dist_str = await format_competition_distance(comp['distance'], user_id)
+
+                # Используем distance_name если есть, иначе форматируем числовое значение
+                distance_name = comp.get('distance_name')
+                if distance_name:
+                    dist_str = safe_convert_distance_name(distance_name, distance_unit)
+                else:
+                    dist_str = await format_competition_distance(comp['distance'], user_id)
 
                 short_name = comp['name'][:30] + "..." if len(comp['name']) > 30 else comp['name']
                 button_text = f"{short_name} • {dist_str}"

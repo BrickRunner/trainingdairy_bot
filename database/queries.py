@@ -1024,6 +1024,58 @@ async def is_user_participant(user_id: int, competition_id: str) -> bool:
         return row is not None
 
 
+async def get_user_registered_distances(user_id: int, competition_id: str, all_distances: list) -> list:
+    """
+    Получить список индексов дистанций, на которые пользователь уже зарегистрирован
+
+    Args:
+        user_id: ID пользователя
+        competition_id: ID соревнования (URL из API)
+        all_distances: Список всех дистанций соревнования из API
+
+    Returns:
+        Список индексов зарегистрированных дистанций
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            SELECT cp.distance, cp.distance_name
+            FROM competition_participants cp
+            JOIN competitions c ON cp.competition_id = c.id
+            WHERE c.source_url = ? AND cp.user_id = ?
+            """,
+            (competition_id, user_id)
+        )
+        rows = await cursor.fetchall()
+
+        if not rows:
+            return []
+
+        # Создаем список зарегистрированных дистанций
+        registered_distances = []
+        for row in rows:
+            registered_distance_km = row[0]
+            registered_distance_name = row[1]
+            registered_distances.append({
+                'distance': registered_distance_km,
+                'name': registered_distance_name
+            })
+
+        # Находим индексы соответствующих дистанций в списке all_distances
+        registered_indices = []
+        for i, dist in enumerate(all_distances):
+            dist_km = dist.get('distance', 0)
+            dist_name = dist.get('name', '')
+
+            # Проверяем совпадение по дистанции и имени
+            for reg_dist in registered_distances:
+                if (dist_km == reg_dist['distance'] and dist_name == reg_dist['name']):
+                    registered_indices.append(i)
+                    break
+
+        return registered_indices
+
+
 async def is_user_registered_all_distances(user_id: int, competition_id: str, total_distances: int) -> bool:
     """
     Проверить, зарегистрирован ли пользователь на ВСЕ дистанции соревнования
