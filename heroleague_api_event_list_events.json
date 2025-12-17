@@ -1,0 +1,3536 @@
+{
+  "values": [
+    {
+      "event_type": {
+        "_id": "67877dd87cd61f39d4b02bc2",
+        "title": "Лыжная гонка",
+        "description": "Всероссийская любительская лыжная гонка",
+        "public_id": "skirun",
+        "user_public_id": "5128303bef",
+        "logo": "/uploads/e21c61299bd9f213097e72e8cae1efbaeedf296f.svg"
+      },
+      "banners": {
+        "landing_page": {
+          "button_color": "#ff3600",
+          "text_color": "#ffffff",
+          "desktop_picture": "/uploads/e21c61299bd9f213097e72e8cae1efbaeedf296f.svg",
+          "mobile_picture": "/uploads/e21c61299bd9f213097e72e8cae1efbaeedf296f.svg"
+        }
+      },
+      "title": "Лыжная гонка Департамент Транспорта",
+      "title_above": "Любительская лыжная гонка",
+      "enabled": true,
+      "description": " Лыжная гонка 1 км., Лыжная гонка 5 км., Лыжная гонка 10 км, Эстафета",
+      "public": true,
+      "cancel": true,
+      "public_id": "skirun2025",
+      "user_public_id": "5128303bef",
+      "created_date": "2025-01-15T09:23:14.703000",
+      "event_city": [
+        {
+          "_id": "67877f117cd61f39d4b02bf4",
+          "registration_open": "2025-01-15T09:24:00",
+          "address": "Москва, КСК Битца",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2025-02-16T07:00:00",
+          "public_id": "skirun2025_msc",
+          "event_public_id": "skirun2025",
+          "registration_close": "2025-02-15T15:00:00",
+          "public": false,
+          "info": {
+            "start_address": "Москва, КСК Битца",
+            "registration_time": "2025-02-02T07:00:00"
+          },
+          "banners": [],
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "event_type": {
+            "public_id": "skirun"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-01-15T09:25:37.855000",
+          "user_public_id": "5128303bef",
+          "corp": true,
+          "corp_city": false,
+          "qr": false,
+          "sale": {
+            "active": false
+          }
+        },
+        {
+          "_id": "69204f243ef164da86aefea3",
+          "registration_open": "2025-11-21T11:38:12.463000",
+          "address": "Москва, Балаклавский пр., 33",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2025-12-27T07:00:00",
+          "public_id": "skirun2025_524901_2012",
+          "event_public_id": "skirun2025",
+          "registration_close": "2025-12-26T16:00:00",
+          "public": false,
+          "info": {
+            "start_address": "Москва, Балаклавский пр., 33",
+            "registration_time": "2025-12-20T07:00:00"
+          },
+          "banners": [],
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "event_type": {
+            "public_id": "skirun"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-01-15T09:25:37.855000",
+          "user_public_id": "5128303bef",
+          "corp": false,
+          "created_date": "2025-11-21T11:38:12.463000",
+          "corp_city": false,
+          "qr": true,
+          "sale": {
+            "active": false
+          }
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "677fd7897515d653a715a644",
+        "title": "Снежный вызов",
+        "description": "Всероссийская любительская лыжная гонка",
+        "logo": "/uploads/b67ecd2001ee47dd6a57f2ce2970a296ef1ca0d0.svg",
+        "public_id": "snowrun",
+        "user_public_id": "838d947ba9",
+        "project": {
+          "public": true,
+          "picture_main": "/uploads/0d52fb5e15544ffbc52576b9429e25c39a0dc08a.webp",
+          "link": "https://xn--80aaikwcpci9jyb.xn--p1ai/"
+        }
+      },
+      "banners": {
+        "landing_page": {
+          "button_color": "#ff3600",
+          "text_color": "#ffffff"
+        }
+      },
+      "title": "Снежный вызов ",
+      "title_above": "Любительская лыжная гонка",
+      "enabled": true,
+      "description": "Лыжная гонка 500м., Лыжная гонка 1 км., Лыжная гонка 3 км., Лыжная гонка 5 км., Лыжная гонка 15 км., Лыжная гонка 30 км",
+      "public": true,
+      "cancel": true,
+      "public_id": "snowrun2025",
+      "user_public_id": "838d947ba9",
+      "created_date": "2025-01-10T10:22:18.876000",
+      "external_url": "https://лыжнаягонка.рф",
+      "event_city": [
+        {
+          "_id": "6780f55e7515d653a715b0e0",
+          "registration_open": "2025-01-09T21:23:00",
+          "address": "Москва, ул. Поляны 4, самбо 70, Битца",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2025-12-20T03:00:00",
+          "public_id": "snowrun2025_msk",
+          "event_public_id": "snowrun2025",
+          "registration_close": "2025-03-07T12:00:00",
+          "public": false,
+          "info": {
+            "start_address": "Москва, ул. Поляны 4, самбо 70, Битца"
+          },
+          "qr": true,
+          "banners": [],
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "event_type": {
+            "public_id": "snowrun"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-01-10T10:24:30.759000",
+          "user_public_id": "838d947ba9",
+          "corp": true
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "64956bc93b334215560c898b",
+        "title": "Марафон «Дорога жизни»",
+        "public_id": "doroga",
+        "description": "Традиционный зимний марафон «Дорога жизни»",
+        "logo": "/files/doroga_logo.svg",
+        "video_promo": null,
+        "project": {
+          "link": "https://heroleague.ru/doroga",
+          "picture_main": "https://heroleague.ru/uploads/fad2f77bc37958e8876166af3f1e932e0d44ce0f.webp",
+          "priority_number": 4,
+          "public": true,
+          "size": "small"
+        },
+        "recommendation": {
+          "link": "https://heroleague.ru/doroga",
+          "picture_main": "https://heroleague.ru/uploads/eec76e114470eadc9c0b453a765fd1c5338112c1.webp",
+          "picture_small": "https://heroleague.ru/uploads/eaed266a98900f155d190293445eba023add6198.webp",
+          "public": true
+        }
+      },
+      "banners": {
+        "home_page": {
+          "desktop_picture": "/files/doroga_title.svg",
+          "mobile_picture": "/files/doroga_title.svg",
+          "button_color": "#ED1C24",
+          "text_color": "#fff"
+        },
+        "landing_page": {
+          "desktop_picture": "/files/doroga_title.svg",
+          "mobile_picture": "/files/doroga_title.svg",
+          "button_color": "#ED1C24",
+          "text_color": "#fff"
+        }
+      },
+      "title": "Зимний марафон «Дорога жизни»",
+      "title_above": "Забег, посвященный 82-летию полного освобождения Ленинграда от фашистской блокады",
+      "external_url": "/doroga",
+      "public_id": "doroga2026",
+      "enabled": true,
+      "description": "57 традиционный легкоатлетический зимний марафон «Дорога жизни», посвященный 82-летию полного освобождения Ленинграда  от фашистской блокады",
+      "video_promo": "",
+      "slider": null,
+      "public": true,
+      "production": true,
+      "cancel": true,
+      "event_city": [
+        {
+          "_id": "690b0ed29a9b6d282ec06c78",
+          "geo": {},
+          "registration_open": "2025-11-07T13:58:00",
+          "address": "Ленинградская область",
+          "city": {
+            "id": 498817,
+            "name_ru": "Санкт-Петербург"
+          },
+          "start_time": "2026-01-25T05:15:00",
+          "registration_close": "2026-01-23T20:30:00",
+          "public_id": "doroga2026",
+          "event_public_id": "doroga2026",
+          "event_type": {
+            "public_id": "doroga"
+          },
+          "public": true,
+          "timezone": "Europe/Moscow",
+          "info": {
+            "map_full": "/uploads/85476b7f70aea191c8fc7ba898dea8ed6baca7eb.webp",
+            "map_preview": "/uploads/85476b7f70aea191c8fc7ba898dea8ed6baca7eb.webp",
+            "legals": "/uploads/bdc9be167028676b5281ae2b872584911f83d728.pdf"
+          },
+          "shirts": [],
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": true,
+          "banners": [
+            {
+              "public_id": "e14cb88968c2ae55c2a40dbd1472627c83e65872"
+            },
+            {
+              "public_id": "95d590209b83bffc8ce9170853254f4a75ebe159"
+            },
+            {
+              "public_id": "b9d795cc8e9695aad8395ce2e12d341abcd9e796"
+            }
+          ],
+          "corp": true,
+          "corp_city": false,
+          "qr": true,
+          "sale": {
+            "active": false
+          }
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "64956bc93b334215560c8980",
+        "title": "Лига Путешествий",
+        "public_id": "camp",
+        "description": "Тренировочные лагеря и туры-перезагрузка",
+        "logo": "/uploads/924e858efdb2a28cb1832544f78e7149e484eefa.svg",
+        "video_promo": "https://www.youtube.com/watch?v=VDUnaJwcs3M",
+        "project": {
+          "link": "https://xn--80aebjaofik7byajdj1f.xn--p1ai/",
+          "picture_main": "https://heroleague.ru/uploads/6a6b4624864dd02bb170e8cd5c2e036707c95983.webp",
+          "priority_number": 9,
+          "public": true,
+          "size": "small"
+        }
+      },
+      "banners": {
+        "landing_page": {
+          "button_color": "#ff3600",
+          "text_color": "#ffffff"
+        }
+      },
+      "title": " Лига Путешествий",
+      "title_above": "Тренировочные лагеря",
+      "external_url": "https://xn--80aebjaofik7byajdj1f.xn--p1ai/",
+      "enabled": true,
+      "description": "Тренировочные лагеря",
+      "public": true,
+      "cancel": true,
+      "public_id": "ligaputeshestviy2026",
+      "user_public_id": "5128303bef",
+      "created_date": "2025-12-12T07:36:00.884000",
+      "event_city": [
+        {
+          "_id": "693bc6a988cfdaa90d098346",
+          "registration_open": "2025-12-12T07:38:00",
+          "address": "дер. Ершино, Новгородская область",
+          "city": {
+            "id": 520555,
+            "name_ru": "Нижний Новгород"
+          },
+          "start_time": "2026-02-12T07:38:00",
+          "public_id": "ligaputeshestviy2025_ershino_1202",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-02-11T07:38:00",
+          "public": true,
+          "external_url": "https://xn--80aebjaofik7byajdj1f.xn--p1ai/novogorod26",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T07:39:21.452000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693bc7db88cfdaa90d098352",
+          "registration_open": "2025-12-12T07:43:00",
+          "address": "Турция",
+          "city": {
+            "id": 481608,
+            "name_ru": "Троицк"
+          },
+          "start_time": "2026-03-01T07:44:00",
+          "public_id": "ligaputeshestviy2026_turtsiya_0103",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-02-28T07:43:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/turkey26",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T07:44:27.635000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693bc86c88cfdaa90d098354",
+          "registration_open": "2025-12-12T07:45:00",
+          "address": "Махачкала",
+          "city": {
+            "id": 532096,
+            "name_ru": "Махачкала"
+          },
+          "start_time": "2026-04-04T07:46:00",
+          "public_id": "ligaputeshestviy2026_dgs_0404",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-04-04T07:45:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/dagestan2026",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T07:46:52.844000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693bc8f188cfdaa90d098359",
+          "registration_open": "2025-12-12T07:47:00",
+          "address": "Махачкала",
+          "city": {
+            "id": 532096,
+            "name_ru": "Махачкала"
+          },
+          "start_time": "2026-04-09T07:48:00",
+          "public_id": "ligaputeshestviy2026_dgs_0904",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-04-08T07:47:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/dagestan042026",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T07:49:05.132000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693bc96d88cfdaa90d09835d",
+          "registration_open": "2025-12-12T07:50:00",
+          "address": "Сочи",
+          "city": {
+            "id": 491422,
+            "name_ru": "Сочи"
+          },
+          "start_time": "2026-05-09T07:50:00",
+          "public_id": "ligaputeshestviy2026_sochi_0905",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-05-08T07:50:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/sochi26",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T07:51:09.119000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693be63a88cfdaa90d098407",
+          "registration_open": "2025-12-12T09:53:00",
+          "address": "Архыз",
+          "city": {
+            "id": 526480,
+            "name_ru": "Минеральные Воды"
+          },
+          "start_time": "2026-06-20T09:53:00",
+          "public_id": "ligaputeshestviy2026_arkhiz_2006",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-06-19T09:53:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/arkhiz2026",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T09:54:02.147000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693be69688cfdaa90d098409",
+          "registration_open": "2025-12-12T06:54:00",
+          "address": "Горно-Алтайск",
+          "city": {
+            "id": 1506271,
+            "name_ru": "Горно-Алтайск"
+          },
+          "start_time": "2026-07-03T06:55:00",
+          "public_id": "ligaputeshestviy2026_altai_0307",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-07-02T06:55:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/altay2026",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Asia/Barnaul",
+          "create_date": "2025-12-12T09:55:34.232000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693be6f688cfdaa90d09840b",
+          "registration_open": "2025-12-12T10:56:00",
+          "address": "Калининград",
+          "city": {
+            "id": 554234,
+            "name_ru": "Калининград"
+          },
+          "start_time": "2026-08-01T10:56:00",
+          "public_id": "ligaputeshestviy2025_kaliningrad_0108",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-07-31T10:56:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/kaliningrad26",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Kaliningrad",
+          "create_date": "2025-12-12T09:57:10.807000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693be76688cfdaa90d09840d",
+          "registration_open": "2025-12-12T09:58:00",
+          "address": "Геленджик",
+          "city": {
+            "id": 561667,
+            "name_ru": "Геленджик"
+          },
+          "start_time": "2026-09-26T09:58:00",
+          "public_id": "ligaputeshestviy2026_gelendzhik_2609",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-09-25T09:58:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/gelengik26",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T09:59:02.515000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693be7c088cfdaa90d09840f",
+          "registration_open": "2025-12-12T10:00:00",
+          "address": "Махачкала",
+          "city": {
+            "id": 532096,
+            "name_ru": "Махачкала"
+          },
+          "start_time": "2026-10-03T10:00:00",
+          "public_id": "ligaputeshestviy2025_dgs_0310",
+          "event_public_id": "ligaputeshestviy2026",
+          "registration_close": "2026-10-02T10:00:00",
+          "public": true,
+          "external_url": "https://лигапутешествий.рф/dagestan04",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "camp"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-12T10:00:32.208000",
+          "user_public_id": "5128303bef"
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "64956bc93b334215560c897d",
+        "title": "Гонка героев Зима",
+        "public_id": "gonka_zima",
+        "description": "Экстремальное приключение в зимних декорациях",
+        "logo": "/uploads/4f9a7c3eeee1b2e605f43f5dd045a011d201ce80.webp",
+        "video_promo": "https://www.youtube.com/watch?v=VDUnaJwcs3M",
+        "banners": [
+          {
+            "url": "https://heroleague.ru/static/media/proj2@1x-min.881dd049.jpg",
+            "description": "Зимний формат популярного забега с препятствиями.",
+            "title": "Гонка героев Зима"
+          },
+          {
+            "url": "/files/eventsCard/card-cover2@1x-min.jpg",
+            "description": "Зимний формат популярного забега с препятствиями.",
+            "title": "Гонка героев Зима"
+          },
+          {
+            "url": "https://heroleague.ru/static/media/proj2@1x-min.881dd049.jpg",
+            "description": "Зимний формат популярного забега с препятствиями.",
+            "title": "Гонка героев Зима"
+          }
+        ],
+        "project": {
+          "picture_main": "https://heroleague.ru/uploads/ae19cb46d73adc65c51df4fe456a2eaf1a1648eb.webp",
+          "public": true,
+          "link": "https://heroleague.ru/zima",
+          "size": "Medium",
+          "priority_number": 3
+        }
+      },
+      "banners": {
+        "home_page": {
+          "desktop_picture": "/files/d6b706690f80c008c4dca45a6746b1b6.jpg",
+          "mobile_picture": "/files/d6b706690f80c008c4dca45a6746b1b6.jpg",
+          "button_color": "#D3161E",
+          "text_color": "#fff"
+        },
+        "landing_page": {
+          "desktop_picture": "/files/gonka_landing_picture.png",
+          "mobile_picture": "/files/gonka_landing_picture.png",
+          "button_color": "#FF3600",
+          "text_color": "#fff"
+        }
+      },
+      "title": "Гонка Героев Зима",
+      "title_above": "Тебя ждут невероятные испытания, сплоченная работа в команде, драйв и адреналин",
+      "external_url": "https://heroleague.ru/zima",
+      "public_id": "zima2026",
+      "enabled": true,
+      "description": "Российский экстремальный забег по пересеченной местности. Гонка Героев – это новый вид активного отдыха для тех, кто привык брать от жизни всё. Собирай команду друзей или участвуй самостоятельно.",
+      "video_promo": "",
+      "slider": null,
+      "public": true,
+      "production": true,
+      "cancel": true,
+      "event_city": [
+        {
+          "_id": "690c96169a9b6d282ec06cd1",
+          "geo": {
+            "lat": 55.54987,
+            "lon": 36.983667
+          },
+          "registration_open": "2025-11-06T13:00:00",
+          "address": "Москва, полигон Алабино",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-02-21T06:00:00",
+          "registration_close": "2026-02-20T14:00:00",
+          "public_id": "zima2026_524901_2102",
+          "qr": true,
+          "event_public_id": "zima2026",
+          "event_type": {
+            "public_id": "gonka_zima"
+          },
+          "public": true,
+          "timezone": "Europe/Moscow",
+          "banners": [],
+          "info": {
+            "public_transport": "от ЖД станции Голицино"
+          },
+          "corp": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "68c13b55b5de790c14827469",
+        "title": "Арктический марафон",
+        "description": "Место, где морозный воздух и белоснежные просторы создают условия для настоящего полярного марафона.",
+        "logo": "/uploads/f91a1201f824a9531bfa6194ea67ae60ac403416.svg",
+        "public_id": "arcticmarathon",
+        "user_public_id": "5128303bef"
+      },
+      "banners": {
+        "landing_page": {
+          "button_color": "#ff3600",
+          "text_color": "#ffffff"
+        }
+      },
+      "title": "Арктический марафон",
+      "title_above": "Арктический марафон совместно с Русским географическим обществом",
+      "external_url": "https://northpolecamp.ru/expedition-program/arctic-marathon",
+      "enabled": true,
+      "description": "Место, где морозный воздух и белоснежные просторы создают условия для настоящего полярного марафона.",
+      "video_promo": "",
+      "public": true,
+      "cancel": true,
+      "public_id": "arcticmarathon2025",
+      "user_public_id": "5128303bef",
+      "created_date": "2025-09-10T08:49:46.472000",
+      "event_city": [
+        {
+          "_id": "68c13ccbb5de790c148274aa",
+          "geo": {
+            "lat": null,
+            "lon": null
+          },
+          "registration_open": "2025-09-10T08:50:00",
+          "address": "АРКТИКА",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-04-03T06:00:00",
+          "public_id": "arcticmarathon2025_arctic",
+          "event_public_id": "arcticmarathon2025",
+          "registration_close": "2026-04-03T06:00:00",
+          "public": true,
+          "external_url": "https://northpolecamp.ru/expedition-program/arctic-marathon#information",
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "discount_form": "percent"
+          },
+          "corp": false,
+          "event_type": {
+            "public_id": "arcticmarathon"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-09-10T08:54:35.127000",
+          "user_public_id": "5128303bef"
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "64956bc93b334215560c897f",
+        "title": "Гонка Героев",
+        "public_id": "gonka",
+        "description": "Всероссийский забег с препятствиями.",
+        "logo": "/files/proj-logo-racehero.svg",
+        "video_promo": "https://www.youtube.com/watch?v=VDUnaJwcs3M",
+        "project": {
+          "link": "https://heroleague.ru/race",
+          "picture_main": "https://heroleague.ru/uploads/f683cf137ee31e02c0ca44243cc01566efa44762.webp",
+          "priority_number": 1,
+          "public": true,
+          "size": "small"
+        }
+      },
+      "banners": {
+        "home_page": {
+          "desktop_picture": "/files/gonka_desktop_picture.jpg",
+          "mobile_picture": "/files/gonka_mobile_picture.png",
+          "button_color": "#D3161E",
+          "text_color": "#fff"
+        },
+        "landing_page": {
+          "desktop_picture": "/uploads/ffee74c7361877ddf2792c69b9d427c42bf526a6.png",
+          "mobile_picture": "/uploads/ffee74c7361877ddf2792c69b9d427c42bf526a6.png",
+          "button_color": "#FF3600",
+          "text_color": "#fff"
+        }
+      },
+      "title": "Гонка Героев",
+      "title_above": "Тебя ждут невероятные испытания, сплоченная работа в команде, драйв и адреналин",
+      "external_url": "/race",
+      "public_id": "gonka2026",
+      "enabled": true,
+      "description": "Российский экстремальный забег по пересеченной местности. Гонка Героев – это новый вид активного отдыха для тех, кто привык брать от жизни всё. Собирай команду друзей или участвуй самостоятельно.",
+      "video_promo": "",
+      "slider": null,
+      "public": true,
+      "production": true,
+      "cancel": true,
+      "result_cert_template": "files/gonka_results.svg",
+      "event_city": [
+        {
+          "_id": "690dec5d9a9b6d282ec06d6f",
+          "geo": {
+            "lat": 55.54987,
+            "lon": 36.983667
+          },
+          "registration_open": "2025-11-07T11:59:00",
+          "address": "Москва, полигон Алабино",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-04-18T06:00:00",
+          "registration_close": "2026-04-18T06:00:00",
+          "public_id": "gonka2026_524901_1804",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "created_date": "2025-11-07T11:59:44.447000",
+          "corp": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911991eb4566572e2e4bc9d",
+          "geo": {
+            "lat": 55.54987,
+            "lon": 36.983667
+          },
+          "registration_open": "2025-11-20T07:49:00",
+          "address": "Москва, полигон Алабино",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-05-16T06:00:00",
+          "registration_close": "2026-05-15T06:00:00",
+          "public_id": "gonka2026_524901_1605",
+          "public": false,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "created_date": "2025-11-10T07:49:50.868000",
+          "corp": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "69119bac5793bc01e54143b0",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T00:00:00",
+          "address": "Казань, \"Свияжские Холмы\"",
+          "city": {
+            "id": 551487,
+            "name_ru": "Казань"
+          },
+          "start_time": "2026-06-06T06:00:00",
+          "registration_close": "2026-06-06T05:30:00",
+          "public_id": "gonka2026_551487_0606",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "results_data": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911a391b4566572e2e4bece",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T08:34:00",
+          "address": "Екатеринбург, полигон Свердловский",
+          "city": {
+            "id": 1486209,
+            "name_ru": "Екатеринбург"
+          },
+          "start_time": "2026-06-13T04:00:00",
+          "registration_close": "2026-06-12T04:00:00",
+          "public_id": "gonka2026_1486209_1306",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Asia/Yekaterinburg",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-10T08:34:25.178000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911af54b4566572e2e4c23e",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T09:24:00",
+          "address": "Санкт-Петербург, полигон Песочненский",
+          "city": {
+            "id": 498817,
+            "name_ru": "Санкт-Петербург"
+          },
+          "start_time": "2026-06-13T06:00:00",
+          "registration_close": "2026-06-12T06:00:00",
+          "public_id": "gonka2026_498817_1306",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "corp": false,
+          "results_data": true,
+          "created_date": "2025-11-10T09:24:36.303000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911b557b4566572e2e4c558",
+          "geo": {
+            "lat": 55.54987,
+            "lon": 36.983667
+          },
+          "registration_open": "2025-11-20T09:50:00",
+          "address": "Москва, полигон Алабино",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-06-20T06:00:00",
+          "registration_close": "2026-06-19T06:00:00",
+          "public_id": "gonka2026_524901_2006",
+          "public": false,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "created_date": "2025-11-10T09:50:15.570000",
+          "corp": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911b747b4566572e2e4c6a5",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T09:58:00",
+          "address": "Самара, Ассет Арена",
+          "city": {
+            "id": 499099,
+            "name_ru": "Самара"
+          },
+          "start_time": "2026-06-20T05:00:00",
+          "registration_close": "2026-06-19T05:00:00",
+          "public_id": "gonka2026_499099_2006",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Samara",
+          "corp": true,
+          "results_data": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false,
+          "created_date": "2025-11-10T09:58:31.293000"
+        },
+        {
+          "_id": "6911daa2b4566572e2e4d416",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T12:29:00",
+          "address": "Новосибирск, полигон \"НВВКУ\"",
+          "city": {
+            "id": 1496747,
+            "name_ru": "Новосибирск"
+          },
+          "start_time": "2026-06-27T02:00:00",
+          "registration_close": "2026-06-26T02:00:00",
+          "public_id": "gonka2026_1496747_2706",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Asia/Novosibirsk",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-10T12:29:22.836000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911dba6b4566572e2e4d44d",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T08:33:00",
+          "address": "Нижний Новгород, полигон Мулино",
+          "city": {
+            "id": 520555,
+            "name_ru": "Нижний Новгород"
+          },
+          "start_time": "2026-07-04T06:00:00",
+          "registration_close": "2026-07-03T06:00:00",
+          "public_id": "gonka2026_520555_0407",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-10T12:33:42.108000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911dc7ab4566572e2e4d48f",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T08:37:00",
+          "address": "Владивосток, \"Горностай\"",
+          "city": {
+            "id": 2013348,
+            "name_ru": "Владивосток"
+          },
+          "start_time": "2026-07-17T23:00:00",
+          "registration_close": "2026-07-16T23:00:00",
+          "public_id": "gonka2026_2013348_1707",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Asia/Vladivostok",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-10T12:37:14.723000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911de22b4566572e2e4d507",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T08:44:00",
+          "address": "Тула, парк Некрасово",
+          "city": {
+            "id": 480562,
+            "name_ru": "Тула"
+          },
+          "start_time": "2026-09-12T06:00:00",
+          "registration_close": "2026-09-11T06:00:00",
+          "public_id": "gonka2026_480562_1209",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-10T12:44:18.952000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911e0c4b4566572e2e4d5c6",
+          "geo": {
+            "lat": 55.54987,
+            "lon": 36.983667
+          },
+          "registration_open": "2025-11-20T12:55:00",
+          "address": "Москва, полигон Алабино",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-07-25T06:00:00",
+          "registration_close": "2026-07-24T06:00:00",
+          "public_id": "gonka2026_524901_2507",
+          "public": false,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "created_date": "2025-11-10T12:55:32.469000",
+          "corp": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911e10ab4566572e2e4d5fb",
+          "geo": {
+            "lat": 55.54987,
+            "lon": 36.983667
+          },
+          "registration_open": "2026-01-20T12:56:00",
+          "address": "Москва, полигон Алабино",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-08-22T06:00:00",
+          "registration_close": "2026-08-21T06:00:00",
+          "public_id": "gonka2026_524901_2208",
+          "public": false,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "created_date": "2025-11-10T12:56:42.848000",
+          "corp": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911e160b4566572e2e4d63d",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2026-01-20T12:58:00",
+          "address": "Санкт-Петербург, полигон Песочненский",
+          "city": {
+            "id": 498817,
+            "name_ru": "Санкт-Петербург"
+          },
+          "start_time": "2026-08-29T06:00:00",
+          "registration_close": "2026-08-28T06:00:00",
+          "public_id": "gonka2026_498817_2908",
+          "public": false,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-10T12:58:08.576000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911e23fb4566572e2e4d6a1",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T08:01:00",
+          "address": "Менделеевск, стадион Менделеева",
+          "city": {
+            "id": 527579,
+            "name_ru": "Менделеевск"
+          },
+          "start_time": "2026-07-25T06:00:00",
+          "registration_close": "2026-07-24T06:00:00",
+          "public_id": "gonka2026_527579_2507",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-10T13:01:51.766000",
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6911e382b4566572e2e4d712",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T08:07:00",
+          "address": "Волгоград, полигон Прудбой",
+          "city": {
+            "id": 472757,
+            "name_ru": "Волгоград"
+          },
+          "start_time": "2026-09-26T06:00:00",
+          "registration_close": "2026-09-25T06:00:00",
+          "public_id": "gonka2026_472757_2609",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Volgograd",
+          "corp": true,
+          "results_data": true,
+          "corp_city": false,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false,
+          "created_date": "2025-11-10T13:07:14.795000"
+        },
+        {
+          "_id": "69148aaab4566572e2e54690",
+          "geo": {
+            "lat": 55.54987,
+            "lon": 36.983667
+          },
+          "registration_open": "2025-11-12T13:24:58.327000",
+          "address": "Москва, полигон Алабино",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-06-13T06:00:00",
+          "registration_close": "2026-06-12T06:00:00",
+          "public_id": "gonka2026_524901_1306",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "created_date": "2025-11-12T13:24:58.327000",
+          "corp": true,
+          "corp_city": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "691495e8b4566572e2e549f6",
+          "geo": {
+            "lat": 55.729213,
+            "lon": 48.72323
+          },
+          "registration_open": "2025-11-12T14:12:56.648000",
+          "address": "Санкт-Петербург, полигон Песочненский",
+          "city": {
+            "id": 498817,
+            "name_ru": "Санкт-Петербург"
+          },
+          "start_time": "2026-06-20T06:00:00",
+          "registration_close": "2026-06-19T06:00:00",
+          "public_id": "gonka2026_498817_2006",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "results_data": true,
+          "created_date": "2025-11-12T14:12:56.648000",
+          "corp_city": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "64956bc93b334215560c897c",
+        "title": "Забег",
+        "public_id": "zabeg",
+        "description": "Международный полумарафон с синхронным стартом",
+        "logo": "/files/proj-logo-run.svg",
+        "video_promo": "https://youtu.be/MgfXT-vwW90",
+        "banners": [
+          {
+            "url": "https://heroleague.ru/static/media/proj2@1x-min.881dd049.jpg",
+            "description": "Международный полумарафон с синхронным стартом",
+            "title": "Забег"
+          },
+          {
+            "url": "/files/eventsCard/card-cover1@1x-min.jpg",
+            "description": "Международный полумарафон с синхронным стартом",
+            "title": "Забег"
+          },
+          {
+            "url": "https://heroleague.ru/static/media/proj2@1x-min.881dd049.jpg",
+            "description": "Международный полумарафон с синхронным стартом",
+            "title": "Забег"
+          }
+        ],
+        "project": {
+          "link": " https://забег.рф",
+          "picture_main": "https://heroleague.ru/uploads/fadd2e34b5e8500d3a41d0b2a3b783f8cafcbf8e.webp",
+          "priority_number": 1,
+          "public": true,
+          "size": "small"
+        }
+      },
+      "banners": {
+        "home_page": {
+          "desktop_picture": "/files/zabeg_ticket_bg.webp",
+          "mobile_picture": "/files/zabeg_ticket_bg.webp",
+          "button_color": "#ED1C24",
+          "text_color": "#fff"
+        },
+        "landing_page": {
+          "desktop_picture": "/files/zabeg_ticket_bg.webp",
+          "mobile_picture": "/files/zabeg_ticket_bg.webp",
+          "button_color": "#ED1C24",
+          "text_color": "#fff"
+        }
+      },
+      "title": "Забег.РФ",
+      "title_above": "X Всероссийский полумарафон",
+      "external_url": "https://забег.рф",
+      "public_id": "zabeg2026",
+      "enabled": true,
+      "description": "Самый крупный полумарафон с синхронным стартом: 4 дистанции, крутая фан-зона и яркий праздник от Калининграда до Камчатки.",
+      "video_promo": "",
+      "slider": null,
+      "public": true,
+      "production": true,
+      "cancel": true,
+      "regions": [],
+      "created_date": "2025-09-03T14:42:13.046000",
+      "event_city": [
+        {
+          "_id": "68b853c55c85b03fc0805a37",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Владивосток",
+          "city": {
+            "id": 2013348,
+            "name_ru": "Владивосток"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_2013348",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 80
+            },
+            {
+              "size": "Детский 152",
+              "count": 120
+            },
+            {
+              "size": "XXS",
+              "count": 160
+            },
+            {
+              "size": "XS",
+              "count": 160
+            },
+            {
+              "size": "S",
+              "count": 700
+            },
+            {
+              "size": "M",
+              "count": 1170
+            },
+            {
+              "size": "L",
+              "count": 780
+            },
+            {
+              "size": "XL",
+              "count": 590
+            },
+            {
+              "size": "XXL",
+              "count": 150
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.053000",
+          "timezone": "Asia/Vladivostok",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a38",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Иркутск",
+          "city": {
+            "id": 2023469,
+            "name_ru": "Иркутск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_2023469",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 40
+            },
+            {
+              "size": "Детский 152",
+              "count": 40
+            },
+            {
+              "size": "XXS",
+              "count": 90
+            },
+            {
+              "size": "XS",
+              "count": 90
+            },
+            {
+              "size": "S",
+              "count": 330
+            },
+            {
+              "size": "M",
+              "count": 650
+            },
+            {
+              "size": "L",
+              "count": 540
+            },
+            {
+              "size": "XL",
+              "count": 330
+            },
+            {
+              "size": "XXL",
+              "count": 70
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.059000",
+          "timezone": "Asia/Irkutsk",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a39",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Хабаровск",
+          "city": {
+            "id": 2022890,
+            "name_ru": "Хабаровск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_2022890",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 20
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 90
+            },
+            {
+              "size": "XS",
+              "count": 90
+            },
+            {
+              "size": "S",
+              "count": 490
+            },
+            {
+              "size": "M",
+              "count": 680
+            },
+            {
+              "size": "L",
+              "count": 440
+            },
+            {
+              "size": "XL",
+              "count": 220
+            },
+            {
+              "size": "XXL",
+              "count": 110
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.067000",
+          "timezone": "Asia/Vladivostok",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a3a",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Якутск",
+          "city": {
+            "id": 2013159,
+            "name_ru": "Якутск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_2013159",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 80
+            },
+            {
+              "size": "Детский 152",
+              "count": 50
+            },
+            {
+              "size": "XXS",
+              "count": 70
+            },
+            {
+              "size": "XS",
+              "count": 70
+            },
+            {
+              "size": "S",
+              "count": 280
+            },
+            {
+              "size": "M",
+              "count": 550
+            },
+            {
+              "size": "L",
+              "count": 360
+            },
+            {
+              "size": "XL",
+              "count": 270
+            },
+            {
+              "size": "XXL",
+              "count": 90
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.074000",
+          "timezone": "Asia/Yakutsk",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a3b",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Чита",
+          "city": {
+            "id": 2025339,
+            "name_ru": "Чита"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_2025339",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 40
+            },
+            {
+              "size": "Детский 152",
+              "count": 50
+            },
+            {
+              "size": "XXS",
+              "count": 90
+            },
+            {
+              "size": "XS",
+              "count": 100
+            },
+            {
+              "size": "S",
+              "count": 280
+            },
+            {
+              "size": "M",
+              "count": 320
+            },
+            {
+              "size": "L",
+              "count": 380
+            },
+            {
+              "size": "XL",
+              "count": 220
+            },
+            {
+              "size": "XXL",
+              "count": 90
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.080000",
+          "timezone": "Asia/Chita",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a3c",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Петропавловск-Камчатский",
+          "city": {
+            "id": 2122104,
+            "name_ru": "Петропавловск-Камчатский"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_2122104",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 40
+            },
+            {
+              "size": "Детский 152",
+              "count": 30
+            },
+            {
+              "size": "XXS",
+              "count": 35
+            },
+            {
+              "size": "XS",
+              "count": 50
+            },
+            {
+              "size": "S",
+              "count": 175
+            },
+            {
+              "size": "M",
+              "count": 330
+            },
+            {
+              "size": "L",
+              "count": 280
+            },
+            {
+              "size": "XL",
+              "count": 110
+            },
+            {
+              "size": "XXL",
+              "count": 120
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.091000",
+          "timezone": "Asia/Kamchatka",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a3d",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Новосибирск",
+          "city": {
+            "id": 1496747,
+            "name_ru": "Новосибирск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_1496747",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 100
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 100
+            },
+            {
+              "size": "XS",
+              "count": 200
+            },
+            {
+              "size": "S",
+              "count": 680
+            },
+            {
+              "size": "M",
+              "count": 1220
+            },
+            {
+              "size": "L",
+              "count": 1410
+            },
+            {
+              "size": "XL",
+              "count": 680
+            },
+            {
+              "size": "XXL",
+              "count": 390
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.100000",
+          "timezone": "Asia/Novosibirsk",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a3e",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Красноярск",
+          "city": {
+            "id": 1502026,
+            "name_ru": "Красноярск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_1502026",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 80
+            },
+            {
+              "size": "Детский 152",
+              "count": 100
+            },
+            {
+              "size": "XXS",
+              "count": 80
+            },
+            {
+              "size": "XS",
+              "count": 100
+            },
+            {
+              "size": "S",
+              "count": 380
+            },
+            {
+              "size": "M",
+              "count": 770
+            },
+            {
+              "size": "L",
+              "count": 640
+            },
+            {
+              "size": "XL",
+              "count": 330
+            },
+            {
+              "size": "XXL",
+              "count": 70
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.108000",
+          "timezone": "Asia/Krasnoyarsk",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a3f",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Кемерово",
+          "city": {
+            "id": 1503901,
+            "name_ru": "Кемерово"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_1503901",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 70
+            },
+            {
+              "size": "Детский 152",
+              "count": 70
+            },
+            {
+              "size": "XXS",
+              "count": 40
+            },
+            {
+              "size": "XS",
+              "count": 70
+            },
+            {
+              "size": "S",
+              "count": 420
+            },
+            {
+              "size": "M",
+              "count": 770
+            },
+            {
+              "size": "L",
+              "count": 540
+            },
+            {
+              "size": "XL",
+              "count": 170
+            },
+            {
+              "size": "XXL",
+              "count": 50
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.114000",
+          "timezone": "Asia/Novokuznetsk",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a40",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Челябинск",
+          "city": {
+            "id": 1508291,
+            "name_ru": "Челябинск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_1508291",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 60
+            },
+            {
+              "size": "Детский 152",
+              "count": 60
+            },
+            {
+              "size": "XXS",
+              "count": 40
+            },
+            {
+              "size": "XS",
+              "count": 40
+            },
+            {
+              "size": "S",
+              "count": 340
+            },
+            {
+              "size": "M",
+              "count": 740
+            },
+            {
+              "size": "L",
+              "count": 520
+            },
+            {
+              "size": "XL",
+              "count": 140
+            },
+            {
+              "size": "XXL",
+              "count": 150
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.119000",
+          "timezone": "Asia/Yekaterinburg",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a41",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Екатеринбург",
+          "city": {
+            "id": 1486209,
+            "name_ru": "Екатеринбург"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_1486209",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 70
+            },
+            {
+              "size": "Детский 152",
+              "count": 70
+            },
+            {
+              "size": "XXS",
+              "count": 80
+            },
+            {
+              "size": "XS",
+              "count": 260
+            },
+            {
+              "size": "S",
+              "count": 570
+            },
+            {
+              "size": "M",
+              "count": 1130
+            },
+            {
+              "size": "L",
+              "count": 950
+            },
+            {
+              "size": "XL",
+              "count": 530
+            },
+            {
+              "size": "XXL",
+              "count": 120
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.124000",
+          "timezone": "Asia/Yekaterinburg",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a42",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Уфа",
+          "city": {
+            "id": 479561,
+            "name_ru": "Уфа"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_479561",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 200
+            },
+            {
+              "size": "Детский 152",
+              "count": 100
+            },
+            {
+              "size": "XXS",
+              "count": 100
+            },
+            {
+              "size": "XS",
+              "count": 200
+            },
+            {
+              "size": "S",
+              "count": 1000
+            },
+            {
+              "size": "M",
+              "count": 1440
+            },
+            {
+              "size": "L",
+              "count": 1400
+            },
+            {
+              "size": "XL",
+              "count": 400
+            },
+            {
+              "size": "XXL",
+              "count": 150
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.132000",
+          "timezone": "Asia/Yekaterinburg",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a43",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Ульяновск",
+          "city": {
+            "id": 479123,
+            "name_ru": "Ульяновск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_479123",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 100
+            },
+            {
+              "size": "Детский 152",
+              "count": 110
+            },
+            {
+              "size": "XXS",
+              "count": 60
+            },
+            {
+              "size": "XS",
+              "count": 90
+            },
+            {
+              "size": "S",
+              "count": 300
+            },
+            {
+              "size": "M",
+              "count": 540
+            },
+            {
+              "size": "L",
+              "count": 510
+            },
+            {
+              "size": "XL",
+              "count": 330
+            },
+            {
+              "size": "XXL",
+              "count": 110
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.137000",
+          "timezone": "Europe/Ulyanovsk",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a44",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Самара",
+          "city": {
+            "id": 499099,
+            "name_ru": "Самара"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_499099",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 90
+            },
+            {
+              "size": "Детский 152",
+              "count": 100
+            },
+            {
+              "size": "XXS",
+              "count": 65
+            },
+            {
+              "size": "XS",
+              "count": 100
+            },
+            {
+              "size": "S",
+              "count": 610
+            },
+            {
+              "size": "M",
+              "count": 865
+            },
+            {
+              "size": "L",
+              "count": 830
+            },
+            {
+              "size": "XL",
+              "count": 450
+            },
+            {
+              "size": "XXL",
+              "count": 100
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.143000",
+          "timezone": "Europe/Samara",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a45",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Саратов",
+          "city": {
+            "id": 498677,
+            "name_ru": "Саратов"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_498677",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 80
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 40
+            },
+            {
+              "size": "XS",
+              "count": 60
+            },
+            {
+              "size": "S",
+              "count": 340
+            },
+            {
+              "size": "M",
+              "count": 580
+            },
+            {
+              "size": "L",
+              "count": 500
+            },
+            {
+              "size": "XL",
+              "count": 270
+            },
+            {
+              "size": "XXL",
+              "count": 130
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.149000",
+          "timezone": "Europe/Saratov",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a46",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Ростов-на-Дону",
+          "city": {
+            "id": 501175,
+            "name_ru": "Ростов-на-Дону"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_501175",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 170
+            },
+            {
+              "size": "Детский 152",
+              "count": 350
+            },
+            {
+              "size": "XXS",
+              "count": 110
+            },
+            {
+              "size": "XS",
+              "count": 180
+            },
+            {
+              "size": "S",
+              "count": 1040
+            },
+            {
+              "size": "M",
+              "count": 1280
+            },
+            {
+              "size": "L",
+              "count": 1570
+            },
+            {
+              "size": "XL",
+              "count": 750
+            },
+            {
+              "size": "XXL",
+              "count": 350
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.157000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a47",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Сириус",
+          "city": {
+            "id": 4914220,
+            "name_ru": "Сириус"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_4914220",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 40
+            },
+            {
+              "size": "Детский 152",
+              "count": 100
+            },
+            {
+              "size": "XXS",
+              "count": 40
+            },
+            {
+              "size": "XS",
+              "count": 130
+            },
+            {
+              "size": "S",
+              "count": 450
+            },
+            {
+              "size": "M",
+              "count": 610
+            },
+            {
+              "size": "L",
+              "count": 490
+            },
+            {
+              "size": "XL",
+              "count": 210
+            },
+            {
+              "size": "XXL",
+              "count": 90
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.162000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a48",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Ялта",
+          "city": {
+            "id": 688533,
+            "name_ru": "Ялта"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2025-10-22T09:00:00",
+          "info": {},
+          "public_id": "zabeg2026_688533",
+          "qr": true,
+          "public": false,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 30
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 40
+            },
+            {
+              "size": "XS",
+              "count": 90
+            },
+            {
+              "size": "S",
+              "count": 350
+            },
+            {
+              "size": "M",
+              "count": 460
+            },
+            {
+              "size": "L",
+              "count": 430
+            },
+            {
+              "size": "XL",
+              "count": 200
+            },
+            {
+              "size": "XXL",
+              "count": 90
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.167000",
+          "timezone": "Europe/Simferopol",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a49",
+          "registration_open": "2025-09-04T08:00:00",
+          "address": "Москва",
+          "city": {
+            "id": 524901,
+            "name_ru": "Москва"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_524901",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 1140
+            },
+            {
+              "size": "Детский 152",
+              "count": 1510
+            },
+            {
+              "size": "XXS",
+              "count": 760
+            },
+            {
+              "size": "XS",
+              "count": 1510
+            },
+            {
+              "size": "S",
+              "count": 7200
+            },
+            {
+              "size": "M",
+              "count": 9480
+            },
+            {
+              "size": "L",
+              "count": 11380
+            },
+            {
+              "size": "XL",
+              "count": 3420
+            },
+            {
+              "size": "XXL",
+              "count": 1520
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.173000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false,
+          "corp_city": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a4a",
+          "registration_open": "2026-05-23T00:00:00",
+          "address": "МО (Раменское)",
+          "city": {
+            "id": 464687,
+            "name_ru": "Зарайск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_464687",
+          "qr": true,
+          "public": false,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 60
+            },
+            {
+              "size": "Детский 152",
+              "count": 70
+            },
+            {
+              "size": "XXS",
+              "count": 20
+            },
+            {
+              "size": "XS",
+              "count": 60
+            },
+            {
+              "size": "S",
+              "count": 160
+            },
+            {
+              "size": "M",
+              "count": 360
+            },
+            {
+              "size": "L",
+              "count": 300
+            },
+            {
+              "size": "XL",
+              "count": 120
+            },
+            {
+              "size": "XXL",
+              "count": 50
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.180000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false,
+          "corp_city": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a4b",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Санкт-Петербург",
+          "city": {
+            "id": 498817,
+            "name_ru": "Санкт-Петербург"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_498817",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 760
+            },
+            {
+              "size": "Детский 152",
+              "count": 760
+            },
+            {
+              "size": "XXS",
+              "count": 380
+            },
+            {
+              "size": "XS",
+              "count": 760
+            },
+            {
+              "size": "S",
+              "count": 3820
+            },
+            {
+              "size": "M",
+              "count": 5720
+            },
+            {
+              "size": "L",
+              "count": 4770
+            },
+            {
+              "size": "XL",
+              "count": 1530
+            },
+            {
+              "size": "XXL",
+              "count": 570
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.185000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a4c",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Калининград",
+          "city": {
+            "id": 554234,
+            "name_ru": "Калининград"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_554234",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 100
+            },
+            {
+              "size": "Детский 152",
+              "count": 120
+            },
+            {
+              "size": "XXS",
+              "count": 40
+            },
+            {
+              "size": "XS",
+              "count": 110
+            },
+            {
+              "size": "S",
+              "count": 270
+            },
+            {
+              "size": "M",
+              "count": 630
+            },
+            {
+              "size": "L",
+              "count": 520
+            },
+            {
+              "size": "XL",
+              "count": 210
+            },
+            {
+              "size": "XXL",
+              "count": 90
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.190000",
+          "timezone": "Europe/Kaliningrad",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a4d",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Псков",
+          "city": {
+            "id": 504341,
+            "name_ru": "Псков"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_504341",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 40
+            },
+            {
+              "size": "Детский 152",
+              "count": 40
+            },
+            {
+              "size": "XXS",
+              "count": 20
+            },
+            {
+              "size": "XS",
+              "count": 50
+            },
+            {
+              "size": "S",
+              "count": 230
+            },
+            {
+              "size": "M",
+              "count": 340
+            },
+            {
+              "size": "L",
+              "count": 280
+            },
+            {
+              "size": "XL",
+              "count": 90
+            },
+            {
+              "size": "XXL",
+              "count": 40
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.195000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a4e",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Череповец",
+          "city": {
+            "id": 569223,
+            "name_ru": "Череповец"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-23T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_569223",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 30
+            },
+            {
+              "size": "Детский 152",
+              "count": 30
+            },
+            {
+              "size": "XXS",
+              "count": 10
+            },
+            {
+              "size": "XS",
+              "count": 30
+            },
+            {
+              "size": "S",
+              "count": 100
+            },
+            {
+              "size": "M",
+              "count": 220
+            },
+            {
+              "size": "L",
+              "count": 220
+            },
+            {
+              "size": "XL",
+              "count": 80
+            },
+            {
+              "size": "XXL",
+              "count": 30
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.201000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false,
+          "corp_city": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a4f",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Великий Новгород",
+          "city": {
+            "id": 519336,
+            "name_ru": "Великий Новгород"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_519336",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 70
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 60
+            },
+            {
+              "size": "XS",
+              "count": 90
+            },
+            {
+              "size": "S",
+              "count": 380
+            },
+            {
+              "size": "M",
+              "count": 600
+            },
+            {
+              "size": "L",
+              "count": 380
+            },
+            {
+              "size": "XL",
+              "count": 150
+            },
+            {
+              "size": "XXL",
+              "count": 60
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.207000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a50",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Тамбов",
+          "city": {
+            "id": 484646,
+            "name_ru": "Тамбов"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_484646",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 80
+            },
+            {
+              "size": "Детский 152",
+              "count": 100
+            },
+            {
+              "size": "XXS",
+              "count": 60
+            },
+            {
+              "size": "XS",
+              "count": 80
+            },
+            {
+              "size": "S",
+              "count": 260
+            },
+            {
+              "size": "M",
+              "count": 360
+            },
+            {
+              "size": "L",
+              "count": 410
+            },
+            {
+              "size": "XL",
+              "count": 210
+            },
+            {
+              "size": "XXL",
+              "count": 70
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.213000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a51",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Ярославль",
+          "city": {
+            "id": 468902,
+            "name_ru": "Ярославль"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_468902",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 90
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 120
+            },
+            {
+              "size": "XS",
+              "count": 150
+            },
+            {
+              "size": "S",
+              "count": 460
+            },
+            {
+              "size": "M",
+              "count": 610
+            },
+            {
+              "size": "L",
+              "count": 760
+            },
+            {
+              "size": "XL",
+              "count": 450
+            },
+            {
+              "size": "XXL",
+              "count": 310
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.218000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a52",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Тверь",
+          "city": {
+            "id": 480060,
+            "name_ru": "Тверь"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2026-05-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_480060",
+          "qr": true,
+          "public": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 90
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 40
+            },
+            {
+              "size": "XS",
+              "count": 100
+            },
+            {
+              "size": "S",
+              "count": 450
+            },
+            {
+              "size": "M",
+              "count": 680
+            },
+            {
+              "size": "L",
+              "count": 570
+            },
+            {
+              "size": "XL",
+              "count": 180
+            },
+            {
+              "size": "XXL",
+              "count": 70
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.224000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false,
+          "roles": {
+            "viewer": [
+              "32c3c9f5e6"
+            ]
+          }
+        },
+        {
+          "_id": "68b853c55c85b03fc0805a53",
+          "registration_open": "2025-09-04T09:00:00",
+          "address": "Нижний Новгород",
+          "city": {
+            "id": 520555,
+            "name_ru": "Нижний Новгород"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "registration_close": "2025-09-18T14:00:00",
+          "info": {},
+          "public_id": "zabeg2026_520555",
+          "qr": true,
+          "public": false,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 100
+            },
+            {
+              "size": "Детский 152",
+              "count": 100
+            },
+            {
+              "size": "XXS",
+              "count": 100
+            },
+            {
+              "size": "XS",
+              "count": 100
+            },
+            {
+              "size": "S",
+              "count": 100
+            },
+            {
+              "size": "M",
+              "count": 100
+            },
+            {
+              "size": "L",
+              "count": 100
+            },
+            {
+              "size": "XL",
+              "count": 100
+            },
+            {
+              "size": "XXL",
+              "count": 100
+            }
+          ],
+          "event_public_id": "zabeg2026",
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "created_date": "2025-09-03T14:42:13.232000",
+          "timezone": "Europe/Moscow",
+          "corp": true,
+          "sale": {
+            "active": false
+          },
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "68ff686233312e62fc1a7837",
+          "registration_open": "2025-10-27T12:40:00",
+          "address": "Воронеж",
+          "city": {
+            "id": 472045,
+            "name_ru": "Воронеж"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "public_id": "zabeg2026_472045",
+          "event_public_id": "zabeg2026",
+          "registration_close": "2026-05-18T14:00:00",
+          "public": true,
+          "external_url": "https://reg.russiarunning.com/event/VORONEZhSKIYPOLUMARAFONZABEGRF202623052026",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": true,
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-10-27T12:41:06.285000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "692edb598daccce35f92708d",
+          "registration_open": "2025-12-02T12:26:00",
+          "address": "Петрозаводск",
+          "city": {
+            "id": 509820,
+            "name_ru": "Петрозаводск"
+          },
+          "start_time": "2026-05-23T06:00:00",
+          "public_id": "zabeg2026_509820",
+          "event_public_id": "zabeg2026",
+          "registration_close": "2026-05-18T14:00:00",
+          "public": true,
+          "external_url": "https://reg.russiarunning.com/event/zabegptz2026",
+          "qr": false,
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": false,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "timezone": "Europe/Moscow",
+          "create_date": "2025-12-02T12:28:09.789000",
+          "user_public_id": "5128303bef"
+        },
+        {
+          "_id": "693137868daccce35f928064",
+          "registration_open": "2025-12-04T04:22:00",
+          "address": "Барнаул",
+          "city": {
+            "id": 1510853,
+            "name_ru": "Барнаул"
+          },
+          "start_time": "2026-05-23T03:00:00",
+          "public_id": "zabeg2026_1510853",
+          "event_public_id": "zabeg2026",
+          "registration_close": "2026-05-18T11:00:00",
+          "public": true,
+          "qr": true,
+          "shirts": [
+            {
+              "size": "Детский 140",
+              "count": 80
+            },
+            {
+              "size": "Детский 152",
+              "count": 90
+            },
+            {
+              "size": "XXS",
+              "count": 80
+            },
+            {
+              "size": "XS",
+              "count": 100
+            },
+            {
+              "size": "S",
+              "count": 330
+            },
+            {
+              "size": "M",
+              "count": 430
+            },
+            {
+              "size": "L",
+              "count": 340
+            },
+            {
+              "size": "XL",
+              "count": 170
+            },
+            {
+              "size": "XXL",
+              "count": 80
+            }
+          ],
+          "ticket_transfer_blocked": false,
+          "ticket_edit_blocked": false,
+          "sale": {
+            "active": false
+          },
+          "corp": true,
+          "corp_city": false,
+          "event_type": {
+            "public_id": "zabeg"
+          },
+          "timezone": "Asia/Barnaul",
+          "create_date": "2025-12-04T07:25:58.547000",
+          "user_public_id": "5128303bef"
+        }
+      ]
+    },
+    {
+      "event_type": {
+        "_id": "64956bc93b334215560c897f",
+        "title": "Гонка Героев",
+        "public_id": "gonka",
+        "description": "Всероссийский забег с препятствиями.",
+        "logo": "/files/proj-logo-racehero.svg",
+        "video_promo": "https://www.youtube.com/watch?v=VDUnaJwcs3M",
+        "project": {
+          "link": "https://heroleague.ru/race",
+          "picture_main": "https://heroleague.ru/uploads/f683cf137ee31e02c0ca44243cc01566efa44762.webp",
+          "priority_number": 1,
+          "public": true,
+          "size": "small"
+        }
+      },
+      "banners": {
+        "home_page": {
+          "desktop_picture": "/files/gonka_desktop_picture.jpg",
+          "mobile_picture": "/files/gonka_mobile_picture.png",
+          "button_color": "#D3161E",
+          "text_color": "#fff"
+        },
+        "landing_page": {
+          "desktop_picture": "/files/gonka_landing_picture.png",
+          "mobile_picture": "/files/gonka_landing_picture.png",
+          "button_color": "#FF3600",
+          "text_color": "#fff"
+        }
+      },
+      "title": "Гонка Героев Уфа",
+      "title_above": "Тебя ждут невероятные испытания, сплоченная работа в команде, драйв и адреналин",
+      "external_url": "/race",
+      "public_id": "gonka2026ufa",
+      "enabled": true,
+      "description": "Российский экстремальный забег по пересеченной местности. Гонка Героев – это новый вид активного отдыха для тех, кто привык брать от жизни всё. Собирай команду друзей или участвуй самостоятельно.",
+      "video_promo": "",
+      "slider": null,
+      "public": true,
+      "production": true,
+      "cancel": true,
+      "event_city": [
+        {
+          "_id": "6914a43009c2d53a6f109892",
+          "geo": {
+            "lat": 54.74306,
+            "lon": 55.96779
+          },
+          "registration_open": "2025-11-13T11:35:00",
+          "address": "Уфа, Алкино-2, парк Патриот",
+          "city": {
+            "id": 479561,
+            "name_ru": "Уфа"
+          },
+          "start_time": "2026-05-30T05:00:00",
+          "registration_close": "2026-05-29T05:00:00",
+          "public_id": "gonka2026ufa_479561_3005",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026ufa",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Asia/Yekaterinburg",
+          "created_date": "2025-11-12T16:19:48.226000",
+          "sale": {
+            "active": false,
+            "discount_form": "percent"
+          },
+          "corp": true,
+          "corp_city": false,
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        },
+        {
+          "_id": "6914a43009c2d53a6f109893",
+          "geo": {
+            "lat": 54.74306,
+            "lon": 55.96779
+          },
+          "registration_open": "2025-11-13T11:35:00",
+          "address": "Уфа (Дети), Алкино-2, парк Патриот",
+          "city": {
+            "id": 479561,
+            "name_ru": "Уфа"
+          },
+          "start_time": "2026-05-30T05:00:00",
+          "registration_close": "2026-05-29T05:00:00",
+          "public_id": "gonka2026ufachild_479561_3005",
+          "public": true,
+          "qr": true,
+          "event_public_id": "gonka2026ufa",
+          "event_type": {
+            "public_id": "gonka"
+          },
+          "timezone": "Asia/Yekaterinburg",
+          "sale": {
+            "active": false,
+            "discount_form": "percent"
+          },
+          "created_date": "2025-11-12T16:24:20.224000",
+          "corp": true,
+          "corp_city": false,
+          "ticket_edit_blocked": false,
+          "ticket_transfer_blocked": false
+        }
+      ]
+    }
+  ]
+}

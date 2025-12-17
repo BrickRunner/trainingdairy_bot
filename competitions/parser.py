@@ -323,6 +323,7 @@ class RussiaRunningParser:
                     "image_url": event.get("imageUrl", ""),
                     "participants_count": event.get("participantsCount", 0),
                     "organizer": event.get("organizerName", ""),
+                    "service": "RussiaRunning",  # Сервис для регистрации
                 }
 
                 # Даты
@@ -489,8 +490,13 @@ SPORT_CODES = {
     "Бег": "run",
     "Плавание": "swim",
     "Велоспорт": "bike",
+    "Лыжи": "ski",
+    "Триатлон": "triathlon",
     "Все виды спорта": "all",
 }
 
 # Обратный словарь
 SPORT_NAMES = {v: k for k, v in SPORT_CODES.items()}
+
+# Добавляем специальные названия (не для фильтра, только для отображения)
+SPORT_NAMES["camp"] = "Лига Путешествий"

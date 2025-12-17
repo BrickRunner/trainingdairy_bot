@@ -46,6 +46,37 @@ def calculate_pace(distance_km: float, time_str: str) -> Optional[str]:
         return None
 
 
+def _normalize_sport_type(sport_type: str) -> str:
+    """
+    Нормализует тип спорта к единому виду
+
+    Args:
+        sport_type: Исходный тип спорта
+
+    Returns:
+        Нормализованный тип спорта
+    """
+    if not sport_type:
+        return 'бег'
+
+    sport_lower = sport_type.lower().strip()
+
+    # Бег и все его варианты
+    if any(keyword in sport_lower for keyword in ['run', 'бег', 'running', 'single-sports']):
+        return 'бег'
+    # Плавание
+    elif any(keyword in sport_lower for keyword in ['swim', 'плав']):
+        return 'плавание'
+    # Велоспорт
+    elif any(keyword in sport_lower for keyword in ['bike', 'cycle', 'велос']):
+        return 'велоспорт'
+    # Триатлон
+    elif 'триатлон' in sport_lower or 'triathlon' in sport_lower:
+        return 'триатлон'
+    else:
+        return 'бег'  # По умолчанию бег
+
+
 def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Рассчитать статистику по соревнованиям пользователя
@@ -110,13 +141,13 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
         elif status == 'registered':
             stats['registered'] += 1
 
-        # Виды спорта
-        sport_type = p.get('sport_type', 'бег')
+        # Виды спорта - нормализуем для унификации
+        sport_type = _normalize_sport_type(p.get('sport_type', 'бег'))
         stats['by_type'][sport_type] += 1
 
-        # Дистанции
+        # Дистанции и километраж - считаем ТОЛЬКО для финишировавших
         distance = p.get('distance')
-        if distance:
+        if distance and status == 'finished':
             stats['by_distance'][distance] += 1
             stats['total_distance'] += distance
 

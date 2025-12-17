@@ -195,6 +195,10 @@ def determine_competition_type(distance_km: float) -> str:
     Returns:
         Тип соревнования
     """
+    # Проверяем на None перед сравнением
+    if distance_km is None or distance_km <= 0:
+        return "забег"
+
     if distance_km >= 42:
         return "марафон"
     elif distance_km >= 21:

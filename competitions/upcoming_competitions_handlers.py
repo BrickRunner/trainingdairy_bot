@@ -7,9 +7,11 @@ from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, InlineKey
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from datetime import datetime
+import asyncio
 
 from competitions.competitions_fsm import UpcomingCompetitionsStates
-from competitions.parser import fetch_competitions, SPORT_CODES, SPORT_NAMES
+from competitions.parser import SPORT_CODES, SPORT_NAMES
+from competitions.competitions_fetcher import fetch_all_competitions, SERVICE_CODES, SERVICE_NAMES
 from database.queries import get_user_settings, add_competition_participant, is_user_participant, get_user_participant_competition_urls
 from utils.date_formatter import DateFormatter
 from utils.unit_converter import format_distance
@@ -146,6 +148,20 @@ async def show_period_selection(message: Message, state: FSMContext):
     await state.set_state(UpcomingCompetitionsStates.waiting_for_period)
 
 
+@router.callback_query(F.data == "upc:back:period")
+async def back_to_period(callback: CallbackQuery, state: FSMContext):
+    """Вернуться к выбору периода"""
+    await show_period_selection(callback.message, state)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "upc:back:sport")
+async def back_to_sport(callback: CallbackQuery, state: FSMContext):
+    """Вернуться к выбору спорта"""
+    await show_sport_selection(callback.message, state)
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("upc:period:"))
 async def select_period(callback: CallbackQuery, state: FSMContext):
     """Выбор периода"""
@@ -181,17 +197,19 @@ async def show_sport_selection(message: Message, state: FSMContext):
 
     builder = InlineKeyboardBuilder()
 
-    # Добавляем виды спорта
+    # Добавляем виды спорта (только основные для фильтра)
+    allowed_sports = ["Бег", "Плавание", "Велоспорт", "Все виды спорта"]
     for sport_name, sport_code in SPORT_CODES.items():
-        builder.row(
-            InlineKeyboardButton(
-                text=sport_name,
-                callback_data=f"upc:sport:{sport_code}"
+        if sport_name in allowed_sports:
+            builder.row(
+                InlineKeyboardButton(
+                    text=sport_name,
+                    callback_data=f"upc:sport:{sport_code}"
+                )
             )
-        )
 
     builder.row(
-        InlineKeyboardButton(text="◀️ Назад", callback_data="comp:upcoming")
+        InlineKeyboardButton(text="◀️ Назад", callback_data="upc:back:period")  # Назад к выбору периода
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад в меню", callback_data="comp:menu")
@@ -210,9 +228,78 @@ async def show_sport_selection(message: Message, state: FSMContext):
     await state.set_state(UpcomingCompetitionsStates.waiting_for_sport)
 
 
+async def show_service_selection(message: Message, state: FSMContext):
+    """Показать выбор сервиса для регистрации"""
+    data = await state.get_data()
+    city_display = data.get('city_display', 'Все города')
+    period_display = data.get('period_display', '1 месяц')
+    sport_display = data.get('sport_display', 'Все виды спорта')
+
+    text = (
+        f"🏃 <b>ПРЕДСТОЯЩИЕ СОРЕВНОВАНИЯ</b>\n\n"
+        f"📍 Город: <b>{city_display}</b>\n"
+        f"📅 Период: <b>{period_display}</b>\n"
+        f"🏃 Спорт: <b>{sport_display}</b>\n\n"
+        f"Выберите сервис для регистрации:"
+    )
+
+    builder = InlineKeyboardBuilder()
+
+    # Добавляем сервисы
+    for service_name, service_code in SERVICE_CODES.items():
+        builder.row(
+            InlineKeyboardButton(
+                text=service_name,
+                callback_data=f"upc:service:{service_code}"
+            )
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад", callback_data="upc:back:sport")  # Назад к выбору спорта
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="comp:menu")
+    )
+
+    try:
+        await message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+
+    await state.set_state(UpcomingCompetitionsStates.waiting_for_service)
+
+
+@router.callback_query(F.data.startswith("upc:service:"))
+async def select_service(callback: CallbackQuery, state: FSMContext):
+    """Выбор сервиса и показ результатов"""
+    service_data = callback.data.split(":", 2)[2]
+
+    # Сохраняем выбранный сервис
+    if service_data == "all":
+        service = None
+        service_display = "Все сервисы"
+    else:
+        service = service_data
+        # Находим название сервиса по коду
+        service_display = next(
+            (name for name, code in SERVICE_CODES.items() if code == service),
+            service_data
+        )
+
+    await state.update_data(service=service, service_display=service_display)
+
+    # Показываем результаты
+    await show_competitions_results(callback.message, state)
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("upc:sport:"))
 async def select_sport(callback: CallbackQuery, state: FSMContext):
-    """Выбор вида спорта и показ результатов"""
+    """Выбор вида спорта и переход к выбору сервиса"""
     sport_data = callback.data.split(":", 2)[2]
 
     # Сохраняем выбранный вид спорта
@@ -229,8 +316,8 @@ async def select_sport(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(sport=sport, sport_display=sport_display)
 
-    # Показываем результаты
-    await show_competitions_results(callback.message, state)
+    # Переходим к выбору сервиса
+    await show_service_selection(callback.message, state)
     await callback.answer()
 
 
@@ -243,6 +330,8 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
     sport_display = data.get('sport_display', 'Все виды спорта')
     period_months = data.get('period_months', 1)
     period_display = data.get('period_display', '1 месяц')
+    service = data.get('service')
+    service_display = data.get('service_display', 'Все сервисы')
 
     # Получаем user_id и настройки
     user_id = message.chat.id
@@ -254,7 +343,8 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
         f"🔍 <b>Поиск соревнований...</b>\n\n"
         f"📍 Город: <b>{city_display}</b>\n"
         f"📅 Период: <b>{period_display}</b>\n"
-        f"🏃 Спорт: <b>{sport_display}</b>"
+        f"🏃 Спорт: <b>{sport_display}</b>\n"
+        f"🌐 Сервис: <b>{service_display}</b>"
     )
 
     try:
@@ -266,14 +356,15 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
     # Получаем соревнования из API
     try:
         # Логируем параметры для отладки
-        logger.info(f"Fetching competitions: city={city}, sport={sport}, period_months={period_months}")
+        logger.info(f"Fetching competitions: city={city}, sport={sport}, period_months={period_months}, service={service}")
 
-        # Получаем все соревнования с фильтрацией по периоду
-        all_competitions = await fetch_competitions(
+        # Получаем все соревнования с фильтрацией по периоду и сервису
+        all_competitions = await fetch_all_competitions(
             city=city,
             sport=sport,
             limit=1000,  # Получаем максимум для фильтрации по периоду
-            period_months=period_months
+            period_months=period_months,
+            service=service
         )
 
         logger.info(f"Received {len(all_competitions)} competitions after filtering")
@@ -292,6 +383,7 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
         for comp in all_competitions:
             comp_url = comp.get('url', '')
             distances_count = len(comp.get('distances', []))
+            sport_code = comp.get('sport_code', '')
 
             # Пропускаем соревнования без URL
             if not comp_url:
@@ -299,11 +391,18 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
                 continue
 
             if distances_count <= 1:
-                # Одна дистанция или нет дистанций - скрываем если участвует
-                if comp_url not in participant_urls:
-                    filtered_competitions.append(comp)
+                # Одна дистанция или нет дистанций (HeroLeague)
+                # Для "camp" (Лига Путешествий) - скрываем после регистрации (одна регистрация)
+                # Для спортивных событий HeroLeague - показываем всегда (можно несколько дистанций)
+                if sport_code == "camp":
+                    # Лига Путешествий - скрываем после регистрации
+                    if comp_url not in participant_urls:
+                        filtered_competitions.append(comp)
+                    else:
+                        logger.info(f"Hiding competition (camp, registered): {comp.get('name', 'Unknown')}")
                 else:
-                    logger.info(f"Hiding competition (single distance, registered): {comp.get('name', 'Unknown')}")
+                    # Спортивные события HeroLeague - показываем всегда
+                    filtered_competitions.append(comp)
             else:
                 # Несколько дистанций - скрываем только если зарегистрирован на все
                 is_all_registered = await is_user_registered_all_distances(user_id, comp_url, distances_count)
@@ -348,7 +447,8 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
             f"😔 <b>Соревнования не найдены</b>\n\n"
             f"📍 Город: <b>{city_display}</b>\n"
             f"📅 Период: <b>{period_display}</b>\n"
-            f"🏃 Спорт: <b>{sport_display}</b>\n\n"
+            f"🏃 Спорт: <b>{sport_display}</b>\n"
+            f"🌐 Сервис: <b>{service_display}</b>\n\n"
             f"Попробуйте изменить параметры поиска."
         )
 
@@ -367,7 +467,8 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
         f"📄 Страница {page} из {total_pages}\n\n"
         f"📍 Город: <b>{city_display}</b>\n"
         f"📅 Период: <b>{period_display}</b>\n"
-        f"🏃 Спорт: <b>{sport_display}</b>\n\n"
+        f"🏃 Спорт: <b>{sport_display}</b>\n"
+        f"🌐 Сервис: <b>{service_display}</b>\n\n"
     )
 
     builder = InlineKeyboardBuilder()
@@ -468,27 +569,32 @@ async def show_competition_detail(callback: CallbackQuery, state: FSMContext):
             f"🏃 Вид спорта: {sport_name_ru}\n"
         )
 
-        # Дистанции
-        if comp['distances']:
-            from utils.unit_converter import safe_convert_distance_name
+        # Дистанции - НЕ показываем для HeroLeague
+        service = comp.get('service', '')
 
-            text += f"\n<b>📏 Дистанции:</b>\n"
-            for dist in comp['distances'][:10]:
-                # Форматируем дистанцию с учетом настроек пользователя
-                distance_km = dist.get('distance', 0)
-                distance_name = dist.get('name', 'Дистанция')
+        if service != 'HeroLeague':
+            # Показываем дистанции для RussiaRunning и Timerman
+            if comp.get('distances'):
+                from utils.unit_converter import safe_convert_distance_name
 
-                # Конвертируем название дистанции (безопасно, с fallback)
-                converted_name = safe_convert_distance_name(distance_name, distance_unit)
+                text += f"\n<b>📏 Дистанции:</b>\n"
+                for dist in comp['distances'][:10]:
+                    # Форматируем дистанцию с учетом настроек пользователя
+                    distance_km = dist.get('distance', 0)
+                    distance_name = dist.get('name', 'Дистанция')
 
-                # Показываем только сконвертированное название
-                # Не дублируем информацию о дистанции
-                text += f"  • {converted_name}\n"
+                    # Конвертируем название дистанции (безопасно, с fallback)
+                    converted_name = safe_convert_distance_name(distance_name, distance_unit)
 
-        if comp['url']:
+                    # Показываем только сконвертированное название
+                    # Не дублируем информацию о дистанции
+                    text += f"  • {converted_name}\n"
+
+        if comp.get('url'):
             text += f"\n🔗 <a href=\"{comp['url']}\">Подробнее на сайте</a>"
 
         # Проверяем, уже участвует ли пользователь
+        # Теперь URL уникальный для каждого city_event в HeroLeague
         is_participant = await is_user_participant(user_id, comp.get('url', comp_id))
         distances = comp.get('distances', [])
         distances_count = len(distances)
@@ -527,17 +633,34 @@ async def show_competition_detail(callback: CallbackQuery, state: FSMContext):
                     InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
                 )
         else:
-            # Одна дистанция или нет дистанций - старая логика
-            if is_participant:
-                logger.info("Showing: ❌ Отменить участие (single distance, registered)")
-                builder.row(
-                    InlineKeyboardButton(text="❌ Отменить участие", callback_data=f"comp:cancel:{comp_id}")
-                )
+            # Одна дистанция или нет дистанций (HeroLeague)
+            service = comp.get('service', '')
+            sport_code = comp.get('sport_code', '')
+
+            if service == 'HeroLeague' and sport_code != 'camp':
+                # Для спортивных событий HeroLeague показываем "Добавить дистанцию"
+                if is_participant:
+                    logger.info("Showing: ➕ Добавить дистанцию (HeroLeague sport, registered)")
+                    builder.row(
+                        InlineKeyboardButton(text="➕ Добавить дистанцию", callback_data=f"comp:participate:{comp_id}")
+                    )
+                else:
+                    logger.info("Showing: ✅ Я участвую (HeroLeague sport, not registered)")
+                    builder.row(
+                        InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
+                    )
             else:
-                logger.info("Showing: ✅ Я участвую (single distance, not registered)")
-                builder.row(
-                    InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
-                )
+                # Для Лиги Путешествий и других сервисов - одна регистрация
+                if is_participant:
+                    logger.info("Showing: ❌ Отменить участие (single registration)")
+                    builder.row(
+                        InlineKeyboardButton(text="❌ Отменить участие", callback_data=f"comp:cancel:{comp_id}")
+                    )
+                else:
+                    logger.info("Showing: ✅ Я участвую (single registration)")
+                    builder.row(
+                        InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
+                    )
 
         builder.row(
             InlineKeyboardButton(text="◀️ К списку", callback_data="upc:page:1")
@@ -652,15 +775,65 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
         elif len(distances) == 1:
             # Если только одна дистанция - сохраняем её и переходим к вводу времени
             distance_km = distances[0].get('distance', 0)
-            await state.update_data(selected_distance=distance_km, selected_distance_name=distances[0].get('name', ''))
+            # Проверяем что distance_km не None
+            selected_distance = distance_km if distance_km is not None and distance_km > 0 else None
+            await state.update_data(selected_distance=selected_distance, selected_distance_name=distances[0].get('name', ''))
 
             # Переходим к вводу целевого времени
             await prompt_for_target_time(callback, state, comp_id)
 
         else:
-            # Нет дистанций - сохраняем без дистанции и переходим к вводу времени
-            await state.update_data(selected_distance=None, selected_distance_name=None)
-            await prompt_for_target_time(callback, state, comp_id)
+            # Нет структурированных дистанций (например, HeroLeague)
+            # Проверяем сервис - для HeroLeague просим пользователя ввести дистанцию
+            service = comp.get('service', '')
+
+            if service == 'HeroLeague':
+                # Для HeroLeague просим пользователя ввести дистанцию вручную
+                await state.set_state(UpcomingCompetitionsStates.waiting_for_custom_distance)
+
+                # Получаем единицу измерения из настроек пользователя
+                user_id = callback.from_user.id
+                settings = await get_user_settings(user_id)
+                distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+                # Формируем примеры с правильной единицей измерения
+                if distance_unit == 'миль':
+                    examples = (
+                        f"• 3 {distance_unit}\n"
+                        f"• 6 {distance_unit}\n"
+                        f"• 13.1 {distance_unit}\n"
+                        f"• Марафон\n"
+                        f"• 2 {distance_unit} (лыжная гонка)\n"
+                    )
+                else:  # км
+                    examples = (
+                        f"• 5 {distance_unit}\n"
+                        f"• 10 {distance_unit}\n"
+                        f"• 21.1 {distance_unit}\n"
+                        f"• Марафон\n"
+                        f"• 3 {distance_unit} (лыжная гонка)\n"
+                    )
+
+                message_text = (
+                    f"📏 <b>Введите дистанцию</b>\n\n"
+                    f"Укажите дистанцию, на которой вы планируете участвовать.\n\n"
+                    f"Примеры:\n"
+                    f"{examples}"
+                )
+
+                builder = InlineKeyboardBuilder()
+                builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"compdetail:{comp_id}"))
+
+                await callback.message.edit_text(
+                    message_text,
+                    parse_mode="HTML",
+                    reply_markup=builder.as_markup()
+                )
+                await callback.answer()
+            else:
+                # Для других сервисов сохраняем без дистанции и переходим к вводу времени
+                await state.update_data(selected_distance=None, selected_distance_name=None)
+                await prompt_for_target_time(callback, state, comp_id)
 
     except Exception as e:
         logger.error(f"Error starting participation: {e}")
@@ -951,6 +1124,13 @@ async def save_all_distances_and_redirect(callback_or_message, state: FSMContext
 
         logger.info("All distances saved successfully")
 
+        # Verify saved data
+        from competitions.competitions_queries import get_user_competitions
+        saved_comps = await get_user_competitions(user_id, status_filter='upcoming')
+        logger.info(f"VERIFICATION: User {user_id} now has {len(saved_comps)} upcoming competitions")
+        for comp in saved_comps:
+            logger.info(f"  - {comp.get('name')} on {comp.get('date')}")
+
         # Show success message and redirect
         count = len(distances_to_process)
         logger.info(f"Showing success message for {count} distances")
@@ -997,13 +1177,21 @@ async def save_all_distances_and_redirect(callback_or_message, state: FSMContext
 
         # Send a new message with loading text, then replace it with "My Competitions"
         new_msg = await original_msg.answer("⏳ Загрузка...")
+        logger.info(f"Created loading message with id={new_msg.message_id}")
+
+        # Increased delay to ensure message is fully created and DB transaction is committed
+        logger.info("Waiting 0.5 seconds before editing message...")
+        await asyncio.sleep(0.5)
 
         # Create synthetic callback with the new message
         synthetic_callback = SyntheticCallback(new_msg, user)
+        logger.info(f"Created synthetic callback for user {user.id}")
 
-        # Import and call the handler directly with synthetic callback
+        # Возвращаемся в раздел "Мои соревнования"
+        logger.info("Returning to My Competitions...")
         from competitions.competitions_handlers import show_my_competitions
         await show_my_competitions(synthetic_callback, state)
+        logger.info("My Competitions shown")
 
     except Exception as e:
         logger.error(f"Error saving distances: {e}")
@@ -1018,7 +1206,7 @@ async def prompt_for_target_time(callback: CallbackQuery, state: FSMContext, com
     # Создаем клавиатуру с кнопкой "Пропустить"
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"comp:skip_time:{comp_id}"))
-    builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"comp:detail:{comp_id}"))
+    builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"compdetail:{comp_id}"))
 
     # Переводим в состояние ожидания целевого времени
     await state.set_state(UpcomingCompetitionsStates.waiting_for_target_time)
@@ -1061,8 +1249,14 @@ async def select_distance(callback: CallbackQuery, state: FSMContext):
         distance_km = selected_dist.get('distance', 0)
         distance_name = selected_dist.get('name', '')
 
+        # Проверяем что distance_km не None перед сравнением
+        if distance_km is not None and distance_km > 0:
+            selected_distance = distance_km
+        else:
+            selected_distance = None
+
         await state.update_data(
-            selected_distance=distance_km if distance_km > 0 else None,
+            selected_distance=selected_distance,
             selected_distance_name=distance_name
         )
 
@@ -1213,15 +1407,57 @@ async def skip_target_time(callback: CallbackQuery, state: FSMContext):
             show_alert=True
         )
 
-        # Очищаем state
-        await state.clear()
-
         # Показываем раздел "Мои соревнования"
         await show_my_competitions(callback, state)
 
     except Exception as e:
         logger.error(f"Error adding participant without target time: {e}")
         await callback.answer("❌ Ошибка при добавлении", show_alert=True)
+
+
+@router.message(UpcomingCompetitionsStates.waiting_for_custom_distance)
+async def process_custom_distance(message: Message, state: FSMContext):
+    """Обработать введенную дистанцию для HeroLeague"""
+    user_id = message.from_user.id
+
+    if not message.text:
+        await message.answer("❌ Пожалуйста, введите дистанцию в текстовом формате")
+        return
+
+    distance_name = message.text.strip()
+
+    logger.info(f"User {user_id} entered custom distance: {distance_name}")
+
+    # Сохраняем введенную дистанцию
+    await state.update_data(
+        selected_distance_name=distance_name,
+        selected_distance=None  # Нет числового значения для HeroLeague
+    )
+
+    # Переходим к вводу целевого времени
+    data = await state.get_data()
+    comp_id = data.get('pending_competition_id')
+
+    if not comp_id:
+        await message.answer("❌ Ошибка: не найден ID соревнования")
+        return
+
+    # Переходим к состоянию ввода целевого времени
+    await state.set_state(UpcomingCompetitionsStates.waiting_for_target_time)
+
+    # Создаем клавиатуру с кнопкой "Пропустить"
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"comp:skip_time:{comp_id}"))
+    builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data=f"compdetail:{comp_id}"))
+
+    # Отправляем НОВОЕ сообщение (не редактируем)
+    await message.answer(
+        "⏱ Введите целевое время для этого соревнования\n\n"
+        "Формат: ЧЧ:ММ:СС (например, 01:30:00) или ММ:СС (например, 45:30)\n\n"
+        "Вы можете пропустить этот шаг, нажав кнопку ниже.",
+        reply_markup=builder.as_markup()
+    )
 
 
 @router.message(UpcomingCompetitionsStates.waiting_for_target_time)
@@ -1276,8 +1512,14 @@ async def process_target_time(message: Message, state: FSMContext):
 
             logger.info(f"Current index: {current_index}, distance_times: {distance_times}")
 
-            # Store time for current distance
-            distance_times[current_index] = target_time
+            # Get REAL distance index from distances_to_process
+            current_distance_info = distances_to_process[current_index]
+            real_distance_idx = current_distance_info['index']
+
+            logger.info(f"Storing time '{target_time}' for real distance index {real_distance_idx} (current_index={current_index})")
+
+            # Store time for current distance using REAL index
+            distance_times[real_distance_idx] = target_time
 
             # Move to next distance FIRST
             next_index = current_index + 1
@@ -1416,12 +1658,19 @@ async def process_target_time(message: Message, state: FSMContext):
                     pass
 
             placeholder_msg = await message.answer("Загрузка...")
-            fake_callback = FakeCallback(placeholder_msg)
+            logger.info(f"Created placeholder message with id={placeholder_msg.message_id}")
 
+            # Increased delay to ensure DB transaction is committed and message can be edited
+            logger.info("Waiting 0.5 seconds before editing message...")
+            await asyncio.sleep(0.5)
+
+            logger.info("Returning to My Competitions (single-distance flow)...")
+
+            # Возвращаемся в раздел "Мои соревнования"
+            fake_callback = FakeCallback(placeholder_msg)
             await show_my_competitions(fake_callback, state)
 
-            # Очищаем state ПОСЛЕ показа ТОЛЬКО для single-distance flow
-            await state.clear()
+            logger.info("Competition details shown (single-distance flow)")
 
     except Exception as e:
         logger.error(f"Error processing target time: {e}")

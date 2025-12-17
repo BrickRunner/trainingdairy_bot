@@ -60,7 +60,12 @@
       "Bash(cmd /c \"venv\\Scripts\\python.exe test_redirect.py\")",
       "Bash(cmd /c:*)",
       "Bash(python:*)",
-      "Bash(del test_multi_distance_fix.py)"
+      "Bash(del test_multi_distance_fix.py)",
+      "Bash(del:*)",
+      "Bash(cd:*)",
+      "Bash(venvScriptspython.exe test_heroleague_events.py)",
+      "Bash(venvScriptspython.exe -m py_compile competitionsupcoming_competitions_handlers.py)",
+      "Bash(d:\\desktop\\coding\\trainingdairy_bot-1\\venv\\Scripts\\python.exe:*)"
     ],
     "deny": [],
     "ask": []

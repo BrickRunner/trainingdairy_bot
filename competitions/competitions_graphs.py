@@ -111,8 +111,10 @@ async def generate_competitions_graphs(
         }
 
         # Создаем графики динамики для каждой дистанции с более чем одним событием
+        # ВАЖНО: Включаем ТОЛЬКО финишировавшие соревнования с результатами
         by_distance = defaultdict(list)
         for p in participants:
+            # Фильтруем только соревнования со статусом 'finished' и введенным результатом
             if p.get('status') == 'finished' and p.get('finish_time') and p.get('distance') and p.get('date'):
                 distance = p['distance']
                 # Фильтруем только основные дистанции

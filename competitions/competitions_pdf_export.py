@@ -26,6 +26,29 @@ from utils.unit_converter import km_to_miles
 logger = logging.getLogger(__name__)
 
 
+def clean_competition_name(name: str) -> str:
+    """
+    Очищает название соревнования от дистанций в скобках
+
+    Args:
+        name: Исходное название соревнования
+
+    Returns:
+        Очищенное название без дистанций в скобках
+
+    Examples:
+        "Полумарафон (21,1км)" -> "Полумарафон"
+        "Марафон (42,195км)" -> "Марафон"
+        "Московский забег (10км)" -> "Московский забег"
+    """
+    import re
+    # Удаляем дистанции в скобках типа (21,1км), (42км), (10 км), (5,5 км) и т.д.
+    cleaned = re.sub(r'\s*\([0-9]+[,.]?[0-9]*\s*км\)', '', name)
+    # Удаляем дистанции в скобках на английском (21.1km), (42km) и т.д.
+    cleaned = re.sub(r'\s*\([0-9]+[,.]?[0-9]*\s*km\)', '', cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
 # Используем те же шрифты, что и для тренировок
 def get_font_paths():
     """Получить пути к шрифтам DejaVu в зависимости от ОС"""
@@ -216,7 +239,8 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     if stats['dnf'] > 0:
         general_stats_data.append(['DNF (не финишировал)', str(stats['dnf'])])
 
-    general_table = Table(general_stats_data, colWidths=[10*cm, 5*cm])
+    # Максимальная ширина таблицы - используем почти всю доступную ширину страницы
+    general_table = Table(general_stats_data, colWidths=[11*cm, 6*cm])
     general_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -253,16 +277,21 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             from competitions.competitions_keyboards import format_qualification
             qual = format_qualification(pr.get('qualification'))
 
+            # Очищаем название от дистанций в скобках
+            competition_name = clean_competition_name(pr['competition'])[:40]
+
             pr_data.append([
                 distance_str,
                 pr['time'],
                 pr.get('pace', '-'),
                 qual,
-                pr['competition'][:30],  # Ограничиваем длину
+                competition_name,
                 formatted_date
             ])
 
-        pr_table = Table(pr_data, colWidths=[2*cm, 2*cm, 2*cm, 2.2*cm, 4.3*cm, 2.5*cm])
+        # Максимально расширяем таблицу личных рекордов (17см)
+        # Перераспределяем ширину для лучшего отображения названий
+        pr_table = Table(pr_data, colWidths=[2*cm, 2*cm, 1.8*cm, 2.2*cm, 6.5*cm, 2.5*cm])
         pr_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -320,8 +349,11 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
     story.append(Paragraph("Детальный список соревнований", heading_style))
     story.append(Spacer(1, 0.5*cm))
 
+    # Фильтруем ТОЛЬКО финишировавшие соревнования для детального списка
+    finished_participants = [p for p in participants if p.get('status') == 'finished']
+
     # Сортируем по дате (сначала новые)
-    sorted_participants = sorted(participants, key=lambda x: x.get('date', ''), reverse=True)
+    sorted_participants = sorted(finished_participants, key=lambda x: x.get('date', ''), reverse=True)
 
     competitions_data = [['Дата', 'Название', 'Дистанция', 'Время', 'Темп', 'Разряд', 'Место', 'Статус']]
 
@@ -331,7 +363,8 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             user_format
         ) if p.get('date') else '-'
 
-        name = p.get('name', 'Без названия')[:40]  # Ограничиваем длину
+        # Очищаем название от дистанций в скобках и ограничиваем длину
+        name = clean_competition_name(p.get('name', 'Без названия'))[:50]
 
         # Форматируем дистанцию с учетом единиц измерения используя правильную функцию
         if p.get('distance'):
@@ -350,15 +383,15 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             time_str = '-'
             pace_str = '-'
 
-        # Место
+        # Место - компактный формат для экономии места
         place_overall = p.get('place_overall')
         place_category = p.get('place_age_category')
         if place_overall and place_category:
-            place_str = f"{place_overall} / {place_category}"
+            place_str = f"{place_overall}/{place_category}"  # Убираем пробелы
         elif place_overall:
             place_str = str(place_overall)
         elif place_category:
-            place_str = f"- / {place_category}"
+            place_str = f"-/{place_category}"
         else:
             place_str = '-'
 
@@ -386,11 +419,13 @@ async def create_competitions_pdf(user_id: int, period_param: str) -> BytesIO:
             status_str
         ])
 
-    # Оптимизируем ширину колонок для максимального использования ширины страницы
+    # Максимально расширяем таблицу соревнований
     # Общая доступная ширина: ~17см (A4 минус отступы)
+    # Оптимизируем для лучшего отображения названий и мест
+    # Дата | Название | Дист | Время | Темп | Разряд | Место | Статус
     competitions_table = Table(
         competitions_data,
-        colWidths=[1.5*cm, 3.8*cm, 1.6*cm, 1.6*cm, 1.6*cm, 2*cm, 2.8*cm, 1.3*cm]
+        colWidths=[1.6*cm, 5.2*cm, 1.5*cm, 1.6*cm, 1.5*cm, 2*cm, 2.2*cm, 1.6*cm]
     )
     competitions_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2ecc71')),
