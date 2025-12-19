@@ -65,7 +65,10 @@
       "Bash(cd:*)",
       "Bash(venvScriptspython.exe test_heroleague_events.py)",
       "Bash(venvScriptspython.exe -m py_compile competitionsupcoming_competitions_handlers.py)",
-      "Bash(d:\\desktop\\coding\\trainingdairy_bot-1\\venv\\Scripts\\python.exe:*)"
+      "Bash(d:\\desktop\\coding\\trainingdairy_bot-1\\venv\\Scripts\\python.exe:*)",
+      "Bash(venvScriptspython.exe -m py_compile competitionscompetitions_handlers.py)",
+      "Bash(findstr:*)",
+      "Bash(venvScriptspython.exe -m py_compile competitionscompetitions_queries.py)"
     ],
     "deny": [],
     "ask": []

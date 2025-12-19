@@ -27,7 +27,7 @@ def normalize_sport_code(sport_type: str) -> str:
     Нормализует sport_code от reg.place к стандартным кодам
 
     Args:
-        sport_type: Тип спорта (например, "running", "cycling", "swimming")
+        sport_type: Тип спорта (slug или название, например: "swimming", "cycling", "skiing", "running")
 
     Returns:
         str: Стандартный код спорта ("run", "bike", "swim", "triathlon", "ski")
@@ -38,7 +38,24 @@ def normalize_sport_code(sport_type: str) -> str:
 
     sport_lower = sport_type.lower()
 
-    # Маппинг типов спорта reg.place на стандартные коды
+    # Маппинг slug-ов API reg.place на стандартные коды
+    # Проверяем точное совпадение slug сначала
+    slug_mapping = {
+        "swimming": "swim",
+        "cycling": "bike",
+        "skiing": "ski",
+        "running": "run",
+        "triathlon": "triathlon",
+        "duathlon": "triathlon",
+        "other": "other",  # "Другой вид" - отдельный код
+    }
+
+    if sport_lower in slug_mapping:
+        result = slug_mapping[sport_lower]
+        logger.debug(f"Normalized sport via slug: '{sport_type}' -> '{result}'")
+        return result
+
+    # Маппинг типов спорта на стандартные коды (для совместимости)
     if any(keyword in sport_lower for keyword in ["run", "бег", "марафон", "забег", "trail", "трейл"]):
         result = "run"
     elif any(keyword in sport_lower for keyword in ["bike", "cycling", "велос", "вело", "cycle"]):
@@ -50,9 +67,9 @@ def normalize_sport_code(sport_type: str) -> str:
     elif any(keyword in sport_lower for keyword in ["ski", "лыж", "лыжн"]):
         result = "ski"
     else:
-        # Неизвестный тип спорта - логируем и возвращаем оригинал
-        logger.warning(f"Unknown sport type '{sport_type}', keeping original value")
-        result = sport_type.lower()
+        # Неизвестный тип спорта - логируем и возвращаем "run" по умолчанию
+        logger.warning(f"Unknown sport type '{sport_type}', defaulting to 'run'")
+        result = "run"
 
     logger.debug(f"Normalized sport: '{sport_type}' -> '{result}'")
     return result
@@ -173,13 +190,20 @@ async def fetch_competitions(
 
             # Парсим события
             competitions = []
+            logger.info(f"Applying filters: city={city}, sport={sport}")
             for event in events:
                 try:
                     comp = parse_event(event)
                     if comp:
+                        # Логируем перед фильтрацией
+                        logger.debug(f"Before filtering: '{comp.get('title')}' - sport_code='{comp.get('sport_code')}', city='{comp.get('city')}'")
+
                         # Применяем фильтры
                         if not matches_filters(comp, city, sport):
+                            logger.debug(f"Event '{comp.get('title')}' was filtered out")
                             continue
+
+                        logger.info(f"Event '{comp.get('title')}' passed all filters!")
 
                         # Фильтр по периоду (с начала до конца указанного периода)
                         if period_months and start_date and end_date:
@@ -193,6 +217,20 @@ async def fetch_competitions(
                                 # Событие должно быть в диапазоне start_date <= comp_date <= end_date
                                 if comp_date < start_date or comp_date > end_date:
                                     continue
+
+                        # Дополнительная проверка: событие должно быть в будущем (>= сегодня)
+                        comp_date = comp.get('start_time')
+                        if comp_date:
+                            if comp_date.tzinfo is None:
+                                from datetime import timezone as tz
+                                comp_date = comp_date.replace(tzinfo=tz.utc)
+
+                            # Проверяем что событие не в прошлом
+                            from datetime import timezone, timedelta
+                            now_utc = datetime.now(timezone.utc)
+                            if comp_date < now_utc:
+                                logger.debug(f"Skipping past event: '{comp.get('title')}' on {comp_date.strftime('%Y-%m-%d')}")
+                                continue
 
                         competitions.append(comp)
 
@@ -232,9 +270,12 @@ def parse_event(event: Dict) -> Optional[Dict]:
         event_id = event.get('id', '') or event.get('event_id', '')
         name = event.get('name', '') or event.get('title', '')
 
-        # Используем либо slug, либо id
-        identifier = slug or event_id
-        if not identifier or not name:
+        # Используем короткий event_id для callback_data (max 64 bytes)
+        # slug используем только для URL
+        short_id = str(event_id) if event_id else slug
+        url_identifier = slug or event_id
+
+        if not short_id or not name:
             logger.warning(f"Missing identifier or name in event: slug={slug}, id={event_id}, name={name}")
             return None
 
@@ -268,8 +309,20 @@ def parse_event(event: Dict) -> Optional[Dict]:
         else:
             city_name = str(city) if city else ''
 
-        # Тип спорта
-        sport_type = event.get('sport_type', '') or event.get('sport', '') or event.get('type', '')
+        # Тип спорта - в API reg.place используется поле 'sports' (массив)
+        sports = event.get('sports', [])
+        if sports and isinstance(sports, list) and len(sports) > 0:
+            # Берём первый вид спорта из массива
+            sport_obj = sports[0]
+            if isinstance(sport_obj, dict):
+                # Используем slug (например: "swimming", "cycling", "skiing")
+                sport_type = sport_obj.get('slug', '') or sport_obj.get('name', '')
+            else:
+                sport_type = ''
+        else:
+            # Fallback на старые поля (на случай изменения API)
+            sport_type = event.get('sport_type', '') or event.get('sport', '') or event.get('type', '')
+
         sport_code = normalize_sport_code(sport_type) if sport_type else 'run'
 
         # Дистанции - пробуем разные возможные поля
@@ -314,8 +367,8 @@ def parse_event(event: Dict) -> Optional[Dict]:
         # URL события - пробуем получить из API или формируем сами
         event_url = event.get('url', '') or event.get('link', '')
         if not event_url:
-            # Формируем URL из идентификатора
-            event_url = f"https://reg.place/event/{identifier}"
+            # Формируем URL из идентификатора (используем url_identifier для полного URL)
+            event_url = f"https://reg.place/event/{url_identifier}"
 
         # Если URL относительный, делаем абсолютным
         if event_url and not event_url.startswith('http'):
@@ -325,7 +378,7 @@ def parse_event(event: Dict) -> Optional[Dict]:
 
         # Формируем результат в формате совместимом с другими парсерами
         comp = {
-            'id': identifier,
+            'id': f"regplace_{short_id}",  # Короткий уникальный ID с префиксом
             'title': name,
             'name': name,  # Дублируем для совместимости
             'url': event_url,
@@ -369,11 +422,15 @@ def matches_filters(comp: Dict, city: Optional[str], sport: Optional[str]) -> bo
             return False
 
     # Фильтр по спорту
-    if sport and sport != "all":
+    if sport and sport != "all" and sport is not None:
         comp_sport = comp.get('sport_code', '')
+        # Проверяем точное совпадение
         if comp_sport != sport:
             logger.debug(f"Filtering out '{comp_title}': sport '{comp_sport}' doesn't match '{sport}'")
             return False
+        logger.debug(f"Event '{comp_title}' matched sport filter: '{comp_sport}' == '{sport}'")
+    else:
+        logger.debug(f"Event '{comp_title}' - no sport filter applied (sport={sport})")
 
     logger.debug(f"Event '{comp_title}' passed filters (city={city}, sport={sport})")
     return True

@@ -294,13 +294,27 @@ async def unregister_from_competition(
     """
     async with aiosqlite.connect(DB_PATH) as db:
         if distance is not None:
-            cursor = await db.execute(
-                """
-                DELETE FROM competition_participants
-                WHERE user_id = ? AND competition_id = ? AND distance = ?
-                """,
-                (user_id, competition_id, distance)
-            )
+            # Для reg.place/HeroLeague distance может быть 0 или NULL
+            # Поэтому используем гибкий поиск
+            if distance in (0, 0.0):
+                # Для distance=0, ищем записи где distance=0, NULL или не указана
+                cursor = await db.execute(
+                    """
+                    DELETE FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ?
+                    AND (distance = 0 OR distance IS NULL)
+                    """,
+                    (user_id, competition_id)
+                )
+            else:
+                # Для обычных дистанций используем точное совпадение
+                cursor = await db.execute(
+                    """
+                    DELETE FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ? AND distance = ?
+                    """,
+                    (user_id, competition_id, distance)
+                )
         else:
             cursor = await db.execute(
                 """
@@ -352,14 +366,29 @@ async def update_target_time(
         True если обновление прошло успешно
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            """
-            UPDATE competition_participants
-            SET target_time = ?
-            WHERE user_id = ? AND competition_id = ? AND distance = ?
-            """,
-            (target_time, user_id, competition_id, distance)
-        )
+        # Для reg.place/HeroLeague distance может быть 0 или NULL
+        # Поэтому используем гибкий поиск
+        if distance in (0, 0.0, None):
+            # Для distance=0/None, ищем записи где distance=0, NULL или не указана
+            cursor = await db.execute(
+                """
+                UPDATE competition_participants
+                SET target_time = ?
+                WHERE user_id = ? AND competition_id = ?
+                AND (distance = 0 OR distance IS NULL)
+                """,
+                (target_time, user_id, competition_id)
+            )
+        else:
+            # Для обычных дистанций используем точное совпадение
+            cursor = await db.execute(
+                """
+                UPDATE competition_participants
+                SET target_time = ?
+                WHERE user_id = ? AND competition_id = ? AND distance = ?
+                """,
+                (target_time, user_id, competition_id, distance)
+            )
         await db.commit()
         return cursor.rowcount > 0
 

@@ -486,6 +486,7 @@ async def show_competitions_results(message: Message, state: FSMContext, page: i
         if date_str:
             button_text = f"{date_str} | {button_text}"
 
+        # Кнопка для просмотра деталей
         builder.row(
             InlineKeyboardButton(
                 text=button_text,
@@ -571,13 +572,15 @@ async def show_competition_detail(callback: CallbackQuery, state: FSMContext):
 
         # Дистанции - НЕ показываем для HeroLeague
         service = comp.get('service', '')
+        logger.info(f"Competition detail: service={service}, has distances={bool(comp.get('distances'))}, count={len(comp.get('distances', []))}")
 
         if service != 'HeroLeague':
-            # Показываем дистанции для RussiaRunning и Timerman
+            # Показываем дистанции для RussiaRunning, Timerman и reg.place
             if comp.get('distances'):
                 from utils.unit_converter import safe_convert_distance_name
 
                 text += f"\n<b>📏 Дистанции:</b>\n"
+                logger.info(f"Showing {len(comp['distances'])} distances for {service}")
                 for dist in comp['distances'][:10]:
                     # Форматируем дистанцию с учетом настроек пользователя
                     distance_km = dist.get('distance', 0)
@@ -589,6 +592,9 @@ async def show_competition_detail(callback: CallbackQuery, state: FSMContext):
                     # Показываем только сконвертированное название
                     # Не дублируем информацию о дистанции
                     text += f"  • {converted_name}\n"
+                    logger.debug(f"  Distance: {converted_name}")
+            else:
+                logger.warning(f"No distances found for {service} competition: {comp.get('title')}")
 
         if comp.get('url'):
             text += f"\n🔗 <a href=\"{comp['url']}\">Подробнее на сайте</a>"
@@ -633,19 +639,19 @@ async def show_competition_detail(callback: CallbackQuery, state: FSMContext):
                     InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
                 )
         else:
-            # Одна дистанция или нет дистанций (HeroLeague)
+            # Одна дистанция или нет дистанций (HeroLeague, reg.place)
             service = comp.get('service', '')
             sport_code = comp.get('sport_code', '')
 
-            if service == 'HeroLeague' and sport_code != 'camp':
-                # Для спортивных событий HeroLeague показываем "Добавить дистанцию"
+            if (service == 'HeroLeague' and sport_code != 'camp') or service == 'reg.place':
+                # Для спортивных событий HeroLeague и reg.place показываем "Добавить дистанцию"
                 if is_participant:
-                    logger.info("Showing: ➕ Добавить дистанцию (HeroLeague sport, registered)")
+                    logger.info(f"Showing: ➕ Добавить дистанцию ({service}, registered)")
                     builder.row(
                         InlineKeyboardButton(text="➕ Добавить дистанцию", callback_data=f"comp:participate:{comp_id}")
                     )
                 else:
-                    logger.info("Showing: ✅ Я участвую (HeroLeague sport, not registered)")
+                    logger.info(f"Showing: ✅ Я участвую ({service}, not registered)")
                     builder.row(
                         InlineKeyboardButton(text="✅ Я участвую", callback_data=f"comp:participate:{comp_id}")
                     )
@@ -783,12 +789,12 @@ async def participate_in_competition(callback: CallbackQuery, state: FSMContext)
             await prompt_for_target_time(callback, state, comp_id)
 
         else:
-            # Нет структурированных дистанций (например, HeroLeague)
-            # Проверяем сервис - для HeroLeague просим пользователя ввести дистанцию
+            # Нет структурированных дистанций (например, HeroLeague, reg.place)
+            # Проверяем сервис - для HeroLeague и reg.place просим пользователя ввести дистанцию
             service = comp.get('service', '')
 
-            if service == 'HeroLeague':
-                # Для HeroLeague просим пользователя ввести дистанцию вручную
+            if service in ('HeroLeague', 'reg.place'):
+                # Для HeroLeague и reg.place просим пользователя ввести дистанцию вручную
                 await state.set_state(UpcomingCompetitionsStates.waiting_for_custom_distance)
 
                 # Получаем единицу измерения из настроек пользователя
@@ -1135,62 +1141,50 @@ async def save_all_distances_and_redirect(callback_or_message, state: FSMContext
         count = len(distances_to_process)
         logger.info(f"Showing success message for {count} distances")
 
-        # Show success alert and immediately redirect to "Мои соревнования"
+        # Clear state BEFORE redirecting
+        await state.clear()
+
+        # Redirect to "Мои соревнования"
+        logger.info("Redirecting to My Competitions...")
+        from competitions.competitions_handlers import show_my_competitions
+
+        # Определяем тип объекта для правильной обработки
         if hasattr(callback_or_message, 'message'):
-            # It's CallbackQuery
-            logger.info("Sending success alert and redirecting via CallbackQuery")
+            # It's CallbackQuery - используем оригинальное сообщение
+            logger.info("Redirecting via CallbackQuery")
             await callback_or_message.answer(
                 f"✅ Зарегистрированы на {count} дистанций!",
                 show_alert=True
             )
+            # Показываем раздел "Мои соревнования"
+            await show_my_competitions(callback_or_message, state)
         else:
-            # It's Message - show quick notification
-            logger.info("Sending success message and redirecting via Message")
+            # It's Message (пользователь ввел текст) - создаем новое сообщение
+            logger.info("Redirecting via Message - sending new message")
+
+            # Отправляем успешное уведомление
             await message_obj.answer(f"✅ Зарегистрированы на {count} дистанций!")
 
-        # Clear state
-        await state.clear()
+            # Создаем FakeCallback для "Мои соревнования"
+            class FakeCallback:
+                def __init__(self, msg, user):
+                    self.message = msg
+                    self.from_user = user
+                    self.data = "comp:my"
 
-        # Redirect to "Мои соревнования" section
-        # We need to send a NEW message instead of editing (to avoid "message can't be edited" error)
-        from aiogram.types import CallbackQuery as CQ
+                async def answer(self, text="", show_alert=False):
+                    pass
 
-        # Create a synthetic callback query that simulates clicking "comp:my" button
-        class SyntheticCallback:
-            """Synthetic callback to properly trigger comp:my handler"""
-            def __init__(self, message, user):
-                self.message = message
-                self.from_user = user
-                self.data = "comp:my"
+            # Отправляем новое сообщение для "Мои соревнования"
+            new_msg = await message_obj.answer("⏳ Загрузка...")
 
-            async def answer(self, text="", show_alert=False):
-                # Callback answers are optional for synthetic callbacks
-                pass
+            # Небольшая задержка для корректной работы редактирования
+            await asyncio.sleep(0.2)
 
-        # Get the user
-        if hasattr(callback_or_message, 'message'):
-            user = callback_or_message.from_user
-            original_msg = callback_or_message.message
-        else:
-            user = message_obj.from_user
-            original_msg = message_obj
+            # Показываем раздел "Мои соревнования"
+            fake_callback = FakeCallback(new_msg, message_obj.from_user)
+            await show_my_competitions(fake_callback, state)
 
-        # Send a new message with loading text, then replace it with "My Competitions"
-        new_msg = await original_msg.answer("⏳ Загрузка...")
-        logger.info(f"Created loading message with id={new_msg.message_id}")
-
-        # Increased delay to ensure message is fully created and DB transaction is committed
-        logger.info("Waiting 0.5 seconds before editing message...")
-        await asyncio.sleep(0.5)
-
-        # Create synthetic callback with the new message
-        synthetic_callback = SyntheticCallback(new_msg, user)
-        logger.info(f"Created synthetic callback for user {user.id}")
-
-        # Возвращаемся в раздел "Мои соревнования"
-        logger.info("Returning to My Competitions...")
-        from competitions.competitions_handlers import show_my_competitions
-        await show_my_competitions(synthetic_callback, state)
         logger.info("My Competitions shown")
 
     except Exception as e:
@@ -1407,7 +1401,11 @@ async def skip_target_time(callback: CallbackQuery, state: FSMContext):
             show_alert=True
         )
 
+        # Очищаем state перед переходом
+        await state.clear()
+
         # Показываем раздел "Мои соревнования"
+        from competitions.competitions_handlers import show_my_competitions
         await show_my_competitions(callback, state)
 
     except Exception as e:
@@ -1646,31 +1644,36 @@ async def process_target_time(message: Message, state: FSMContext):
             # Отправляем подтверждение
             await message.answer("✅ Соревнование добавлено в 'Мои соревнования'!")
 
-            # Автоматически показываем раздел "Мои соревнования"
+            # Очищаем state перед переходом
+            await state.clear()
+
+            # Показываем раздел "Мои соревнования"
             from competitions.competitions_handlers import show_my_competitions
 
             class FakeCallback:
                 def __init__(self, msg):
                     self.message = msg
                     self.from_user = msg.from_user
+                    self.data = "comp:my"
 
                 async def answer(self, text="", show_alert=False):
                     pass
 
-            placeholder_msg = await message.answer("Загрузка...")
-            logger.info(f"Created placeholder message with id={placeholder_msg.message_id}")
+            # Отправляем новое сообщение для "Мои соревнования"
+            new_msg = await message.answer("⏳ Загрузка...")
+            logger.info(f"Created new message for My Competitions with id={new_msg.message_id}")
 
-            # Increased delay to ensure DB transaction is committed and message can be edited
-            logger.info("Waiting 0.5 seconds before editing message...")
-            await asyncio.sleep(0.5)
+            # Небольшая задержка для корректного редактирования
+            logger.info("Waiting 0.2 seconds before editing message...")
+            await asyncio.sleep(0.2)
 
             logger.info("Returning to My Competitions (single-distance flow)...")
 
-            # Возвращаемся в раздел "Мои соревнования"
-            fake_callback = FakeCallback(placeholder_msg)
+            # Показываем раздел "Мои соревнования"
+            fake_callback = FakeCallback(new_msg)
             await show_my_competitions(fake_callback, state)
 
-            logger.info("Competition details shown (single-distance flow)")
+            logger.info("My Competitions shown (single-distance flow)")
 
     except Exception as e:
         logger.error(f"Error processing target time: {e}")

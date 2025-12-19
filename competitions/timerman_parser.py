@@ -345,6 +345,14 @@ class TimmermanParser:
                             filtered_count += 1
                             filtered_by_period += 1
                             continue
+
+                        # Дополнительная проверка: событие должно быть в будущем (>= сегодня)
+                        now_utc = datetime.now(timezone.utc)
+                        if begin_date_obj < now_utc:
+                            filtered_count += 1
+                            filtered_by_period += 1
+                            logger.debug(f"Skipping past event: '{comp['title']}' on {begin_date_obj.strftime('%Y-%m-%d')}")
+                            continue
                     except Exception as e:
                         logger.error(f"Error parsing date for event {comp['id']}: {e}")
 

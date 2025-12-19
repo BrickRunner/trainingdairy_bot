@@ -23,7 +23,7 @@ def normalize_sport_code(event_type_id: str) -> str:
         event_type_id: ID типа события (например, "gonka", "zabeg", "skirun")
 
     Returns:
-        str: Стандартный код спорта ("run", "ski", "bike", "swim", "triathlon")
+        str: Стандартный код спорта ("run", "ski", "bike", "swim", "triathlon", "other")
     """
     event_type_lower = event_type_id.lower()
 
@@ -31,17 +31,20 @@ def normalize_sport_code(event_type_id: str) -> str:
     # Маппинг типов событий HeroLeague на стандартные коды
     if any(keyword in event_type_lower for keyword in ["skirun", "snowrun", "ski", "лыж"]):
         return "ski"
-    elif any(keyword in event_type_lower for keyword in ["gonka", "zabeg", "race", "run", "marathon", "doroga", "arctic"]):
+    # "Гонка Героев", "Гонка Героев Зима" и тренировочные лагеря относятся к "другим видам спорта"
+    elif any(keyword in event_type_lower for keyword in ["gonka", "gonka_zima", "camp"]):
+        return "other"
+    elif any(keyword in event_type_lower for keyword in ["zabeg", "race", "run", "marathon", "doroga", "arctic", "trail"]):
         return "run"
-    elif any(keyword in event_type_lower for keyword in ["bike", "велос"]):
+    elif any(keyword in event_type_lower for keyword in ["bike", "велос", "lastrada"]):
         return "bike"
     elif any(keyword in event_type_lower for keyword in ["swim", "плав"]):
         return "swim"
     elif any(keyword in event_type_lower for keyword in ["triathlon", "триатлон"]):
         return "triathlon"
     else:
-        # По умолчанию возвращаем оригинальный код
-        return event_type_id
+        # По умолчанию возвращаем "other" для неизвестных типов
+        return "other"
 
 
 def matches_sport_type(event_type_id: str, sport: Optional[str]) -> bool:
@@ -141,12 +144,45 @@ async def fetch_competitions(
                                         begin_date = begin_date.replace(tzinfo=timezone.utc)
 
                                     now = datetime.now(timezone.utc)
-                                    from dateutil.relativedelta import relativedelta
-                                    end_period = now + relativedelta(months=period_months)
+                                    year = now.year
+                                    month = now.month
 
-                                    if begin_date < now or begin_date > end_period:
+                                    # Вычисляем диапазон дат как в других парсерах
+                                    if period_months == 1:
+                                        # 1 месяц - с 1-го до последнего дня текущего месяца
+                                        from datetime import timedelta
+                                        start_date = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
+                                        if month == 12:
+                                            end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                                        else:
+                                            next_month_first = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+                                            end_date = next_month_first - timedelta(seconds=1)
+
+                                    elif period_months == 12:
+                                        # 1 год - с 01.01 до 31.12 текущего года
+                                        start_date = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+                                        end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+                                    else:
+                                        # 6 месяцев - от текущей даты + 180 дней
+                                        from datetime import timedelta
+                                        start_date = now
+                                        end_date = now + timedelta(days=180)
+
+                                    # Событие должно быть в диапазоне start_date <= begin_date <= end_date
+                                    if begin_date < start_date or begin_date > end_date:
                                         continue
-                                except (ValueError, ImportError) as e:
+
+                                    # Дополнительная проверка: событие должно быть в будущем (>= сегодня)
+                                    from datetime import timezone as tz
+                                    now_utc = datetime.now(tz.utc)
+                                    # Делаем begin_date timezone-aware если он naive
+                                    if begin_date.tzinfo is None:
+                                        begin_date = begin_date.replace(tzinfo=tz.utc)
+                                    if begin_date < now_utc:
+                                        logger.debug(f"Skipping past event: '{comp.get('title')}' on {begin_date.strftime('%Y-%m-%d')}")
+                                        continue
+                                except ValueError as e:
                                     logger.warning(f"Date parsing error: {e}")
                                     continue
 

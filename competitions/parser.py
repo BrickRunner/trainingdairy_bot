@@ -366,6 +366,18 @@ class RussiaRunningParser:
                             filtered_count += 1
                             filtered_by_period += 1
                             continue
+
+                        # Дополнительная проверка: событие должно быть в будущем (>= сегодня)
+                        from datetime import timezone as tz
+                        now_utc = datetime.now(tz.utc)
+                        # Делаем begin_date_obj timezone-aware если он naive
+                        if begin_date_obj.tzinfo is None:
+                            begin_date_obj = begin_date_obj.replace(tzinfo=tz.utc)
+                        if begin_date_obj < now_utc:
+                            filtered_count += 1
+                            filtered_by_period += 1
+                            logger.debug(f"Skipping past event: '{comp['title']}' on {begin_date_obj.strftime('%Y-%m-%d')}")
+                            continue
                     except Exception as e:
                         logger.error(f"Error parsing date for event {comp['id']}: {e}")
                         # Продолжаем обработку события если не удалось распарсить дату
@@ -500,3 +512,4 @@ SPORT_NAMES = {v: k for k, v in SPORT_CODES.items()}
 
 # Добавляем специальные названия (не для фильтра, только для отображения)
 SPORT_NAMES["camp"] = "Лига Путешествий"
+SPORT_NAMES["other"] = "Другое"
