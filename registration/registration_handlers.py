@@ -16,6 +16,7 @@ from registration.registration_keyboards import (
     get_training_types_keyboard
 )
 from bot.keyboards import get_main_menu_keyboard
+from coach.coach_queries import is_user_coach
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -325,10 +326,11 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML"
     )
 
-    # Отправляем главное меню
+    # Отправляем главное меню с учётом статуса тренера
+    is_coach_status = await is_user_coach(callback.from_user.id)
     await callback.message.answer(
         "Выбери действие:",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_main_menu_keyboard(is_coach_status)
     )
 
     await callback.answer()

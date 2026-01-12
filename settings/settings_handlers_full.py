@@ -1907,6 +1907,7 @@ async def process_reminder_time(message: Message, state: FSMContext):
 async def toggle_coach_mode(callback: CallbackQuery):
     """Переключить режим тренера"""
     from coach.coach_queries import is_user_coach, set_coach_mode
+    from aiogram.exceptions import TelegramBadRequest
 
     user_id = callback.from_user.id
     current_mode = await is_user_coach(user_id)
@@ -1963,8 +1964,12 @@ async def toggle_coach_mode(callback: CallbackQuery):
 
     info_text += "\nВыберите раздел для настройки:"
 
-    await callback.message.edit_text(
-        info_text,
-        reply_markup=get_settings_menu_keyboard(is_coach_now),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            info_text,
+            reply_markup=get_settings_menu_keyboard(is_coach_now),
+            parse_mode="Markdown"
+        )
+    except TelegramBadRequest:
+        # Сообщение не изменилось - это нормально
+        pass

@@ -65,6 +65,11 @@ async def start_create_custom_competition(callback: CallbackQuery, state: FSMCon
 async def process_comp_name(message: Message, state: FSMContext):
     """Обработать название соревнования"""
 
+    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
+    data = await state.get_data()
+    if 'propose_student_id' in data:
+        return
+
     comp_name = message.text.strip()
 
     # Проверка на отмену
@@ -281,6 +286,11 @@ async def process_comp_date(message: Message, state: FSMContext):
     """Обработать дату соревнования (текстовый ввод как альтернатива календарю)"""
     from aiogram.types import ReplyKeyboardRemove
 
+    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
+    data = await state.get_data()
+    if 'propose_student_id' in data:
+        return
+
     date_text = message.text.strip()
 
     # Проверка на отмену
@@ -345,6 +355,11 @@ async def process_comp_date(message: Message, state: FSMContext):
 @router.message(CompetitionStates.waiting_for_comp_type)
 async def process_comp_type(message: Message, state: FSMContext):
     """Обработать тип соревнования"""
+
+    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
+    data = await state.get_data()
+    if 'propose_student_id' in data:
+        return
 
     comp_type_text = message.text.strip()
 
@@ -416,6 +431,11 @@ async def process_comp_type(message: Message, state: FSMContext):
 @router.message(CompetitionStates.waiting_for_comp_distance)
 async def process_comp_distance(message: Message, state: FSMContext):
     """Обработать дистанцию соревнования"""
+
+    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
+    data = await state.get_data()
+    if 'propose_student_id' in data:
+        return
 
     distance_text = message.text.strip()
 
@@ -589,6 +609,11 @@ async def cancel_competition_creation(callback: CallbackQuery, state: FSMContext
 @router.message(CompetitionStates.waiting_for_comp_target)
 async def process_comp_target_and_create(message: Message, state: FSMContext):
     """Обработать целевое время и создать соревнование"""
+
+    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
+    data = await state.get_data()
+    if 'propose_student_id' in data:
+        return
 
     target_text = message.text.strip()
 

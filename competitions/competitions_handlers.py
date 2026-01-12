@@ -35,6 +35,7 @@ from competitions.competitions_queries import (
 )
 from bot.keyboards import get_main_menu_keyboard
 from utils.time_formatter import normalize_time
+from coach.coach_queries import is_user_coach
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -1065,14 +1066,16 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
             )
             await view_my_competition(new_callback, None)
         else:
+            is_coach = await is_user_coach(message.from_user.id)
             await message.answer(
                 "✅ Результат обновлён, но не удалось найти регистрацию",
-                reply_markup=get_main_menu_keyboard()
+                reply_markup=get_main_menu_keyboard(is_coach)
             )
     else:
+        is_coach = await is_user_coach(message.from_user.id)
         await message.answer(
             "❌ Ошибка при обновлении результата",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(is_coach)
         )
 
 
@@ -1366,9 +1369,10 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                     return
 
         # Если не удалось показать детали, возвращаемся в "Мои соревнования"
+        is_coach = await is_user_coach(message.from_user.id)
         await message.answer(
             "Вернитесь в раздел 'Мои соревнования' для просмотра событий.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(is_coach)
         )
         return
 
@@ -1482,9 +1486,10 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                 parse_mode="HTML"
             )
     else:
+        is_coach = await is_user_coach(message.from_user.id)
         await message.answer(
             "❌ Ошибка при обновлении целевого времени",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(is_coach)
         )
 
 
@@ -2365,9 +2370,10 @@ async def process_heart_rate(message: Message, state: FSMContext):
     from competitions.competitions_queries import get_user_competition_registration
     registration = await get_user_competition_registration(user_id, competition_id)
     if not registration:
+        is_coach = await is_user_coach(user_id)
         await message.answer(
             "❌ Не найдена регистрация на это соревнование",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(is_coach)
         )
         await state.clear()
         return
@@ -2477,9 +2483,10 @@ async def process_heart_rate(message: Message, state: FSMContext):
         proxy_callback = CallbackProxy(temp_msg, message.from_user)
         await show_my_results_with_period(proxy_callback, state, period)
     else:
+        is_coach = await is_user_coach(message.from_user.id)
         await message.answer(
             "❌ Ошибка при добавлении результата",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(is_coach)
         )
 
     await state.clear()

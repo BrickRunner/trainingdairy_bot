@@ -147,17 +147,22 @@ def get_period_dates(period: str) -> tuple:
     Returns:
         Кортеж (start_date, end_date) или (None, None) для 'all'
     """
+    import calendar
     today = datetime.now().date()
 
     if period == 'week':
-        # Последние 7 дней
-        start_date = today - timedelta(days=6)
-        return start_date, today
+        # Текущая календарная неделя: от понедельника до воскресенья
+        start_date = today - timedelta(days=today.weekday())  # Понедельник
+        end_date = start_date + timedelta(days=6)  # Воскресенье
+        return start_date, end_date
 
     elif period == 'month':
-        # Последние 30 дней
-        start_date = today - timedelta(days=29)
-        return start_date, today
+        # Текущий календарный месяц: с 1 до последнего числа
+        start_date = today.replace(day=1)
+        # Последний день месяца
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        end_date = today.replace(day=last_day)
+        return start_date, end_date
 
     elif period == 'season':
         # Последние 3 месяца (90 дней)

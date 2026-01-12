@@ -1,0 +1,29 @@
+{
+  "name": "trainingdairy_bot-2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main_app.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BrickRunner/trainingdairy_bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/BrickRunner/trainingdairy_bot/issues"
+  },
+  "homepage": "https://github.com/BrickRunner/trainingdairy_bot#readme",
+  "dependencies": {
+    "body-parser": "^2.2.1",
+    "express": "^5.2.1",
+    "model-context-protocol": "^1.0.2"
+  }
+}

@@ -35,8 +35,11 @@ CREATE TABLE IF NOT EXISTS trainings (
     results TEXT,
     comment TEXT,
     fatigue_level INTEGER,
+    added_by_coach_id INTEGER,  -- ID тренера, если тренировка добавлена тренером
+    is_planned INTEGER DEFAULT 0,  -- 1 если это запланированная тренировка
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (added_by_coach_id) REFERENCES users(id)
 )
 """
 
@@ -102,12 +105,21 @@ CREATE TABLE IF NOT EXISTS competition_participants (
     -- Статусы
     status TEXT DEFAULT 'registered',  -- 'registered', 'dns' (не стартовал), 'dnf' (не финишировал), 'finished'
 
+    -- Предложение от тренера
+    proposed_by_coach INTEGER DEFAULT 0,  -- 1 если предложено тренером
+    proposed_by_coach_id INTEGER,  -- ID тренера, предложившего соревнование
+    proposal_status TEXT,  -- 'pending', 'accepted', 'rejected'
+
+    -- Напоминания
+    reminders_enabled INTEGER DEFAULT 1,  -- Включены ли напоминания
+
     -- Даты
     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     result_added_at TIMESTAMP,
 
     FOREIGN KEY (competition_id) REFERENCES competitions(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (proposed_by_coach_id) REFERENCES users(id),
     UNIQUE(competition_id, user_id, distance, distance_name)
 )
 """
@@ -144,11 +156,25 @@ CREATE TABLE IF NOT EXISTS coach_links (
     student_id INTEGER NOT NULL,
     status TEXT DEFAULT 'active',  -- 'active', 'pending', 'removed'
     link_code TEXT UNIQUE,
+    coach_nickname TEXT,  -- Псевдоним ученика (виден только тренеру)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     removed_at TIMESTAMP,
     FOREIGN KEY (coach_id) REFERENCES users(id),
     FOREIGN KEY (student_id) REFERENCES users(id),
     UNIQUE(coach_id, student_id)
+)
+"""
+
+CREATE_TRAINING_COMMENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS training_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    training_id INTEGER NOT NULL,
+    author_id INTEGER NOT NULL,
+    comment TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (training_id) REFERENCES trainings(id),
+    FOREIGN KEY (author_id) REFERENCES users(id)
 )
 """
 
@@ -229,6 +255,11 @@ CREATE TABLE IF NOT EXISTS user_settings (
     last_goal_notification_week TEXT,  -- Неделя последнего уведомления о достижении цели (формат: YYYY-WW) - DEPRECATED, используем goal_notifications
     goal_notifications TEXT,  -- JSON с информацией о достигнутых целях {week: {goal_type: True/False}}
 
+    -- Напоминания о тренировках
+    training_reminders_enabled INTEGER DEFAULT 0,  -- Включены ли напоминания о тренировках
+    training_reminder_days TEXT DEFAULT '[]',  -- JSON массив с днями недели для напоминаний
+    training_reminder_time TEXT,  -- Время напоминания (HH:MM)
+
     -- Режим тренера
     is_coach BOOLEAN DEFAULT 0,  -- Является ли пользователь тренером
     coach_link_code TEXT UNIQUE,  -- Уникальный код для подключения учеников
@@ -264,15 +295,34 @@ CREATE TABLE IF NOT EXISTS personal_records (
 )
 """
 
+CREATE_COMPETITION_REMINDERS_TABLE = """
+CREATE TABLE IF NOT EXISTS competition_reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    competition_id INTEGER NOT NULL,
+    reminder_type TEXT NOT NULL,  -- '7days', '3days', '1day'
+    scheduled_date DATE NOT NULL,
+    sent INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (competition_id) REFERENCES competitions(id),
+    UNIQUE(user_id, competition_id, reminder_type)
+)
+"""
+
 # Список всех таблиц для инициализации
 ALL_TABLES = [
     CREATE_USERS_TABLE,
     CREATE_TRAININGS_TABLE,
     CREATE_COMPETITIONS_TABLE,
     CREATE_COMPETITION_PARTICIPANTS_TABLE,
+    CREATE_COMPETITION_REMINDERS_TABLE,
     CREATE_ACHIEVEMENTS_TABLE,
     CREATE_RATINGS_TABLE,
     CREATE_COACH_LINKS_TABLE,
+    CREATE_TRAINING_COMMENTS_TABLE,
     CREATE_HEALTH_METRICS_TABLE,
     CREATE_USER_SETTINGS_TABLE,
     CREATE_PERSONAL_RECORDS_TABLE

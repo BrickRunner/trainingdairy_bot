@@ -54,13 +54,119 @@ logger = logging.getLogger(__name__)
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     """Обработчик команды /start"""
-    from coach.coach_queries import is_user_coach
+    from coach.coach_queries import is_user_coach, find_coach_by_code, add_student_to_coach
 
     user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
 
     # Добавляем пользователя в БД, если его нет
     await add_user(user_id, username)
+
+    # Проверяем, есть ли параметр coach_XXXXXXXX
+    args = message.text.split()
+    if len(args) > 1 and args[1].startswith("coach_"):
+        coach_code = args[1].replace("coach_", "").upper()
+
+        # Ищем тренера по коду
+        coach_id = await find_coach_by_code(coach_code)
+
+        if coach_id:
+            # Проверяем, что пользователь не пытается добавить себя
+            if coach_id == user_id:
+                await message.answer(
+                    "❌ Вы не можете добавить себя в качестве своего ученика.",
+                    parse_mode="HTML"
+                )
+                # Показываем главное меню
+                is_coach_status = await is_user_coach(user_id)
+                settings = await get_user_settings(user_id)
+                name = settings.get('name', username) if settings else username
+                await message.answer(
+                    f"👋 Привет, {name}!\n\nВыбери действие из меню ниже 👇",
+                    reply_markup=get_main_menu_keyboard(is_coach_status),
+                    parse_mode="HTML"
+                )
+                return
+
+            # Проверяем, заполнен ли профиль
+            settings = await get_user_settings(user_id)
+
+            if not settings or not settings.get('name') or not settings.get('birth_date'):
+                # Сохраняем код тренера для подключения после регистрации
+                await state.update_data(pending_coach_code=coach_code)
+                from registration.registration_handlers import start_registration
+                await start_registration(message, state)
+                return
+
+            # Добавляем связь с тренером
+            success = await add_student_to_coach(coach_id, user_id)
+
+            if success:
+                coach_user = await get_user(coach_id)
+                coach_name = coach_user.get('username', 'Тренер') if coach_user else 'Тренер'
+
+                await message.answer(
+                    f"✅ <b>Вы успешно подключились к тренеру!</b>\n\n"
+                    f"Ваш тренер: @{coach_name}\n\n"
+                    f"Теперь тренер может просматривать ваши тренировки и статистику.",
+                    reply_markup=ReplyKeyboardRemove(),
+                    parse_mode="HTML"
+                )
+
+                # Уведомляем тренера
+                try:
+                    student_name = message.from_user.full_name
+                    await message.bot.send_message(
+                        coach_id,
+                        f"🎉 <b>Новый ученик!</b>\n\n"
+                        f"К вам подключился: {student_name}",
+                        parse_mode="HTML"
+                    )
+
+                    # Редирект тренера в главное меню
+                    coach_settings = await get_user_settings(coach_id)
+                    coach_is_coach = await is_user_coach(coach_id)
+
+                    await message.bot.send_message(
+                        coach_id,
+                        "Вы в главном меню",
+                        reply_markup=get_main_menu_keyboard(coach_is_coach),
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify coach: {e}")
+
+                # Редирект в главное меню
+                settings = await get_user_settings(user_id)
+                is_coach_status = await is_user_coach(user_id)
+
+                await message.answer(
+                    "Вы в главном меню",
+                    reply_markup=get_main_menu_keyboard(is_coach_status),
+                    parse_mode="HTML"
+                )
+                return
+            else:
+                await message.answer(
+                    "⚠️ Вы уже подключены к этому тренеру.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+
+                # Редирект в главное меню
+                settings = await get_user_settings(user_id)
+                is_coach_status = await is_user_coach(user_id)
+
+                await message.answer(
+                    "Вы в главном меню",
+                    reply_markup=get_main_menu_keyboard(is_coach_status),
+                    parse_mode="HTML"
+                )
+                return
+        else:
+            await message.answer(
+                "❌ Код тренера не найден.\n\n"
+                "Проверьте правильность ссылки и попробуйте снова."
+            )
 
     # Проверяем, заполнен ли профиль
     settings = await get_user_settings(user_id)
@@ -811,29 +917,38 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
-    
-    # Рассчитываем средний темп
-    time_str = data['time']
-    hours, minutes, seconds = map(int, time_str.split(':'))
-    total_seconds = hours * 3600 + minutes * 60 + seconds
-    total_minutes = total_seconds / 60
+
+    # Проверяем наличие обязательного поля training_type
+    if 'training_type' not in data:
+        await callback.message.edit_text("❌ Ошибка: не удалось определить тип тренировки. Попробуйте добавить тренировку заново.")
+        await state.clear()
+        await callback.answer()
+        return
+
     training_type = data['training_type']
-    
-    # Расчет темпа только для тренировок с дистанцией
-    if training_type not in ['силовая', 'интервальная']:
-        distance = data['distance']
-        
-        # Используем утилиту для форматирования темпа
-        avg_pace, pace_unit = format_pace(
-            distance, 
-            total_seconds, 
-            distance_unit, 
-            training_type
-        )
-        
-        # Сохраняем темп в данные
-        data['avg_pace'] = avg_pace
-        data['pace_unit'] = pace_unit
+
+    # Рассчитываем средний темп только если есть время
+    if 'time' in data and data['time']:
+        time_str = data['time']
+        hours, minutes, seconds = map(int, time_str.split(':'))
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        total_minutes = total_seconds / 60
+
+        # Расчет темпа только для тренировок с дистанцией
+        if training_type not in ['силовая', 'интервальная'] and 'distance' in data:
+            distance = data['distance']
+
+            # Используем утилиту для форматирования темпа
+            avg_pace, pace_unit = format_pace(
+                distance,
+                total_seconds,
+                distance_unit,
+                training_type
+            )
+
+            # Сохраняем темп в данные
+            data['avg_pace'] = avg_pace
+            data['pace_unit'] = pace_unit
     
     # Для интервальной тренировки - calculated_volume уже должен быть в data
     # (добавляется при обработке описания интервалов)
@@ -958,13 +1073,16 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
         summary += f"💬 Комментарий: {data['comment']}\n"
     
     summary += f"💪 Усилия: {fatigue_level}/10"
-    
+
     await callback.message.edit_text(summary, parse_mode="Markdown")
+
+    # Проверяем статус тренера для правильного меню
+    is_coach_status = await is_user_coach(callback.from_user.id)
     await callback.message.answer(
         "Что делаем дальше?",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_main_menu_keyboard(is_coach_status)
     )
-    
+
     # Очищаем состояние
     await state.clear()
     await callback.answer("Тренировка сохранена! ✅")
@@ -977,9 +1095,10 @@ async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
 
     if current_state is None:
         if isinstance(message, Message):
+            is_coach_status = await is_user_coach(message.from_user.id)
             await message.answer(
                 "Нечего отменять 🤷‍♂️",
-                reply_markup=get_main_menu_keyboard()
+                reply_markup=get_main_menu_keyboard(is_coach_status)
             )
         return
 
@@ -1514,11 +1633,13 @@ async def show_training_detail(callback: CallbackQuery):
     parts = callback.data.split(":")
     training_id = int(parts[1])
     period = parts[2]
-    
-    # Получаем данные тренировки
-    training = await get_training_by_id(training_id, callback.from_user.id)
-    
-    if not training:
+
+    # Получаем данные тренировки с комментариями
+    from coach.coach_training_queries import get_training_with_comments
+    training = await get_training_with_comments(training_id)
+
+    # Проверяем что тренировка принадлежит пользователю
+    if not training or training['user_id'] != callback.from_user.id:
         await callback.answer("❌ Тренировка не найдена", show_alert=True)
         return
     
@@ -1623,10 +1744,18 @@ async def show_training_detail(callback: CallbackQuery):
     if training.get('max_pulse'):
         detail_text += f"💗 *Максимальный пульс:* {training['max_pulse']} уд/мин\n"
     
-    # Комментарий
+    # Комментарий ученика
     if training.get('comment'):
-        detail_text += f"\n💬 *Комментарий:*\n_{training['comment']}_\n"
-    
+        detail_text += f"\n💬 *Мой комментарий:*\n_{training['comment']}_\n"
+
+    # Комментарии тренера
+    comments = training.get('comments', [])
+    if comments:
+        detail_text += f"\n💬 *Комментарий тренера:*\n"
+        for comment in comments:
+            author_name = comment.get('author_name') or comment.get('author_username')
+            detail_text += f"_{author_name}:_ {comment['comment']}\n"
+
     # Усилия
     if training.get('fatigue_level'):
         detail_text += f"\n💪 *Уровень усилий:* {training['fatigue_level']}/10\n"
@@ -1696,10 +1825,15 @@ async def back_to_list(callback: CallbackQuery):
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: CallbackQuery):
     """Вернуться в главное меню"""
+    from coach.coach_queries import is_user_coach
+
+    user_id = callback.from_user.id
+    is_coach_status = await is_user_coach(user_id)
+
     await callback.message.delete()
     await callback.message.answer(
         "Вы в главном меню",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_main_menu_keyboard(is_coach_status)
     )
     await callback.answer()
 
@@ -2092,19 +2226,28 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
         )
         
         logger.info(f"PDF успешно отправлен пользователю {user_id}")
-        
+
+        # Получаем статус тренера для клавиатуры
+        from coach.coach_queries import is_user_coach
+        is_coach_status = await is_user_coach(user_id)
+
         # Возвращаем в главное меню
         await message.answer(
             "✅ PDF успешно создан!",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(is_coach_status)
         )
-        
+
     except Exception as e:
         logger.error(f"Ошибка при генерации PDF: {str(e)}", exc_info=True)
+
+        # Получаем статус тренера для клавиатуры
+        from coach.coach_queries import is_user_coach
+        is_coach_status = await is_user_coach(user_id)
+
         await message.answer(
             f"❌ Ошибка при создании PDF:\n{str(e)}\n\n"
             "Попробуйте позже или выберите другой период.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(is_coach_status)
         )
 
 
@@ -2385,11 +2528,11 @@ async def cancel_trainings_export_inline(callback: CallbackQuery, state: FSMCont
     await callback.answer("Экспорт отменен")
 
 
-# ============== ОБРАБОТЧИК КНОПКИ "ТРЕНЕР" ==============
+# ============== ОБРАБОТЧИК КНОПКИ "КАБИНЕТ ТРЕНЕРА" ==============
 
-@router.message(F.text == "👨‍🏫 Тренер")
+@router.message(F.text == "👨‍🏫 Кабинет тренера")
 async def show_coach_section(message: Message):
-    """Показать раздел тренера"""
+    """Показать кабинет тренера"""
     from coach.coach_queries import is_user_coach
     from coach.coach_keyboards import get_coach_main_menu
 
@@ -2404,7 +2547,7 @@ async def show_coach_section(message: Message):
         return
 
     await message.answer(
-        "👨‍🏫 <b>Раздел тренера</b>\n\n"
+        "👨‍🏫 <b>Кабинет тренера</b>\n\n"
         "Здесь вы можете управлять своими учениками, "
         "просматривать их тренировки и прогресс.",
         reply_markup=ReplyKeyboardRemove(),

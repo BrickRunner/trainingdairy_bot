@@ -94,13 +94,90 @@ async def get_student_trainings(
             FROM trainings t
             LEFT JOIN users u ON u.id = t.added_by_coach_id
             WHERE t.user_id = ?
-            ORDER BY t.date ASC, t.created_at ASC
+            ORDER BY t.date DESC, t.created_at DESC
             LIMIT ? OFFSET ?
             """,
             (student_id, limit, offset)
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+
+async def get_student_trainings_by_period(
+    student_id: int,
+    period: str
+) -> List[Dict[str, Any]]:
+    """
+    Получить тренировки ученика за указанный период
+
+    Args:
+        student_id: ID ученика
+        period: Период:
+            - 'week': от понедельника до воскресенья текущей недели
+            - '2weeks': последние 14 дней до сегодня
+            - 'month': с 1 до последнего числа текущего месяца
+            - 'all': все тренировки
+
+    Returns:
+        Список тренировок
+    """
+    from datetime import datetime, timedelta
+    import calendar
+
+    today = datetime.now().date()
+
+    if period == 'week':
+        # Текущая календарная неделя: от понедельника до воскресенья
+        start_date = today - timedelta(days=today.weekday())  # Понедельник
+        end_date = start_date + timedelta(days=6)  # Воскресенье
+    elif period == '2weeks':
+        # Последние 14 дней до сегодня
+        start_date = today - timedelta(days=13)
+        end_date = today
+    elif period == 'month':
+        # Текущий календарный месяц: с 1 до последнего числа
+        start_date = today.replace(day=1)
+        # Последний день месяца
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        end_date = today.replace(day=last_day)
+    else:  # all
+        start_date = None
+        end_date = None
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        if start_date:
+            async with db.execute(
+                """
+                SELECT
+                    t.*,
+                    u.username as coach_username
+                FROM trainings t
+                LEFT JOIN users u ON u.id = t.added_by_coach_id
+                WHERE t.user_id = ? AND t.date >= ? AND t.date <= ?
+                ORDER BY t.date DESC, t.created_at DESC
+                """,
+                (student_id, start_date.isoformat(), end_date.isoformat())
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+        else:
+            async with db.execute(
+                """
+                SELECT
+                    t.*,
+                    u.username as coach_username
+                FROM trainings t
+                LEFT JOIN users u ON u.id = t.added_by_coach_id
+                WHERE t.user_id = ?
+                ORDER BY t.date DESC, t.created_at DESC
+                LIMIT 100
+                """,
+                (student_id,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
 
 
 async def get_training_with_comments(training_id: int) -> Optional[Dict[str, Any]]:

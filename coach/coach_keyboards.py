@@ -17,7 +17,7 @@ def get_coach_main_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🔗 Ссылка для учеников", callback_data="coach:link")
     )
     builder.row(
-        InlineKeyboardButton(text="« Назад", callback_data="main_menu")
+        InlineKeyboardButton(text="« Назад", callback_data="back_to_main")
     )
 
     return builder.as_markup()
@@ -48,7 +48,7 @@ def get_student_detail_keyboard(student_id: int) -> InlineKeyboardMarkup:
 
     builder.row(
         InlineKeyboardButton(
-            text="➕ Добавить тренировку",
+            text="➕ Назначить тренировку",
             callback_data=f"coach:add_training:{student_id}"
         )
     )
@@ -60,14 +60,8 @@ def get_student_detail_keyboard(student_id: int) -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(
-            text="📊 Тренировки",
+            text="📊 Статистика",
             callback_data=f"coach:student_trainings:{student_id}"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="📈 Статистика",
-            callback_data=f"coach:student_stats:{student_id}"
         )
     )
     builder.row(
@@ -124,7 +118,7 @@ def get_add_coach_keyboard() -> InlineKeyboardMarkup:
         )
     )
     builder.row(
-        InlineKeyboardButton(text="« Назад", callback_data="settings")
+        InlineKeyboardButton(text="« Назад", callback_data="settings:menu")
     )
 
     return builder.as_markup()
@@ -141,7 +135,7 @@ def get_student_coach_info_keyboard() -> InlineKeyboardMarkup:
         )
     )
     builder.row(
-        InlineKeyboardButton(text="« Назад", callback_data="settings")
+        InlineKeyboardButton(text="« Назад", callback_data="settings:menu")
     )
 
     return builder.as_markup()
@@ -165,8 +159,10 @@ def get_confirm_remove_coach_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_student_trainings_keyboard(student_id: int, trainings: list) -> InlineKeyboardMarkup:
+def get_student_trainings_keyboard(student_id: int, trainings: list, period: str = None, date_format: str = 'ДД.ММ.ГГГГ') -> InlineKeyboardMarkup:
     """Клавиатура со списком тренировок ученика"""
+    from utils.date_formatter import DateFormatter
+
     builder = InlineKeyboardBuilder()
 
     type_emoji = {
@@ -179,7 +175,16 @@ def get_student_trainings_keyboard(student_id: int, trainings: list) -> InlineKe
 
     for training in trainings[:15]:  # Максимум 15 тренировок
         emoji = type_emoji.get(training['type'], '📝')
-        date_str = training['date'][5:]  # MM-DD
+
+        # Форматируем дату согласно настройкам тренера (короткий формат: без года)
+        formatted_date = DateFormatter.format_date(training['date'], date_format)
+        # Для короткого отображения берем только день и месяц
+        if date_format == 'ДД.ММ.ГГГГ':
+            date_str = formatted_date[:5]  # ДД.ММ
+        elif date_format == 'ММ/ДД/ГГГГ':
+            date_str = formatted_date[:5]  # ММ/ДД
+        else:  # ГГГГ-ММ-ДД
+            date_str = formatted_date[5:]  # ММ-ДД
 
         # Отметка если добавлено тренером
         added_mark = " 👨‍🏫" if training.get('added_by_coach_id') else ""
@@ -187,36 +192,54 @@ def get_student_trainings_keyboard(student_id: int, trainings: list) -> InlineKe
         builder.row(
             InlineKeyboardButton(
                 text=f"{emoji} {date_str}{added_mark}",
-                callback_data=f"coach:training_detail:{training['id']}:{student_id}"
+                callback_data=f"coach:training_detail:{training['id']}:{student_id}:{period}"
             )
         )
 
+    # Кнопка назад - к выбору периода
     builder.row(
         InlineKeyboardButton(
-            text="« Назад",
-            callback_data=f"coach:student:{student_id}"
+            text="« К выбору периода",
+            callback_data=f"coach:student_trainings:{student_id}"
         )
     )
 
     return builder.as_markup()
 
 
-def get_training_detail_keyboard(training_id: int, student_id: int, has_comments: bool = False) -> InlineKeyboardMarkup:
+def get_training_detail_keyboard(training_id: int, student_id: int, period: str = None, has_comments: int = 0, coach_has_comment: bool = False) -> InlineKeyboardMarkup:
     """Клавиатура для детальной информации о тренировке"""
     builder = InlineKeyboardBuilder()
 
-    builder.row(
-        InlineKeyboardButton(
-            text=f"💬 Комментарии ({has_comments})" if has_comments else "💬 Добавить комментарий",
-            callback_data=f"coach:add_comment:{training_id}:{student_id}"
+    # Показываем кнопку добавления комментария только если тренер еще не комментировал
+    if not coach_has_comment:
+        # Формируем callback_data с учетом периода
+        comment_callback = f"coach:add_comment:{training_id}:{student_id}"
+        if period:
+            comment_callback += f":{period}"
+
+        builder.row(
+            InlineKeyboardButton(
+                text="💬 Добавить комментарий",
+                callback_data=comment_callback
+            )
         )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="« К списку",
-            callback_data=f"coach:student_trainings:{student_id}"
+
+    # Если period указан, возвращаемся к списку с этим периодом, иначе к меню выбора периода
+    if period:
+        builder.row(
+            InlineKeyboardButton(
+                text="« К списку",
+                callback_data=f"coach:trainings_period:{student_id}:{period}"
+            )
         )
-    )
+    else:
+        builder.row(
+            InlineKeyboardButton(
+                text="« К выбору периода",
+                callback_data=f"coach:student_trainings:{student_id}"
+            )
+        )
 
     return builder.as_markup()
 
@@ -233,6 +256,46 @@ def get_student_stats_period_keyboard(student_id: int) -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(text="📅 Месяц", callback_data=f"coach:stats_period:{student_id}:month")
+    )
+    builder.row(
+        InlineKeyboardButton(text="« Назад", callback_data=f"coach:student:{student_id}")
+    )
+
+    return builder.as_markup()
+
+
+def get_student_trainings_period_keyboard(student_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура выбора периода для просмотра тренировок ученика"""
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(text="📅 Неделя", callback_data=f"coach:trainings_period:{student_id}:week")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 2 недели", callback_data=f"coach:trainings_period:{student_id}:2weeks")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Месяц", callback_data=f"coach:trainings_period:{student_id}:month")
+    )
+    builder.row(
+        InlineKeyboardButton(text="« Назад", callback_data=f"coach:student:{student_id}")
+    )
+
+    return builder.as_markup()
+
+
+def get_student_health_period_keyboard(student_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура выбора периода для просмотра здоровья ученика"""
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(text="📅 Неделя", callback_data=f"coach:health_period:{student_id}:week")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Две недели", callback_data=f"coach:health_period:{student_id}:2weeks")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📅 Месяц", callback_data=f"coach:health_period:{student_id}:month")
     )
     builder.row(
         InlineKeyboardButton(text="« Назад", callback_data=f"coach:student:{student_id}")

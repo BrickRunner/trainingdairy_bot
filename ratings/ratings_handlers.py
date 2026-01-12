@@ -276,9 +276,14 @@ async def show_period_ranking(callback: CallbackQuery):
 @router.callback_query(F.data == "achievements:back")
 async def back_to_main(callback: CallbackQuery):
     """Вернуться в главное меню"""
+    from coach.coach_queries import is_user_coach
+
+    user_id = callback.from_user.id
+    is_coach_status = await is_user_coach(user_id)
+
     await callback.message.answer(
         "Главное меню:",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_main_menu_keyboard(is_coach_status)
     )
     await callback.message.delete()
     await callback.answer()

@@ -220,43 +220,53 @@ async def delete_training(training_id: int, user_id: int) -> bool:
 async def get_trainings_by_period(user_id: int, period: str) -> list:
     """
     Получить тренировки пользователя за календарный период
-    
+
     Args:
         user_id: ID пользователя
-        period: Период ('week' - текущая неделя, '2weeks' - текущая и прошлая недели, 'month' - текущий месяц)
-        
+        period: Период:
+            - 'week': от понедельника до воскресенья текущей недели
+            - '2weeks': последние 14 дней до сегодня
+            - 'month': с 1 до последнего числа текущего месяца
+
     Returns:
         Список тренировок за период (отсортированных по дате тренировки, от старых к новым)
     """
     from datetime import datetime, timedelta
-    
-    # Определяем начальную дату в зависимости от периода
+    import calendar
+
+    # Определяем начальную и конечную даты в зависимости от периода
     today = datetime.now().date()
-    
+
     if period == 'week':
-        # Текущая календарная неделя (с понедельника)
-        start_date = today - timedelta(days=today.weekday())
+        # Текущая календарная неделя: от понедельника до воскресенья
+        start_date = today - timedelta(days=today.weekday())  # Понедельник
+        end_date = start_date + timedelta(days=6)  # Воскресенье
     elif period == '2weeks':
-        # Текущая и прошлая календарные недели (с понедельника прошлой недели)
-        start_date = today - timedelta(days=today.weekday() + 7)
+        # Последние 14 дней до сегодня
+        start_date = today - timedelta(days=13)
+        end_date = today
     elif period == 'month':
-        # Текущий календарный месяц (с 1-го числа)
+        # Текущий календарный месяц: с 1 до последнего числа
         start_date = today.replace(day=1)
+        # Последний день месяца
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        end_date = today.replace(day=last_day)
     else:
         # По умолчанию - текущая неделя
         start_date = today - timedelta(days=today.weekday())
-    
+        end_date = start_date + timedelta(days=6)
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """
-            SELECT * FROM trainings 
-            WHERE user_id = ? 
+            SELECT * FROM trainings
+            WHERE user_id = ?
             AND date >= ?
             AND date <= ?
             ORDER BY date ASC
             """,
-            (user_id, start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+            (user_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -265,11 +275,14 @@ async def get_trainings_by_period(user_id: int, period: str) -> list:
 async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
     """
     Получить статистику тренировок за календарный период
-    
+
     Args:
         user_id: ID пользователя
-        period: Период ('week', '2weeks', 'month')
-        
+        period: Период:
+            - 'week': от понедельника до воскресенья текущей недели
+            - '2weeks': последние 14 дней до сегодня
+            - 'month': с 1 до последнего числа текущего месяца
+
     Returns:
         Словарь со статистикой:
         - total_count: общее количество тренировок
@@ -278,27 +291,34 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
         - avg_fatigue: средний уровень усилий
     """
     from datetime import datetime, timedelta
-    
-    # Определяем начальную дату в зависимости от периода
+    import calendar
+
+    # Определяем начальную и конечную даты в зависимости от периода
     today = datetime.now().date()
-    
+
     if period == 'week':
-        # Текущая календарная неделя (с понедельника)
-        start_date = today - timedelta(days=today.weekday())
+        # Текущая календарная неделя: от понедельника до воскресенья
+        start_date = today - timedelta(days=today.weekday())  # Понедельник
+        end_date = start_date + timedelta(days=6)  # Воскресенье
     elif period == '2weeks':
-        # Текущая и прошлая календарные недели (с понедельника прошлой недели)
-        start_date = today - timedelta(days=today.weekday() + 7)
+        # Последние 14 дней до сегодня
+        start_date = today - timedelta(days=13)
+        end_date = today
     elif period == 'month':
-        # Текущий календарный месяц (с 1-го числа)
+        # Текущий календарный месяц: с 1 до последнего числа
         start_date = today.replace(day=1)
+        # Последний день месяца
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        end_date = today.replace(day=last_day)
     else:
         # По умолчанию - текущая неделя
         start_date = today - timedelta(days=today.weekday())
-    
+        end_date = start_date + timedelta(days=6)
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        
-        # Получаем все тренировки за период (до сегодняшнего дня включительно)
+
+        # Получаем все тренировки за период
         async with db.execute(
             """
             SELECT type, distance, calculated_volume, duration, fatigue_level
@@ -307,7 +327,7 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
             AND date >= ?
             AND date <= ?
             """,
-            (user_id, start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+            (user_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         ) as cursor:
             trainings = await cursor.fetchall()
         

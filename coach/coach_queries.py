@@ -7,7 +7,10 @@ import logging
 import secrets
 import string
 import os
+from datetime import datetime
 from typing import Optional, List, Dict, Any
+import pytz
+from database.queries import get_user_settings
 
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
@@ -43,6 +46,15 @@ async def set_coach_mode(user_id: int, is_coach: bool) -> str:
 
                 if row and row[0]:
                     link_code = row[0]
+                    # Убеждаемся что is_coach = 1
+                    await db.execute(
+                        """
+                        UPDATE user_settings
+                        SET is_coach = 1
+                        WHERE user_id = ?
+                        """,
+                        (user_id,)
+                    )
                 else:
                     # Генерируем уникальный код
                     while True:
@@ -120,22 +132,66 @@ async def add_student_to_coach(coach_id: int, student_id: int) -> bool:
     Добавить ученика к тренеру
 
     Returns:
-        True если успешно, False если связь уже существует
+        True если успешно, False если активная связь уже существует или coach_id == student_id
     """
+    # Проверка на самодобавление
+    if coach_id == student_id:
+        logger.warning(f"User {coach_id} tried to add themselves as student")
+        return False
+
+    # Получаем часовой пояс ученика для корректного сохранения даты подключения
+    student_settings = await get_user_settings(student_id)
+    student_timezone = student_settings.get('timezone', 'Europe/Moscow') if student_settings else 'Europe/Moscow'
+
+    # Вычисляем текущее время в часовом поясе ученика
+    try:
+        tz = pytz.timezone(student_timezone)
+        local_time = datetime.now(tz)
+        created_at_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        logger.error(f"Error getting timezone {student_timezone}: {e}")
+        # Fallback на UTC в случае ошибки
+        created_at_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
     async with aiosqlite.connect(DB_PATH) as db:
-        try:
+        # Проверяем, есть ли уже связь
+        cursor = await db.execute(
+            """
+            SELECT status FROM coach_links
+            WHERE coach_id = ? AND student_id = ?
+            """,
+            (coach_id, student_id)
+        )
+        existing = await cursor.fetchone()
+
+        if existing:
+            status = existing[0]
+            if status == 'active':
+                # Активная связь уже существует
+                return False
+            else:
+                # Связь была удалена, реактивируем её с новой датой подключения и очищаем псевдоним
+                await db.execute(
+                    """
+                    UPDATE coach_links
+                    SET status = 'active', removed_at = NULL, created_at = ?, coach_nickname = NULL
+                    WHERE coach_id = ? AND student_id = ?
+                    """,
+                    (created_at_str, coach_id, student_id)
+                )
+                await db.commit()
+                return True
+        else:
+            # Связи нет, создаём новую
             await db.execute(
                 """
-                INSERT INTO coach_links (coach_id, student_id, status)
-                VALUES (?, ?, 'active')
+                INSERT INTO coach_links (coach_id, student_id, status, created_at)
+                VALUES (?, ?, 'active', ?)
                 """,
-                (coach_id, student_id)
+                (coach_id, student_id, created_at_str)
             )
             await db.commit()
             return True
-        except aiosqlite.IntegrityError:
-            # Связь уже существует
-            return False
 
 
 async def remove_student_from_coach(coach_id: int, student_id: int) -> bool:
@@ -162,7 +218,8 @@ async def get_coach_students(coach_id: int) -> List[Dict[str, Any]]:
                 u.id,
                 u.username,
                 s.name,
-                cl.created_at
+                cl.created_at,
+                cl.coach_nickname
             FROM coach_links cl
             JOIN users u ON u.id = cl.student_id
             LEFT JOIN user_settings s ON s.user_id = cl.student_id
@@ -176,7 +233,7 @@ async def get_coach_students(coach_id: int) -> List[Dict[str, Any]]:
                 {
                     "id": row[0],
                     "username": row[1],
-                    "name": row[2] or row[1],
+                    "name": row[4] or row[2] or row[1],  # Приоритет: псевдоним > имя > username
                     "connected_at": row[3]
                 }
                 for row in rows
@@ -210,9 +267,31 @@ async def get_student_coach(student_id: int) -> Optional[Dict[str, Any]]:
             return None
 
 
-async def remove_coach_from_student(student_id: int) -> bool:
-    """Ученик отключается от тренера"""
+async def remove_coach_from_student(student_id: int) -> int:
+    """
+    Ученик отключается от тренера
+
+    Returns:
+        coach_id если успешно, None если тренер не найден
+    """
     async with aiosqlite.connect(DB_PATH) as db:
+        # Сначала получаем ID тренера
+        cursor = await db.execute(
+            """
+            SELECT coach_id
+            FROM coach_links
+            WHERE student_id = ? AND status = 'active'
+            """,
+            (student_id,)
+        )
+        row = await cursor.fetchone()
+
+        if not row:
+            return None
+
+        coach_id = row[0]
+
+        # Обновляем статус
         await db.execute(
             """
             UPDATE coach_links
@@ -222,4 +301,4 @@ async def remove_coach_from_student(student_id: int) -> bool:
             (student_id,)
         )
         await db.commit()
-        return True
+        return coach_id

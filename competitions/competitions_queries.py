@@ -422,10 +422,10 @@ async def get_user_competitions(
             SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
                    cp.place_overall, cp.place_age_category, cp.age_category,
                    cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
-                   cp.registered_at, cp.result_added_at
+                   cp.registered_at, cp.result_added_at, cp.proposal_status
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
-            WHERE cp.user_id = ? AND {date_condition}
+            WHERE cp.user_id = ? AND {date_condition} AND (cp.proposal_status IS NULL OR cp.proposal_status != 'pending')
             ORDER BY c.date ASC
             """,
             (user_id,)
@@ -462,7 +462,7 @@ async def get_user_competitions_by_period(
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        conditions = ["cp.user_id = ?", "c.date < date('now')"]
+        conditions = ["cp.user_id = ?", "c.date < date('now')", "(cp.proposal_status IS NULL OR cp.proposal_status != 'pending')"]
         params = [user_id]
 
         if date_from:
@@ -968,7 +968,7 @@ async def get_user_competitions_with_details(
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        conditions = ["cp.user_id = ?"]
+        conditions = ["cp.user_id = ?", "(cp.proposal_status IS NULL OR cp.proposal_status != 'pending')"]
         params = [user_id]
 
         if start_date:

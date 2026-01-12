@@ -1,0 +1,20 @@
+{
+    "compilerOptions": {
+        "module": "NodeNext",
+        "target": "es2017",
+        "moduleResolution": "NodeNext",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "outDir": "./dist",
+        "declaration": true, // Generate .d.ts files for type definitions
+        "declarationMap": true, // Generate source maps for .d.ts files
+        "sourceMap": true, // Generate source maps for .js files
+        "rootDir": "./src", // Specify the root directory of input files
+        "composite": true, // Enable project references
+        "resolveJsonModule": true // Allow importing .json files
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "dist"]
+}

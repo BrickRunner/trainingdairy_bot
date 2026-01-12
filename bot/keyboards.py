@@ -24,10 +24,10 @@ def get_main_menu_keyboard(is_coach: bool = False) -> ReplyKeyboardMarkup:
         KeyboardButton(text="🏆 Достижения")
     )
 
-    # Кнопка "Тренер" показывается только если is_coach=True
+    # Кнопка "Кабинет тренера" показывается только если is_coach=True
     if is_coach:
         builder.row(
-            KeyboardButton(text="👨‍🏫 Тренер"),
+            KeyboardButton(text="👨‍🏫 Кабинет тренера"),
             KeyboardButton(text="❤️ Здоровье")
         )
     else:
@@ -152,17 +152,36 @@ def get_period_keyboard(period: str = None) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_date_keyboard() -> ReplyKeyboardMarkup:
-    """Клавиатура выбора даты тренировки"""
+def get_date_keyboard(for_coach: bool = False) -> ReplyKeyboardMarkup:
+    """
+    Клавиатура выбора даты тренировки
+
+    Args:
+        for_coach: True если для тренера (включает кнопку "Завтра"), False для обычного пользователя
+    """
     builder = ReplyKeyboardBuilder()
-    builder.row(
-        KeyboardButton(text="📅 Сегодня"),
-        KeyboardButton(text="📅 Вчера")
-    )
-    builder.row(
-        KeyboardButton(text="📝 Ввести дату"),
-        KeyboardButton(text="❌ Отменить")
-    )
+
+    if for_coach:
+        # Для тренера: Сегодня, Завтра, Ввести дату, Отменить
+        builder.row(
+            KeyboardButton(text="📅 Сегодня"),
+            KeyboardButton(text="📅 Завтра")
+        )
+        builder.row(
+            KeyboardButton(text="📝 Ввести дату"),
+            KeyboardButton(text="❌ Отменить")
+        )
+    else:
+        # Для обычного пользователя: Сегодня, Вчера, Ввести дату, Отменить
+        builder.row(
+            KeyboardButton(text="📅 Сегодня"),
+            KeyboardButton(text="📅 Вчера")
+        )
+        builder.row(
+            KeyboardButton(text="📝 Ввести дату"),
+            KeyboardButton(text="❌ Отменить")
+        )
+
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -197,12 +216,12 @@ def get_trainings_list_keyboard(trainings: list, period: str, date_format: str) 
         # Форматируем дату согласно настройкам (короткий формат: без года)
         formatted_date = format_date_by_setting(training['date'], date_format)
         # Для короткого отображения берем только день.месяц или эквивалент
-        if date_format == 'DD.MM.YYYY':
+        if date_format == 'ДД.ММ.ГГГГ':
             short_date = formatted_date[:5]  # ДД.ММ
-        elif date_format == 'MM/DD/YYYY':
+        elif date_format == 'ММ/ДД/ГГГГ':
             short_date = formatted_date[:5]  # ММ/ДД
-        else:
-            short_date = formatted_date[-5:]  # ММ-ДД (от末尾)
+        else:  # ГГГГ-ММ-ДД
+            short_date = formatted_date[5:]  # ММ-ДД (пропускаем год и дефис)
         
         # Текст кнопки: "№1 🏃 15.01"
         button_text = f"№{idx} {emoji} {short_date}"

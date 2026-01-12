@@ -62,12 +62,12 @@ async def main():
     dp.include_router(registration_router)  # Роутер регистрации
     dp.include_router(settings_router)  # settings_router содержит специфичные обработчики (cal_birth_)
     dp.include_router(competitions_statistics_router)  # Роутер статистики и экспорта соревнований
+    dp.include_router(coach_router)  # Роутер тренеров
+    dp.include_router(coach_add_training_router)  # Роутер добавления тренировок для учеников
+    dp.include_router(coach_competitions_router)  # Роутер предложения соревнований от тренера (ПЕРЕД custom!)
     dp.include_router(competitions_router)  # Роутер соревнований
     dp.include_router(custom_competitions_router)  # Роутер пользовательских соревнований
     dp.include_router(search_competitions_router)  # Роутер поиска соревнований
-    dp.include_router(coach_router)  # Роутер тренеров
-    dp.include_router(coach_add_training_router)  # Роутер добавления тренировок для учеников
-    dp.include_router(coach_competitions_router)  # Роутер предложения соревнований от тренера
     dp.include_router(health_calendar_export_router)  # Роутер календарей экспорта здоровья
     dp.include_router(health_router)
     dp.include_router(ratings_router)
