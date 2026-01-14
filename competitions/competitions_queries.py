@@ -64,6 +64,90 @@ async def add_competition(data: Dict[str, Any]) -> int:
         return cursor.lastrowid
 
 
+async def get_or_create_competition_from_api(api_comp: Dict[str, Any]) -> int:
+    """
+    Получить БД ID соревнования из API данных или создать новую запись если не существует
+
+    Args:
+        api_comp: Словарь с данными соревнования из API
+                  Обязательные поля: id, title, date, url
+
+    Returns:
+        Integer ID соревнования в БД
+    """
+    source_url = api_comp.get('url', '')
+
+    # Проверяем существование соревнования по source_url
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM competitions WHERE source_url = ? AND source_url != ''",
+            (source_url,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                # Соревнование уже существует
+                return row['id']
+
+    # Соревнование не найдено - создаем новое
+    # Преобразуем данные API в формат для add_competition
+
+    # Парсим дату (может быть в формате ISO с временем)
+    comp_date = api_comp.get('date', '')
+    if 'T' in comp_date:
+        comp_date = comp_date.split('T')[0]
+
+    # Преобразуем distances в нужный формат
+    distances_data = api_comp.get('distances', [])
+    if isinstance(distances_data, list) and distances_data:
+        # API может возвращать [{"name": "5 км", "distance": 5.0}, ...]
+        # Извлекаем только числовые значения дистанций
+        distances = []
+        for d in distances_data:
+            if isinstance(d, dict):
+                dist_val = d.get('distance')
+                if dist_val:
+                    distances.append(dist_val)
+            elif isinstance(d, (int, float)):
+                distances.append(d)
+    else:
+        distances = []
+
+    # Определяем organizer по URL
+    organizer = ''
+    if 'russiarunning' in source_url.lower():
+        organizer = 'Russia Running'
+    elif 'timerman' in source_url.lower():
+        organizer = 'Timerman'
+    elif 'heroleague' in source_url.lower():
+        organizer = 'HeroLeague'
+    elif 'reg.place' in source_url.lower() or 'regplace' in source_url.lower():
+        organizer = 'reg.place'
+
+    comp_data = {
+        'name': api_comp.get('title', api_comp.get('name', 'Без названия')),
+        'date': comp_date,
+        'city': api_comp.get('city', ''),
+        'country': 'Россия',
+        'location': api_comp.get('place', ''),
+        'distances': distances,
+        'type': api_comp.get('type', ''),
+        'description': api_comp.get('description', ''),
+        'official_url': source_url,
+        'organizer': organizer,
+        'registration_status': 'unknown',
+        'status': 'upcoming',
+        'created_by': None,
+        'is_official': 1,
+        'source_url': source_url,
+        'sport_type': api_comp.get('sport_code', 'бег')
+    }
+
+    db_id = await add_competition(comp_data)
+    logger.info(f"Created competition in DB: {comp_data['name']} with DB ID: {db_id} (API ID: {api_comp.get('id')})")
+    return db_id
+
+
 async def get_competition(competition_id: int) -> Optional[Dict[str, Any]]:
     """
     Получить соревнование по ID
@@ -766,28 +850,60 @@ async def get_competition_participants_count(competition_id: int) -> int:
             return row[0] if row else 0
 
 
-async def get_user_competition_registration(user_id: int, competition_id: int) -> Optional[Dict[str, Any]]:
+async def get_user_competition_registration(
+    user_id: int,
+    competition_id: int,
+    distance: float = None,
+    distance_name: str = None
+) -> Optional[Dict[str, Any]]:
     """
     Получить регистрацию пользователя на соревнование
 
     Args:
         user_id: ID пользователя
         competition_id: ID соревнования
+        distance: Дистанция (опционально, для точного поиска при множественных регистрациях)
+        distance_name: Название дистанции (опционально, для точного поиска при множественных регистрациях)
 
     Returns:
         Словарь с данными регистрации или None
     """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute(
+
+        # Если указаны distance или distance_name, используем их для точного поиска
+        if distance is not None or distance_name:
+            # Формируем условия поиска
+            conditions = ["user_id = ?", "competition_id = ?"]
+            params = [user_id, competition_id]
+
+            if distance is not None:
+                conditions.append("distance = ?")
+                params.append(distance)
+
+            if distance_name:
+                conditions.append("distance_name = ?")
+                params.append(distance_name)
+
+            query = f"""
+                SELECT * FROM competition_participants
+                WHERE {' AND '.join(conditions)}
             """
-            SELECT * FROM competition_participants
-            WHERE user_id = ? AND competition_id = ?
-            """,
-            (user_id, competition_id)
-        ) as cursor:
-            row = await cursor.fetchone()
-            return dict(row) if row else None
+
+            async with db.execute(query, tuple(params)) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+        else:
+            # Обратная совместимость: если параметры не указаны, возвращаем первую запись
+            async with db.execute(
+                """
+                SELECT * FROM competition_participants
+                WHERE user_id = ? AND competition_id = ?
+                """,
+                (user_id, competition_id)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
 
 
 # ========== ЛИЧНЫЕ РЕКОРДЫ ==========

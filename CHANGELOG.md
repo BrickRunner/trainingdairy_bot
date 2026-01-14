@@ -1,5 +1,125 @@
 # Журнал изменений (Changelog)
 
+## [2026-01-14] - Исправлена ошибка UUID при предложении соревнований тренером
+
+### Исправлено
+
+#### Ошибка "ValueError: invalid literal for int() with base 10: UUID" при просмотре соревнований
+
+**Файлы:**
+- `competitions/competitions_queries.py:67-148` - добавлена функция `get_or_create_competition_from_api`
+- `coach/coach_competitions_handlers.py:1337-1394` - обновлена функция `coach_show_filtered_competitions`
+
+**Проблема:**
+Когда тренер предлагал ученику соревнования через раздел "Предстоящие соревнования" (путь: Кабинет тренера → Ученики → Соревнования → Предстоящие соревнования → [выбор города/периода/спорта]), при открытии детальной информации о соревновании возникала ошибка:
+
+```
+ValueError: invalid literal for int() with base 10: '78f22026-60f0-48de-90ff-14f356e61fc9'
+```
+
+**Причина:**
+1. Функция `coach_show_filtered_competitions` получает соревнования из внешних API через `fetch_all_competitions()`
+2. Внешние API (RussiaRunning, Timerman, HeroLeague, reg.place) возвращают соревнования с UUID в поле `id` (не integer)
+3. UUID передавался в callback: `callback_data=f"coach:sel_comp:{student_id}:{comp['id']}"`
+4. Обработчик `coach_select_competition_for_student` пытался преобразовать UUID в int: `comp_id = int(parts[3])`
+5. Это вызывало ValueError, так как UUID нельзя преобразовать в integer
+
+**Исправление:**
+
+1. **Добавлена функция `get_or_create_competition_from_api`** (competitions/competitions_queries.py):
+```python
+async def get_or_create_competition_from_api(api_comp: Dict[str, Any]) -> int:
+    """
+    Получить БД ID соревнования из API данных или создать новую запись
+
+    - Проверяет существование по source_url
+    - Если существует - возвращает БД ID
+    - Если нет - создает запись и возвращает новый БД ID
+    """
+```
+
+2. **Обновлена функция `coach_show_filtered_competitions`**:
+```python
+# БЫЛО (неправильно - UUID в callback):
+for comp in competitions[:20]:
+    comp_id = comp.get('id', '')  # UUID из API
+    callback_data=f"coach:sel_comp:{student_id}:{comp_id}"
+
+# СТАЛО (правильно - БД ID в callback):
+# Сохраняем соревнования в БД перед показом
+competitions_with_db_ids = []
+for comp in competitions[:20]:
+    db_id = await get_or_create_competition_from_api(comp)
+    comp['db_id'] = db_id
+    competitions_with_db_ids.append(comp)
+
+for comp in competitions_with_db_ids:
+    comp_db_id = comp.get('db_id')  # Integer БД ID
+    callback_data=f"coach:sel_comp:{student_id}:{comp_db_id}"
+```
+
+**Результат:**
+- ✅ Соревнования из внешних API автоматически сохраняются в БД перед показом
+- ✅ В callback передается integer БД ID вместо UUID
+- ✅ Обработчик `coach_select_competition_for_student` корректно работает с int ID
+- ✅ Исключены повторные дубликаты соревнований в БД (проверка по source_url)
+- ✅ Тренер может успешно предлагать соревнования ученикам
+
+
+## [2026-01-14] - Исправлена ошибка просмотра деталей соревнования при множественных регистрациях
+
+### Исправлено
+
+#### Ошибка при просмотре деталей соревнования ученика (тренер)
+
+**Файлы:**
+- `coach/coach_competitions_handlers.py:1795-1802` - обновлен callback с передачей distance/distance_name
+- `coach/coach_competitions_handlers.py:1820-1857` - обновлен обработчик view_student_competition_details
+- `competitions/competitions_queries.py:769-822` - обновлена функция get_user_competition_registration
+
+**Проблема:**
+При просмотре тренером детальной информации о предстоящем соревновании ученика (путь: Кабинет тренера → Ученики → Соревнования → Предстоящие соревнования → [клик на соревнование]) возникала ошибка, когда ученик был зарегистрирован на несколько дистанций одного соревнования (например, 5км и 10км).
+
+**Причина:**
+1. В таблице `competition_participants` может быть несколько записей для одного соревнования (разные дистанции)
+2. Callback передавал только `competition_id`, без информации о конкретной дистанции
+3. Функция `get_user_competition_registration` возвращала первую найденную запись, которая могла не совпадать с выбранной в списке
+
+**Исправление:**
+```python
+# БЫЛО (неправильно):
+callback_data=f"coach:view_student_comp:{student_id}:{comp['id']}"
+
+# В обработчике:
+registration = await get_user_competition_registration(student_id, competition_id)
+
+# СТАЛО (правильно):
+callback_data=f"coach:view_student_comp:{student_id}:{comp['id']}:{distance}:{distance_name}"
+
+# В обработчике:
+distance = float(parts[4]) if len(parts) > 4 and parts[4] else None
+distance_name = parts[5] if len(parts) > 5 else None
+registration = await get_user_competition_registration(
+    student_id,
+    competition_id,
+    distance=distance,
+    distance_name=distance_name
+)
+```
+
+**Обновлена функция get_user_competition_registration:**
+- Добавлены опциональные параметры `distance` и `distance_name`
+- При указании этих параметров выполняется точный поиск нужной регистрации
+- Сохранена обратная совместимость (без параметров работает как раньше)
+
+**Результат:**
+- ✅ Корректное отображение деталей соревнования для правильной дистанции
+- ✅ Поддержка множественных регистраций на одно соревнование
+- ✅ Обратная совместимость со старыми callback
+- ✅ Соответствие уникальному ограничению `UNIQUE(competition_id, user_id, distance, distance_name)`
+
+---
+
 ## [2026-01-14] - Исправлена фильтрация в разделе "Предстоящие соревнования" для тренера
 
 ### Исправлено

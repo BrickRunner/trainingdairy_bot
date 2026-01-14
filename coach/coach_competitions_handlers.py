@@ -1334,6 +1334,21 @@ async def coach_show_filtered_competitions(callback: CallbackQuery, state: FSMCo
         await callback.answer()
         return
 
+    # Преобразуем соревнования из API в БД ID
+    # Это нужно для корректной работы callback handlers
+    from competitions.competitions_queries import get_or_create_competition_from_api
+
+    competitions_with_db_ids = []
+    for comp in competitions[:20]:  # Ограничиваем 20 соревнованиями
+        try:
+            db_id = await get_or_create_competition_from_api(comp)
+            comp['db_id'] = db_id
+            competitions_with_db_ids.append(comp)
+        except Exception as e:
+            logger.error(f"Error saving competition to DB: {e}, comp: {comp.get('title', 'unknown')}")
+            # Пропускаем соревнования с ошибками
+            continue
+
     # Показываем результаты
     from utils.date_formatter import get_user_date_format, DateFormatter
     coach_date_format = await get_user_date_format(coach_id)
@@ -1345,7 +1360,7 @@ async def coach_show_filtered_competitions(callback: CallbackQuery, state: FSMCo
         f"📅 Период: <b>{period_display}</b>\n"
         f"🏃 Спорт: <b>{sport_display}</b>\n"
         f"📋 Сервис: <b>{service_display}</b>\n\n"
-        f"Найдено соревнований: {len(competitions)}\n\n"
+        f"Найдено соревнований: {len(competitions_with_db_ids)}\n\n"
         f"Выберите соревнование для предложения ученику:"
     )
 
@@ -1362,11 +1377,11 @@ async def coach_show_filtered_competitions(callback: CallbackQuery, state: FSMCo
         'triathlon': '🏊‍♂️🚴‍♂️🏃'
     }
 
-    for comp in competitions[:20]:  # Показываем первые 20
+    for comp in competitions_with_db_ids:
         # Безопасный доступ к полям соревнования
         comp_name = comp.get('title') or comp.get('name', 'Без названия')
         comp_type = comp.get('sport_code') or comp.get('type', '')
-        comp_id = comp.get('id', '')
+        comp_db_id = comp.get('db_id')  # Используем БД ID вместо UUID
 
         emoji = type_emoji.get(comp_type, '🏃')
         short_name = comp_name[:35] + '...' if len(comp_name) > 35 else comp_name
@@ -1374,7 +1389,7 @@ async def coach_show_filtered_competitions(callback: CallbackQuery, state: FSMCo
         builder.row(
             InlineKeyboardButton(
                 text=f"{emoji} {short_name}",
-                callback_data=f"coach:sel_comp:{student_id}:{comp_id}"
+                callback_data=f"coach:sel_comp:{student_id}:{comp_db_id}"
             )
         )
 
@@ -1792,10 +1807,13 @@ async def show_student_competitions(callback: CallbackQuery, state: FSMContext):
     for comp in all_competitions[:15]:
         # Короткое название для кнопки
         short_name = comp['name'][:30] + '...' if len(comp['name']) > 30 else comp['name']
+        # Передаем distance и distance_name для правильной идентификации регистрации
+        distance = comp.get('distance', 0)
+        distance_name = comp.get('distance_name', '')
         builder.row(
             InlineKeyboardButton(
                 text=f"📋 {short_name}",
-                callback_data=f"coach:view_student_comp:{student_id}:{comp['id']}"
+                callback_data=f"coach:view_student_comp:{student_id}:{comp['id']}:{distance}:{distance_name}"
             )
         )
 
@@ -1821,6 +1839,9 @@ async def view_student_competition_details(callback: CallbackQuery):
     parts = callback.data.split(":")
     student_id = int(parts[2])
     competition_id = int(parts[3])
+    # Парсим distance и distance_name из callback (могут быть пустыми для старых callback)
+    distance = float(parts[4]) if len(parts) > 4 and parts[4] else None
+    distance_name = parts[5] if len(parts) > 5 else None
     coach_id = callback.from_user.id
 
     # Проверяем доступ
@@ -1839,7 +1860,13 @@ async def view_student_competition_details(callback: CallbackQuery):
         return
 
     # Получаем регистрацию ученика на это соревнование
-    registration = await get_user_competition_registration(student_id, competition_id)
+    # Передаем distance и distance_name для точного поиска
+    registration = await get_user_competition_registration(
+        student_id,
+        competition_id,
+        distance=distance,
+        distance_name=distance_name
+    )
     if not registration:
         await callback.answer("Регистрация не найдена", show_alert=True)
         return
