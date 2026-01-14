@@ -165,7 +165,7 @@ async def send_weekly_reports(bot: Bot):
     import aiosqlite
     import os
     from aiogram.types import BufferedInputFile
-    from reports.weekly_report_pdf import generate_weekly_report_pdf
+    from bot.pdf_export import create_training_pdf
 
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
@@ -221,9 +221,31 @@ async def send_weekly_reports(bot: Bot):
                     print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
                     continue
 
-                # Генерируем PDF отчёт
+                # Генерируем PDF отчёт за последнюю неделю
                 try:
-                    pdf_buffer = await generate_weekly_report_pdf(user_id)
+                    # Получаем тренировки за последние 7 дней
+                    end_date = user_now.date()
+                    start_date = end_date - timedelta(days=7)
+
+                    trainings = await get_trainings_by_period(user_id, start_date, end_date)
+
+                    # Если нет тренировок, не отправляем отчёт
+                    if not trainings:
+                        print(f"Пользователь {user_id}: нет тренировок за неделю, отчёт не отправлен")
+                        continue
+
+                    # Получаем статистику
+                    stats = await get_training_statistics(user_id, start_date, end_date)
+
+                    # Формируем текст периода
+                    from utils.date_formatter import DateFormatter, get_user_date_format
+                    user_date_format = await get_user_date_format(user_id)
+                    start_str = DateFormatter.format_date(start_date.strftime('%Y-%m-%d'), user_date_format)
+                    end_str = DateFormatter.format_date(end_date.strftime('%Y-%m-%d'), user_date_format)
+                    period_text = f"{start_str} - {end_str}"
+
+                    # Генерируем PDF
+                    pdf_buffer = await create_training_pdf(trainings, period_text, stats, user_id)
 
                     # Формируем имя файла
                     today = user_now.strftime('%Y-%m-%d')
@@ -243,7 +265,9 @@ async def send_weekly_reports(bot: Bot):
                     )
 
                 except Exception as e:
+                    import traceback
                     print(f"Ошибка генерации или отправки отчёта пользователю {user_id}: {e}")
+                    traceback.print_exc()
 
 
 async def send_training_reminders(bot: Bot):

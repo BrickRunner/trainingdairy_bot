@@ -54,8 +54,8 @@ def get_student_detail_keyboard(student_id: int) -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(
-            text="🏆 Предложить соревнование",
-            callback_data=f"coach:propose_comp:{student_id}"
+            text="🏆 Соревнования",
+            callback_data=f"coach:competitions_menu:{student_id}"
         )
     )
     builder.row(

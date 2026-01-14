@@ -84,7 +84,12 @@
       "Bash(find:*)",
       "Bash(sqlite3:*)",
       "Bash(git checkout:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Read(//d/**)",
+      "Bash(timeout /t 3)",
+      "Bash(venv/bin/python:*)",
+      "Bash(venvScriptspython.exe -m py_compile coachcoach_competitions_handlers.py)",
+      "Bash(venvScriptspython.exe -m py_compile coachcoach_keyboards.py coachcoach_competitions_handlers.py)"
     ],
     "deny": [],
     "ask": []

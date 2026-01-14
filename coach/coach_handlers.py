@@ -733,13 +733,46 @@ async def show_my_coach(callback: CallbackQuery):
 @router.callback_query(F.data == "student:add_coach")
 async def add_coach_prompt(callback: CallbackQuery, state: FSMContext):
     """Запросить код тренера"""
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="❌ Отменить",
+            callback_data="student:cancel_add_coach"
+        )
+    )
+
     await callback.message.edit_text(
         "✏️ <b>Добавление тренера</b>\n\n"
         "Введите код тренера, который он вам отправил:",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
     )
     await state.set_state(CoachStates.waiting_for_coach_code)
     await callback.answer()
+
+
+@router.callback_query(F.data == "student:cancel_add_coach")
+async def cancel_add_coach(callback: CallbackQuery, state: FSMContext):
+    """Отменить добавление тренера и вернуться в настройки"""
+    await state.clear()
+
+    # Редирект в настройки
+    from settings.settings_keyboards import get_settings_menu_keyboard
+
+    # Проверяем, является ли пользователь тренером
+    user_id = callback.from_user.id
+    user_is_coach = await is_user_coach(user_id)
+
+    await callback.message.edit_text(
+        "⚙️ <b>Настройки</b>\n\n"
+        "Выберите раздел:",
+        reply_markup=get_settings_menu_keyboard(is_coach=user_is_coach),
+        parse_mode="HTML"
+    )
+    await callback.answer("❌ Отменено")
 
 
 @router.message(CoachStates.waiting_for_coach_code)
