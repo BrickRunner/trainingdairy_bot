@@ -56,6 +56,12 @@ async def show_coach_menu(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "coach:main_menu")
+async def show_coach_main_menu_redirect(callback: CallbackQuery):
+    """Редирект на главное меню тренера (алиас для coach:menu)"""
+    await show_coach_menu(callback)
+
+
 @router.callback_query(F.data == "coach:students")
 async def show_students_list(callback: CallbackQuery):
     """Показать список учеников"""

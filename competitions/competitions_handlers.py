@@ -1403,6 +1403,60 @@ async def process_target_time_edit(message: Message, state: FSMContext):
     await state.clear()
 
     if success:
+        # Проверяем, было ли соревнование предложено тренером
+        import aiosqlite
+        import os
+        DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                """
+                SELECT proposed_by_coach_id FROM competition_participants
+                WHERE user_id = ? AND competition_id = ? AND distance = ? AND proposed_by_coach = 1
+                """,
+                (user_id, competition_id, distance)
+            ) as cursor:
+                result = await cursor.fetchone()
+
+        if result and result[0]:
+            # Есть тренер - отправляем уведомление
+            coach_id = result[0]
+
+            # Получаем данные ученика и соревнования
+            from database.queries import get_user_settings
+            student_settings = await get_user_settings(user_id)
+            student_name = student_settings.get('name') if student_settings else None
+
+            if not student_name:
+                from database.queries import get_user
+                student = await get_user(user_id)
+                student_name = student.get('name') or student.get('username') or 'Ученик'
+
+            # Получаем соревнование
+            comp = await get_competition(competition_id)
+            if comp:
+                from utils.date_formatter import get_user_date_format, DateFormatter
+                from competitions.competitions_utils import format_competition_distance
+
+                coach_date_format = await get_user_date_format(coach_id)
+                formatted_date = DateFormatter.format_date(comp['date'], coach_date_format)
+                formatted_distance = await format_competition_distance(distance, coach_id)
+
+                # Отправляем уведомление тренеру
+                try:
+                    await message.bot.send_message(
+                        coach_id,
+                        f"📝 <b>Ученик изменил целевое время</b>\n\n"
+                        f"<b>{student_name}</b> изменил целевое время в соревновании:\n\n"
+                        f"🏆 <b>{comp['name']}</b>\n"
+                        f"📅 {formatted_date}\n"
+                        f"📏 {formatted_distance}\n"
+                        f"🎯 Новое целевое время: <b>{normalized_time}</b>",
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send notification to coach {coach_id}: {e}")
+
         await message.answer(
             f"✅ Целевое время обновлено: {normalized_time}",
             reply_markup=ReplyKeyboardRemove()

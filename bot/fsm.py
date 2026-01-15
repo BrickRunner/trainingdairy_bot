@@ -114,6 +114,7 @@ class CompetitionStates(StatesGroup):
     waiting_for_comp_type = State()             # Вид спорта (бег, плавание, вело, триатлон)
     waiting_for_comp_distance = State()         # Дистанция
     waiting_for_comp_target = State()           # Целевое время
+    waiting_for_coach_multi_target = State()    # Ввод целевого времени для нескольких дистанций (тренер)
     waiting_for_comp_city = State()             # Город (опционально)
     waiting_for_comp_url = State()              # URL сайта (опционально)
 
