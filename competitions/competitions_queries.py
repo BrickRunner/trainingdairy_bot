@@ -491,6 +491,9 @@ async def get_user_competitions(
     Returns:
         Список соревнований с данными участия
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
@@ -500,6 +503,37 @@ async def get_user_competitions(
             date_condition = "c.date < date('now')"
         else:
             date_condition = "1=1"
+
+        # Добавим логирование для диагностики
+        logger.info(f"get_user_competitions: user_id={user_id}, status_filter={status_filter}, date_condition={date_condition}")
+
+        # Сначала проверим, есть ли вообще записи в competition_participants для этого пользователя
+        async with db.execute(
+            "SELECT COUNT(*) FROM competition_participants WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            count_row = await cursor.fetchone()
+            logger.info(f"Total competition_participants records for user {user_id}: {count_row[0]}")
+
+        # Проверим записи без фильтра по дате
+        async with db.execute(
+            """
+            SELECT c.id, c.name, c.date, cp.distance, cp.distance_name
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE cp.user_id = ?
+            """,
+            (user_id,)
+        ) as cursor:
+            all_rows = await cursor.fetchall()
+            logger.info(f"All competitions for user (no date filter): {len(all_rows)}")
+            for row in all_rows:
+                logger.info(f"  - comp_id={row[0]}, name={row[1]}, date={row[2]}, distance={row[3]}, distance_name={row[4]}")
+
+        # Проверим текущую дату в SQLite
+        async with db.execute("SELECT date('now')") as cursor:
+            now_row = await cursor.fetchone()
+            logger.info(f"SQLite current date: {now_row[0]}")
 
         async with db.execute(
             f"""
@@ -515,6 +549,7 @@ async def get_user_competitions(
             (user_id,)
         ) as cursor:
             rows = await cursor.fetchall()
+            logger.info(f"Competitions after applying filter: {len(rows)}")
             competitions = []
             for row in rows:
                 comp = dict(row)

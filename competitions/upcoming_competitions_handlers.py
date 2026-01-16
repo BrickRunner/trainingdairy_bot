@@ -883,6 +883,15 @@ async def toggle_distance_selection(callback: CallbackQuery, state: FSMContext):
 
         distances = competition.get('distances', [])
 
+        # Проверяем, не является ли эта дистанция уже зарегистрированной
+        if distance_idx in registered_distances:
+            await callback.answer(
+                "🔒 Вы уже зарегистрированы на эту дистанцию. "
+                "Её нельзя удалить или добавить повторно.",
+                show_alert=True
+            )
+            return
+
         # Toggle selection
         if distance_idx in selected_distances:
             selected_distances.remove(distance_idx)

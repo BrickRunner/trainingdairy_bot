@@ -948,19 +948,54 @@ async def add_competition_participant(
 
     async with aiosqlite.connect(DB_PATH) as db:
         # Сначала проверим, есть ли уже такое соревнование в БД
+        source_url = comp_data.get('url', '')
+
+        # Fallback: если url пустой, используем competition_id или id из comp_data
+        if not source_url:
+            source_url = competition_id or str(comp_data.get('id', ''))
+            logger.warning(f"comp_data has empty 'url' field! Using fallback source_url: '{source_url}'")
+            logger.info(f"comp_data keys: {list(comp_data.keys())}")
+            logger.info(f"comp_data['id']: {comp_data.get('id', 'MISSING')}")
+            logger.info(f"comp_data['title']: {comp_data.get('title', 'MISSING')}")
+
+        logger.info(f"Searching for competition with source_url: '{source_url}'")
+
         cursor = await db.execute(
-            "SELECT id FROM competitions WHERE source_url = ?",
-            (comp_data.get('url', ''),)
+            "SELECT id, date FROM competitions WHERE source_url = ?",
+            (source_url,)
         )
         row = await cursor.fetchone()
 
         if row:
             # Соревнование уже существует
             comp_db_id = row[0]
-            logger.info(f"Competition already exists with id={comp_db_id}")
+            existing_date = row[1]
+            logger.info(f"Competition already exists with id={comp_db_id}, existing date='{existing_date}'")
+
+            # Если дата пустая или отсутствует, обновляем её
+            comp_date = comp_data.get('begin_date', '')
+            if comp_date:
+                comp_date = comp_date.split('T')[0]  # Только дата
+                logger.info(f"comp_data['begin_date']: {comp_data.get('begin_date', 'MISSING')}, parsed date: {comp_date}")
+
+                if not existing_date or existing_date.strip() == '':
+                    logger.warning(f"Competition {comp_db_id} has empty date, updating to {comp_date}")
+                    await db.execute(
+                        "UPDATE competitions SET date = ? WHERE id = ?",
+                        (comp_date, comp_db_id)
+                    )
+                    logger.info(f"Updated competition {comp_db_id} date to {comp_date}")
+            else:
+                logger.error(f"comp_data has no 'begin_date' field! Keys: {list(comp_data.keys())}")
         else:
             # Добавляем новое соревнование
             distances_json = json.dumps(comp_data.get('distances', []))
+            comp_date = comp_data.get('begin_date', '')
+            if comp_date:
+                comp_date = comp_date.split('T')[0]  # Только дата
+            else:
+                logger.error(f"New competition has no begin_date! comp_data keys: {list(comp_data.keys())}")
+                comp_date = ''
 
             insert_cursor = await db.execute(
                 """
@@ -972,7 +1007,7 @@ async def add_competition_participant(
                 """,
                 (
                     comp_data['title'],
-                    comp_data['begin_date'].split('T')[0],  # Только дата
+                    comp_date,
                     comp_data.get('city', ''),
                     comp_data.get('place', ''),
                     distances_json,
@@ -983,11 +1018,11 @@ async def add_competition_participant(
                     comp_data.get('organizer', ''),
                     'upcoming',
                     1,  # is_official
-                    comp_data.get('url', '')
+                    source_url  # Используем source_url с fallback
                 )
             )
             comp_db_id = insert_cursor.lastrowid
-            logger.info(f"Added new competition with id={comp_db_id}, date={comp_data['begin_date'].split('T')[0]}")
+            logger.info(f"Added new competition with id={comp_db_id}, source_url='{source_url}', date={comp_date}")
 
         # Проверим, не добавлен ли уже пользователь как участник на ЭТОЙ дистанции
         cursor = await db.execute(
@@ -1084,8 +1119,14 @@ async def get_user_registered_distances(user_id: int, competition_id: str, all_d
         # Находим индексы соответствующих дистанций в списке all_distances
         registered_indices = []
         for i, dist in enumerate(all_distances):
-            dist_km = dist.get('distance', 0)
-            dist_name = dist.get('name', '')
+            # Обрабатываем дистанцию - может быть числом или объектом с distance/name
+            if isinstance(dist, dict):
+                dist_km = dist.get('distance', 0)
+                dist_name = dist.get('name', '')
+            else:
+                # Если дистанция - просто число
+                dist_km = float(dist) if dist else 0
+                dist_name = str(dist)
 
             # Проверяем совпадение по дистанции и имени
             for reg_dist in registered_distances:

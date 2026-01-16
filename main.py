@@ -44,18 +44,18 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Основная функция запуска бота"""
-    
+
     # Получение токена из переменных окружения
     bot_token = os.getenv('BOT_TOKEN')
     if not bot_token:
         logger.error("BOT_TOKEN не найден в .env файле!")
         return
-    
+
     # Инициализация бота и диспетчера
     bot = Bot(token=bot_token)
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
-    
+
     # Подключение роутеров
     # ВАЖНО: Порядок имеет значение - более специфичные роутеры должны быть первыми
     dp.include_router(upcoming_competitions_router)  # Роутер предстоящих соревнований (ПЕРВЫМ!)
@@ -72,11 +72,11 @@ async def main():
     dp.include_router(health_router)
     dp.include_router(ratings_router)
     dp.include_router(router)  # Основной роутер (общие команды)
-    
+
     # Инициализация базы данных
     await init_db()
     logger.info("База данных инициализирована")
-    
+
     # Запуск планировщика уведомлений
     start_notification_scheduler(bot)
     logger.info("Планировщик уведомлений запущен")

@@ -43,11 +43,15 @@ def get_main_menu_keyboard(is_coach: bool = False) -> ReplyKeyboardMarkup:
             KeyboardButton(text="📥 Экспорт в PDF")
         )
         builder.row(
+            KeyboardButton(text="🤖 Training Assistant"),
             KeyboardButton(text="ℹ️ Помощь")
         )
     else:
         builder.row(
             KeyboardButton(text="📥 Экспорт в PDF"),
+            KeyboardButton(text="🤖 Training Assistant")
+        )
+        builder.row(
             KeyboardButton(text="ℹ️ Помощь")
         )
 

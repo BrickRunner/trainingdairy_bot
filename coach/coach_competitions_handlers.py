@@ -1729,10 +1729,16 @@ async def coach_select_competition_for_student(callback: CallbackQuery, state: F
 
     # Несколько дистанций, показываем выбор с чекбоксами (копия из главного раздела)
 
+    # Получаем список уже зарегистрированных дистанций УЧЕНИКА
+    from database.queries import get_user_registered_distances
+    comp_url = competition.get('url', str(comp_id))
+    registered_indices = await get_user_registered_distances(student_id, comp_url, distances)
+
     # Инициализируем список выбранных дистанций
     await state.update_data(
         coach_selected_distances=[],
-        coach_all_distances=distances
+        coach_all_distances=distances,
+        coach_registered_distances=registered_indices
     )
 
     text = (
@@ -1740,8 +1746,13 @@ async def coach_select_competition_for_student(callback: CallbackQuery, state: F
         f"Ученик: <b>{display_name}</b>\n\n"
         f"📌 <b>{competition['name']}</b>\n"
         f"📅 {formatted_date}\n\n"
-        f"Выберите дистанции (можно несколько):"
     )
+
+    if registered_indices:
+        text += "🔒 Ученик уже зарегистрирован на некоторые дистанции (отмечены замком).\n"
+        text += "Выберите дополнительные дистанции для предложения.\n\n"
+    else:
+        text += "Выберите дистанции (можно несколько):\n"
 
     builder = InlineKeyboardBuilder()
 
@@ -1765,9 +1776,15 @@ async def coach_select_competition_for_student(callback: CallbackQuery, state: F
         # Конвертируем название дистанции
         converted_name = safe_convert_distance_name(distance_name, distance_unit)
 
-        # Показываем чекбокс
-        button_text = f"☐ {converted_name}"
-        callback_data = f"coach:toggle_dist:{student_id}:{comp_id}:{i}"
+        # Проверяем, зарегистрирован ли ученик на эту дистанцию
+        if i in registered_indices:
+            # Уже зарегистрирован - показываем с замком (нельзя предложить повторно)
+            button_text = f"🔒 {converted_name} (зарегистрирован)"
+            callback_data = f"coach:already_registered:{student_id}:{i}"
+        else:
+            # Не зарегистрирован - показываем обычный чекбокс
+            button_text = f"☐ {converted_name}"
+            callback_data = f"coach:toggle_dist:{student_id}:{comp_id}:{i}"
 
         builder.row(InlineKeyboardButton(
             text=button_text,
@@ -1810,6 +1827,16 @@ async def coach_toggle_distance_selection(callback: CallbackQuery, state: FSMCon
         data = await state.get_data()
         selected_distances = data.get('coach_selected_distances', [])
         all_distances = data.get('coach_all_distances', [])
+        registered_distances = data.get('coach_registered_distances', [])
+
+        # Проверяем, не является ли эта дистанция уже зарегистрированной
+        if distance_idx in registered_distances:
+            await callback.answer(
+                "🔒 Ученик уже зарегистрирован на эту дистанцию. "
+                "Её нельзя удалить или добавить повторно.",
+                show_alert=True
+            )
+            return
 
         # Переключаем выбор
         if distance_idx in selected_distances:
@@ -1839,10 +1866,16 @@ async def coach_toggle_distance_selection(callback: CallbackQuery, state: FSMCon
 
             converted_name = safe_convert_distance_name(distance_name, distance_unit)
 
-            # Показываем чекбокс
-            checkbox = "✓" if i in selected_distances else "☐"
-            button_text = f"{checkbox} {converted_name}"
-            callback_data = f"coach:toggle_dist:{student_id}:{comp_id}:{i}"
+            # Проверяем, зарегистрирован ли ученик на эту дистанцию
+            if i in registered_distances:
+                # Уже зарегистрирован - показываем с замком
+                button_text = f"🔒 {converted_name} (зарегистрирован)"
+                callback_data = f"coach:already_registered:{student_id}:{i}"
+            else:
+                # Не зарегистрирован - показываем чекбокс
+                checkbox = "✓" if i in selected_distances else "☐"
+                button_text = f"{checkbox} {converted_name}"
+                callback_data = f"coach:toggle_dist:{student_id}:{comp_id}:{i}"
 
             builder.row(InlineKeyboardButton(
                 text=button_text,
@@ -1866,6 +1899,16 @@ async def coach_toggle_distance_selection(callback: CallbackQuery, state: FSMCon
     except Exception as e:
         logger.error(f"Error toggling distance for coach: {e}")
         await callback.answer("❌ Ошибка", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("coach:already_registered:"))
+async def coach_already_registered_distance(callback: CallbackQuery, state: FSMContext):
+    """Обработка нажатия на уже зарегистрированную дистанцию ученика"""
+    await callback.answer(
+        "⚠️ Ученик уже зарегистрирован на эту дистанцию.\n"
+        "Невозможно предложить её повторно.",
+        show_alert=True
+    )
 
 
 @router.callback_query(F.data.startswith("coach:confirm_distances:"))
