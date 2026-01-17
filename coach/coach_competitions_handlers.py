@@ -3020,7 +3020,7 @@ async def reject_coach_competition_proposal(callback: CallbackQuery):
 # ========== НОВЫЕ ОБРАБОТЧИКИ ДЛЯ ОТДЕЛЬНЫХ ДИСТАНЦИЙ ==========
 
 @router.callback_query(F.data.startswith("accept_coach_dist:"))
-async def accept_coach_distance_proposal(callback: CallbackQuery):
+async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMContext):
     """Ученик принимает предложение ОДНОЙ дистанции от тренера"""
     try:
         parts = callback.data.split(":")
@@ -3061,8 +3061,19 @@ async def accept_coach_distance_proposal(callback: CallbackQuery):
             distance_km = float(dist)
             distance_name = str(dist)
 
-        # Обновляем статус предложения на "accepted"
+        # Проверяем есть ли целевое время в предложении
         async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                """
+                SELECT target_time FROM competition_participants
+                WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
+                """,
+                (student_id, comp_id, distance_km, distance_name)
+            ) as cursor:
+                row = await cursor.fetchone()
+                has_target_time = row and row[0] is not None and row[0] != ''
+
+            # Обновляем статус предложения на "accepted"
             await db.execute(
                 """
                 UPDATE competition_participants
@@ -3094,6 +3105,43 @@ async def accept_coach_distance_proposal(callback: CallbackQuery):
             parse_mode="HTML"
         )
 
+        # Если нет целевого времени - запросить у ученика
+        if not has_target_time:
+            from bot.fsm import CompetitionStates
+
+            # Сохраняем данные для последующего использования
+            await state.update_data(
+                accept_proposal_comp_id=comp_id,
+                accept_proposal_coach_id=coach_id,
+                accept_proposal_distance_idx=distance_idx,
+                accept_proposal_distance_km=distance_km,
+                accept_proposal_distance_name=distance_name,
+                accept_proposal_competition=competition
+            )
+
+            # Запрашиваем целевое время с возможностью пропуска
+            from aiogram.utils.keyboard import ReplyKeyboardBuilder
+            from aiogram.types import KeyboardButton
+
+            keyboard_builder = ReplyKeyboardBuilder()
+            keyboard_builder.row(KeyboardButton(text="⏩ Пропустить"))
+            keyboard_builder.row(KeyboardButton(text="❌ Отменить"))
+
+            await callback.message.answer(
+                f"📝 <b>Хотите установить целевое время для этой дистанции?</b>\n\n"
+                f"Дистанция: <b>{formatted_dist}</b>\n\n"
+                f"Введите целевое время в формате:\n"
+                f"• ЧЧ:ММ:СС (например, 01:30:00)\n"
+                f"• ММ:СС (например, 45:30)\n\n"
+                f"Или нажмите <b>⏩ Пропустить</b> чтобы не устанавливать целевое время.",
+                parse_mode="HTML",
+                reply_markup=keyboard_builder.as_markup(resize_keyboard=True)
+            )
+
+            await state.set_state(CompetitionStates.waiting_for_target_time_after_accept)
+            await callback.answer()
+            return
+
         # Отправляем уведомление тренеру
         try:
             from database.queries import get_user
@@ -3120,14 +3168,15 @@ async def accept_coach_distance_proposal(callback: CallbackQuery):
                 parse_mode="HTML"
             )
 
-            # Редирект в главное меню тренера
-            from coach.coach_keyboards import get_coach_main_menu
+            # Редирект в главное меню
+            from bot.keyboards import get_main_menu_keyboard
+            from coach.coach_queries import is_user_coach
+
+            coach_is_coach = await is_user_coach(coach_id)
             await callback.bot.send_message(
                 coach_id,
-                "👨‍🏫 <b>Кабинет тренера</b>\n\n"
-                "Здесь вы можете управлять своими учениками, "
-                "просматривать их тренировки и прогресс.",
-                reply_markup=get_coach_main_menu(),
+                "📱 <b>Главное меню</b>",
+                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
                 parse_mode="HTML"
             )
         except Exception as e:
@@ -3178,6 +3227,22 @@ async def change_coach_distance_time(callback: CallbackQuery, state: FSMContext)
             distance_km = float(dist)
             distance_name = str(dist)
 
+        # Получаем текущее целевое время из БД
+        import aiosqlite
+        import os
+        DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                """
+                SELECT target_time FROM competition_participants
+                WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
+                """,
+                (student_id, comp_id, distance_km, distance_name)
+            ) as cursor:
+                row = await cursor.fetchone()
+                current_target_time = row[0] if row and row[0] else None
+
         # Сохраняем данные в state для обработки ввода времени
         await state.update_data(
             change_time_comp_id=comp_id,
@@ -3205,12 +3270,21 @@ async def change_coach_distance_time(callback: CallbackQuery, state: FSMContext)
             callback_data=f"cancel_change_time:{comp_id}:{coach_id}:{distance_idx}"
         ))
 
+        # Формируем текст с текущим временем
+        time_text = f"⏱ <b>Изменение целевого времени</b>\n\n" \
+                   f"Дистанция: <b>{formatted_dist}</b>\n"
+
+        if current_target_time:
+            time_text += f"Текущее целевое время: <b>{current_target_time}</b>\n\n"
+        else:
+            time_text += "\n"
+
+        time_text += f"Введите новое целевое время в формате:\n" \
+                    f"• ЧЧ:ММ:СС (например, 01:30:00)\n" \
+                    f"• ММ:СС (например, 45:30)"
+
         await callback.message.edit_text(
-            f"⏱ <b>Изменение целевого времени</b>\n\n"
-            f"Дистанция: <b>{formatted_dist}</b>\n\n"
-            f"Введите новое целевое время в формате:\n"
-            f"• ЧЧ:ММ:СС (например, 01:30:00)\n"
-            f"• ММ:СС (например, 45:30)",
+            time_text,
             parse_mode="HTML",
             reply_markup=builder.as_markup()
         )
@@ -3296,11 +3370,14 @@ async def process_changed_target_time(message: Message, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Редирект в "Мои соревнования"
-        from competitions.competitions_keyboards import get_competitions_menu_keyboard
+        # Редирект в главное меню
+        from bot.keyboards import get_main_menu_keyboard
+        from coach.coach_queries import is_user_coach
+
+        student_is_coach = await is_user_coach(user_id)
         await message.answer(
-            "📋 <b>Мои соревнования:</b>",
-            reply_markup=get_competitions_menu_keyboard(),
+            "📱 <b>Главное меню</b>",
+            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
             parse_mode="HTML"
         )
 
@@ -3331,14 +3408,12 @@ async def process_changed_target_time(message: Message, state: FSMContext):
                 parse_mode="HTML"
             )
 
-            # Редирект в главное меню тренера
-            from coach.coach_keyboards import get_coach_main_menu
+            # Редирект в главное меню
+            coach_is_coach = await is_user_coach(coach_id)
             await message.bot.send_message(
                 coach_id,
-                "👨‍🏫 <b>Кабинет тренера</b>\n\n"
-                "Здесь вы можете управлять своими учениками, "
-                "просматривать их тренировки и прогресс.",
-                reply_markup=get_coach_main_menu(),
+                "📱 <b>Главное меню</b>",
+                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
                 parse_mode="HTML"
             )
         except Exception as e:
@@ -3361,6 +3436,176 @@ async def cancel_change_time(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML"
     )
     await callback.answer()
+
+
+@router.message(CompetitionStates.waiting_for_target_time_after_accept)
+async def process_target_time_after_accept(message: Message, state: FSMContext):
+    """Обработать целевое время после принятия предложения без времени"""
+    from utils.time_formatter import validate_time_format, normalize_time
+    from aiogram.types import ReplyKeyboardRemove
+
+    user_id = message.from_user.id
+    text = message.text.strip()
+
+    # Получаем данные из state
+    data = await state.get_data()
+    comp_id = data.get('accept_proposal_comp_id')
+    coach_id = data.get('accept_proposal_coach_id')
+    distance_km = data.get('accept_proposal_distance_km')
+    distance_name = data.get('accept_proposal_distance_name')
+    competition = data.get('accept_proposal_competition')
+
+    if not all([comp_id, coach_id is not None, distance_name, competition]):
+        await message.answer("❌ Ошибка: данные не найдены", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    try:
+        # Обработка кнопок
+        if text == "⏩ Пропустить":
+            # Пропускаем ввод целевого времени
+            target_time = None
+
+            await message.answer(
+                "✅ <b>Вы приняли предложение!</b>\n\n"
+                "Соревнование добавлено без целевого времени.",
+                parse_mode="HTML",
+                reply_markup=ReplyKeyboardRemove()
+            )
+
+        elif text == "❌ Отменить":
+            # Отменяем всё и удаляем предложение
+            import aiosqlite
+            import os
+            DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute(
+                    """
+                    DELETE FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
+                    """,
+                    (user_id, comp_id, distance_km, distance_name)
+                )
+                await db.commit()
+
+            await message.answer(
+                "❌ Предложение отклонено",
+                parse_mode="HTML",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            await state.clear()
+
+            # Редирект в главное меню
+            from bot.keyboards import get_main_menu_keyboard
+            from coach.coach_queries import is_user_coach
+
+            student_is_coach = await is_user_coach(user_id)
+            await message.answer(
+                "📱 <b>Главное меню</b>",
+                reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
+                parse_mode="HTML"
+            )
+            return
+
+        else:
+            # Валидация формата времени
+            if not validate_time_format(text):
+                await message.answer(
+                    "❌ Неверный формат времени!\n\n"
+                    "Используйте формат ЧЧ:ММ:СС или ММ:СС\n"
+                    "Примеры: 01:30:00 или 45:30"
+                )
+                return
+
+            target_time = normalize_time(text)
+
+            # Обновляем целевое время в БД
+            import aiosqlite
+            import os
+            DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute(
+                    """
+                    UPDATE competition_participants
+                    SET target_time = ?
+                    WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
+                    """,
+                    (target_time, user_id, comp_id, distance_km, distance_name)
+                )
+                await db.commit()
+
+            await message.answer(
+                f"✅ <b>Целевое время установлено!</b>\n\n"
+                f"⏱ Время: <b>{target_time}</b>",
+                parse_mode="HTML",
+                reply_markup=ReplyKeyboardRemove()
+            )
+
+        # Отправляем уведомление тренеру
+        from database.queries import get_user, get_user_settings
+        from utils.unit_converter import safe_convert_distance_name
+
+        student = await get_user(user_id)
+        student_name = student.get('name') or student.get('username') or f'Ученик {user_id}'
+
+        coach_settings = await get_user_settings(coach_id)
+        coach_distance_unit = coach_settings.get('distance_unit', 'км') if coach_settings else 'км'
+        formatted_dist_coach = safe_convert_distance_name(distance_name, coach_distance_unit)
+
+        # Добавляем единицу измерения явно
+        if coach_distance_unit == 'мили' and 'миль' not in formatted_dist_coach and 'миля' not in formatted_dist_coach and 'ярд' not in formatted_dist_coach:
+            formatted_dist_coach = f"{formatted_dist_coach} (мили)"
+        elif coach_distance_unit == 'км' and 'км' not in formatted_dist_coach and 'м' not in formatted_dist_coach:
+            formatted_dist_coach = f"{formatted_dist_coach} км"
+
+        # Формируем уведомление тренеру
+        notification_text = (
+            f"✅ <b>Ученик принял предложение!</b>\n\n"
+            f"<b>{student_name}</b> принял участие в соревновании:\n"
+            f"🏆 {competition['name']}\n"
+            f"📏 Дистанция: {formatted_dist_coach}"
+        )
+
+        if target_time:
+            notification_text += f"\n⏱ Целевое время: <b>{target_time}</b>"
+
+        await message.bot.send_message(
+            coach_id,
+            notification_text,
+            parse_mode="HTML"
+        )
+
+        # Редирект в главное меню для тренера
+        from bot.keyboards import get_main_menu_keyboard
+        from coach.coach_queries import is_user_coach
+
+        coach_is_coach = await is_user_coach(coach_id)
+        await message.bot.send_message(
+            coach_id,
+            "📱 <b>Главное меню</b>",
+            reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
+            parse_mode="HTML"
+        )
+
+        # Редирект в главное меню для ученика
+        student_is_coach = await is_user_coach(user_id)
+        await message.answer(
+            "📱 <b>Главное меню</b>",
+            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
+            parse_mode="HTML"
+        )
+
+        await state.clear()
+
+    except Exception as e:
+        logger.error(f"Error processing target time after accept: {e}")
+        await message.answer(
+            "❌ Ошибка при сохранении времени",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await state.clear()
 
 
 @router.callback_query(F.data.startswith("reject_coach_dist:"))
@@ -3462,14 +3707,15 @@ async def reject_coach_distance_proposal(callback: CallbackQuery):
                 parse_mode="HTML"
             )
 
-            # Редирект в главное меню тренера
-            from coach.coach_keyboards import get_coach_main_menu
+            # Редирект в главное меню
+            from bot.keyboards import get_main_menu_keyboard
+            from coach.coach_queries import is_user_coach
+
+            coach_is_coach = await is_user_coach(coach_id)
             await callback.bot.send_message(
                 coach_id,
-                "👨‍🏫 <b>Кабинет тренера</b>\n\n"
-                "Здесь вы можете управлять своими учениками, "
-                "просматривать их тренировки и прогресс.",
-                reply_markup=get_coach_main_menu(),
+                "📱 <b>Главное меню</b>",
+                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
                 parse_mode="HTML"
             )
         except Exception as e:

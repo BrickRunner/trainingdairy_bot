@@ -92,6 +92,7 @@ class CompetitionStates(StatesGroup):
     # Регистрация на соревнование
     waiting_for_target_time = State()           # Целевое время
     waiting_for_target_time_edit = State()      # Изменение целевого времени
+    waiting_for_target_time_after_accept = State()  # Ввод целевого времени после принятия предложения без времени
 
     # Добавление результата
     waiting_for_finish_time = State()           # Финишное время

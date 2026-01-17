@@ -24,6 +24,7 @@ from competitions.upcoming_competitions_handlers import router as upcoming_compe
 from coach.coach_handlers import router as coach_router
 from coach.coach_add_training_handlers import router as coach_add_training_router
 from coach.coach_competitions_handlers import router as coach_competitions_router
+from coach.coach_upcoming_competitions_handlers import router as coach_upcoming_competitions_router
 from database.queries import init_db
 from notifications.notification_scheduler import start_notification_scheduler
 from utils.birthday_checker import schedule_birthday_check
@@ -64,6 +65,7 @@ async def main():
     dp.include_router(competitions_statistics_router)  # Роутер статистики и экспорта соревнований
     dp.include_router(coach_router)  # Роутер тренеров
     dp.include_router(coach_add_training_router)  # Роутер добавления тренировок для учеников
+    dp.include_router(coach_upcoming_competitions_router)  # Роутер предстоящих соревнований для тренера
     dp.include_router(coach_competitions_router)  # Роутер предложения соревнований от тренера (ПЕРЕД custom!)
     dp.include_router(competitions_router)  # Роутер соревнований
     dp.include_router(custom_competitions_router)  # Роутер пользовательских соревнований
