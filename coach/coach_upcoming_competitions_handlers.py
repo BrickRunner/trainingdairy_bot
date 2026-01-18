@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from datetime import datetime
 import asyncio
+import os
 
 from competitions.competitions_fsm import CoachUpcomingCompetitionsStates
 from competitions.parser import SPORT_CODES, SPORT_NAMES
@@ -405,6 +406,75 @@ async def show_coach_competitions_results(message: Message, state: FSMContext, p
         )
 
         logger.info(f"Received {len(all_competitions)} competitions")
+
+        # Фильтруем соревнования: скрываем те, где у ученика заняты все дистанции
+        import aiosqlite
+        import json
+        DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+        filtered_competitions = []
+        async with aiosqlite.connect(DB_PATH) as db:
+            for comp in all_competitions:
+                comp_id_from_api = comp.get('id')
+                # Получаем ID соревнования в БД (если оно там есть)
+                async with db.execute(
+                    "SELECT id FROM competitions WHERE source_url = ?",
+                    (comp.get('url', comp_id_from_api),)
+                ) as cursor:
+                    comp_row = await cursor.fetchone()
+
+                if not comp_row:
+                    # Соревнование еще не в БД - показываем его
+                    filtered_competitions.append(comp)
+                    continue
+
+                comp_db_id = comp_row[0]
+
+                # Получаем дистанции соревнования
+                distances_json = comp.get('distances', [])
+                if isinstance(distances_json, str):
+                    try:
+                        distances = json.loads(distances_json)
+                    except:
+                        distances = distances_json
+                else:
+                    distances = distances_json
+
+                if not distances:
+                    # Нет дистанций - показываем
+                    filtered_competitions.append(comp)
+                    continue
+
+                # Считаем сколько дистанций занято учеником
+                occupied_count = 0
+                for dist in distances:
+                    if isinstance(dist, dict):
+                        distance_km = dist.get('distance', 0)
+                        distance_name = dist.get('name', str(distance_km))
+                    else:
+                        distance_km = float(dist)
+                        distance_name = str(dist)
+
+                    # Проверяем есть ли регистрация на эту дистанцию (включая pending)
+                    async with db.execute(
+                        """
+                        SELECT id FROM competition_participants
+                        WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
+                        """,
+                        (student_id, comp_db_id, distance_km, distance_name)
+                    ) as cursor:
+                        reg_row = await cursor.fetchone()
+                        if reg_row:
+                            occupied_count += 1
+
+                # Показываем только если есть свободные дистанции
+                if occupied_count < len(distances):
+                    filtered_competitions.append(comp)
+                else:
+                    logger.info(f"Skipping competition '{comp.get('title')}' - all distances occupied for student {student_id}")
+
+        all_competitions = filtered_competitions
+        logger.info(f"After filtering: {len(all_competitions)} competitions available")
 
         # Сохраняем все соревнования в state для пагинации
         await state.update_data(all_competitions=all_competitions)
@@ -995,10 +1065,35 @@ async def coach_confirm_distances_selection(callback: CallbackQuery, state: FSMC
         distances_to_process = []
         for idx in selected_distances:
             if idx < len(distances):
+                dist = distances[idx]
+                # Проверяем тип дистанции - может быть dict, число или текст
+                if isinstance(dist, dict):
+                    distance_km = dist.get('distance', 0)
+                    distance_name = dist.get('name', '')
+                else:
+                    # Если дистанция - число или текст
+                    distance_name = str(dist)
+
+                    # Безопасно извлекаем число из текста
+                    try:
+                        # Если это число - просто конвертируем
+                        distance_km = float(dist)
+                    except (ValueError, TypeError):
+                        # Если это текст типа "10 км", "21.1 км" - извлекаем число
+                        import re
+                        match = re.search(r'[\d.]+', str(dist))
+                        if match:
+                            distance_km = float(match.group())
+                        else:
+                            distance_km = 0
+                            logger.warning(f"Could not parse distance from: {dist}")
+
+                logger.info(f"Processing distance idx={idx}: distance_km={distance_km}, name='{distance_name}'")
+
                 distances_to_process.append({
                     'index': idx,
-                    'distance_km': distances[idx].get('distance', 0),
-                    'name': distances[idx].get('name', '')
+                    'distance_km': distance_km,
+                    'name': distance_name
                 })
 
         await state.update_data(
@@ -1051,9 +1146,11 @@ async def coach_prompt_for_distance_time(callback: CallbackQuery, state: FSMCont
             callback_data=f"coach_comp:back_dist_time:{index-1}"
         ))
     elif len(distances_to_process) > 1:
+        # Используем current_comp_index вместо comp_id для возврата к выбору дистанций
+        comp_index_val = data.get('current_comp_index', 0)
         builder.row(InlineKeyboardButton(
             text="◀️ К выбору дистанций",
-            callback_data=f"coach_comp:participate:{comp_id}"
+            callback_data=f"coach_comp:participate:{comp_index_val}"
         ))
     else:
         builder.row(InlineKeyboardButton(
@@ -1160,11 +1257,13 @@ async def coach_save_all_distances_and_redirect(callback_or_message, state: FSMC
         from competitions.competitions_queries import get_or_create_competition_from_api
 
         # Преобразуем данные соревнования в формат для API функции
+        # Используем реальный URL из API или comp_id как fallback
+        source_url = competition.get('url', comp_id)
         competition_db_id = await get_or_create_competition_from_api({
             'id': comp_id,
             'title': competition.get('title', ''),
             'date': competition.get('begin_date', ''),
-            'url': comp_id,
+            'url': source_url,
             'city': competition.get('city', ''),
             'place': competition.get('place', ''),
             'distances': competition.get('distances', []),
@@ -1192,7 +1291,7 @@ async def coach_save_all_distances_and_redirect(callback_or_message, state: FSMC
                     SELECT id FROM competition_participants
                     WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
                     """,
-                    (student_id, comp_id, distance_km, distance_name)
+                    (student_id, competition_db_id, distance_km, distance_name)
                 ) as cursor:
                     existing = await cursor.fetchone()
 
@@ -1205,7 +1304,7 @@ async def coach_save_all_distances_and_redirect(callback_or_message, state: FSMC
                             proposed_by_coach = 1, proposed_by_coach_id = ?, reminders_enabled = 0
                         WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
                         """,
-                        (target_time, coach_id, student_id, comp_id, distance_km, distance_name)
+                        (target_time, coach_id, student_id, competition_db_id, distance_km, distance_name)
                     )
                 else:
                     # Вставляем новую запись с предложением
@@ -1216,9 +1315,11 @@ async def coach_save_all_distances_and_redirect(callback_or_message, state: FSMC
                          proposed_by_coach, proposed_by_coach_id, proposal_status, reminders_enabled)
                         VALUES (?, ?, ?, ?, ?, 1, ?, 'pending', 0)
                         """,
-                        (student_id, comp_id, distance_km, distance_name, target_time, coach_id)
+                        (student_id, competition_db_id, distance_km, distance_name, target_time, coach_id)
                     )
+                    logger.info(f"Inserted new proposal: student={student_id}, comp_id={competition_db_id}, dist={distance_km}, dist_name={distance_name}, target_time={target_time}")
                 await db.commit()
+                logger.info(f"Proposal committed to database successfully")
 
             # Форматируем дистанцию с учетом настроек ученика
             formatted_dist = safe_convert_distance_name(distance_name, student_distance_unit)
@@ -1241,25 +1342,22 @@ async def coach_save_all_distances_and_redirect(callback_or_message, state: FSMC
 
             if target_time:
                 notification_text += f"⏱ Целевое время: <b>{target_time}</b>\n"
+            else:
+                notification_text += f"⏱ Целевое время: <i>не указано</i>\n"
 
             notification_text += "\n<b>Что вы решите?</b>"
 
             # Кнопки для ЭТОЙ дистанции
             builder = InlineKeyboardBuilder()
 
+            # ВАЖНО: Передаем distance_km а не idx, т.к. idx может быть > len(distances)
             builder.row(InlineKeyboardButton(
                 text="✅ Принять",
-                callback_data=f"accept_coach_dist:{competition_db_id}:{coach_id}:{idx}"
+                callback_data=f"accept_coach_dist:{competition_db_id}:{coach_id}:{distance_km}"
             ))
-            # Показываем кнопку "Изменить время" только если тренер указал целевое время
-            if target_time:
-                builder.row(InlineKeyboardButton(
-                    text="✏️ Изменить время",
-                    callback_data=f"change_coach_dist_time:{competition_db_id}:{coach_id}:{idx}"
-                ))
             builder.row(InlineKeyboardButton(
                 text="❌ Отклонить",
-                callback_data=f"reject_coach_dist:{competition_db_id}:{coach_id}:{idx}"
+                callback_data=f"reject_coach_dist:{competition_db_id}:{coach_id}:{distance_km}"
             ))
 
             # Отправляем отдельное сообщение для этой дистанции
@@ -1278,41 +1376,56 @@ async def coach_save_all_distances_and_redirect(callback_or_message, state: FSMC
         student_is_coach = await is_user_coach(student_id)
         await bot.send_message(
             student_id,
-            "📱 <b>Главное меню</b>",
-            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
-            parse_mode="HTML"
+            "Вы в главном меню",
+            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach)
         )
 
         count = len(distances_to_process)
+
         await state.clear()
 
-        # Подтверждение тренеру
+        # Подтверждение тренеру + автоматический редирект в меню соревнований ученика
+        from coach.coach_competitions_handlers import show_coach_competitions_menu
+
+        # Создаем объект для редиректа
+        class RedirectCallback:
+            def __init__(self, msg, user, data_str):
+                self.message = msg
+                self.from_user = user
+                self.data = data_str
+
+            async def answer(self, text="", show_alert=False):
+                pass
+
         if hasattr(callback_or_message, 'message'):
+            # Редирект через callback - редактируем текущее сообщение
+            redirect_callback = RedirectCallback(
+                callback_or_message.message,
+                callback_or_message.from_user,
+                f"coach:competitions_menu:{student_id}"
+            )
+
+            # Сначала показываем успех во всплывающем уведомлении
             await callback_or_message.answer(
                 f"✅ Отправлено {sent_count} предложений ученику {student_display_name}!",
                 show_alert=True
             )
-            # Redirect to student's competitions menu
-            from coach.coach_competitions_handlers import show_coach_competitions_menu
-            await show_coach_competitions_menu(callback_or_message, state)
+
+            # Затем редактируем сообщение на меню соревнований ученика
+            await show_coach_competitions_menu(redirect_callback, state)
         else:
-            await message_obj.answer(f"✅ Отправлено {sent_count} предложений ученику {student_display_name}!")
-            # Send new message for competitions menu
-            class FakeCallback:
-                def __init__(self, msg, user):
-                    self.message = msg
-                    self.from_user = user
-                    self.data = f"coach:competitions_menu:{student_id}"
+            # Редирект через message - отправляем новое сообщение
+            await message_obj.answer(
+                f"✅ Отправлено {sent_count} предложений ученику {student_display_name}!"
+            )
 
-                async def answer(self, text="", show_alert=False):
-                    pass
-
-            new_msg = await message_obj.answer("⏳ Загрузка...")
-            await asyncio.sleep(0.2)
-
-            from coach.coach_competitions_handlers import show_coach_competitions_menu
-            fake_callback = FakeCallback(new_msg, message_obj.from_user)
-            await show_coach_competitions_menu(fake_callback, state)
+            new_msg = await message_obj.answer("📋 Соревнования ученика")
+            redirect_callback = RedirectCallback(
+                new_msg,
+                message_obj.from_user,
+                f"coach:competitions_menu:{student_id}"
+            )
+            await show_coach_competitions_menu(redirect_callback, state)
 
     except Exception as e:
         logger.error(f"Error sending coach proposals: {e}")
@@ -1326,16 +1439,25 @@ async def coach_save_all_distances_and_redirect(callback_or_message, state: FSMC
 async def coach_skip_distance_target_time(callback: CallbackQuery, state: FSMContext):
     """Пропустить целевое время для дистанции"""
     try:
-        index = int(callback.data.split(":", 2)[2])
+        current_index = int(callback.data.split(":", 2)[2])
 
         data = await state.get_data()
         distance_times = data.get('distance_times', {})
         distances_to_process = data.get('distances_to_process', [])
 
-        distance_times[index] = None
-        await state.update_data(distance_times=distance_times, current_distance_index=index)
+        # КРИТИЧЕСКИ ВАЖНО: Используем real_distance_idx, а не current_index!
+        # current_index - это позиция в distances_to_process
+        # real_distance_idx - это индекс в исходном массиве distances соревнования
+        current_distance_info = distances_to_process[current_index]
+        real_distance_idx = current_distance_info['index']
 
-        next_index = index + 1
+        logger.info(f"Skip: current_index={current_index}, real_distance_idx={real_distance_idx}")
+        distance_times[real_distance_idx] = None
+
+        next_index = current_index + 1
+
+        # Сохраняем next_index для следующего шага
+        await state.update_data(distance_times=distance_times, current_distance_index=next_index)
 
         if next_index >= len(distances_to_process):
             await coach_save_all_distances_and_redirect(callback, state)
@@ -1418,11 +1540,13 @@ async def coach_skip_target_time(callback: CallbackQuery, state: FSMContext):
         from competitions.competitions_queries import get_or_create_competition_from_api
 
         # Преобразуем данные соревнования в формат для API функции
+        # Используем реальный URL из API или comp_id как fallback
+        source_url2 = comp.get('url', comp_id)
         competition_db_id = await get_or_create_competition_from_api({
             'id': comp_id,
             'title': comp.get('title', ''),
             'date': comp.get('begin_date', ''),
-            'url': comp_id,
+            'url': source_url2,
             'city': comp.get('city', ''),
             'place': comp.get('place', ''),
             'distances': comp.get('distances', []),
@@ -1439,7 +1563,7 @@ async def coach_skip_target_time(callback: CallbackQuery, state: FSMContext):
                 SELECT id FROM competition_participants
                 WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
                 """,
-                (student_id, comp_id, selected_distance, selected_distance_name)
+                (student_id, competition_db_id, selected_distance, selected_distance_name)
             ) as cursor:
                 existing = await cursor.fetchone()
 
@@ -1451,7 +1575,7 @@ async def coach_skip_target_time(callback: CallbackQuery, state: FSMContext):
                         proposed_by_coach = 1, proposed_by_coach_id = ?, reminders_enabled = 0
                     WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
                     """,
-                    (coach_id, student_id, comp_id, selected_distance, selected_distance_name)
+                    (coach_id, student_id, competition_db_id, selected_distance, selected_distance_name)
                 )
             else:
                 await db.execute(
@@ -1461,7 +1585,7 @@ async def coach_skip_target_time(callback: CallbackQuery, state: FSMContext):
                      proposed_by_coach, proposed_by_coach_id, proposal_status, reminders_enabled)
                     VALUES (?, ?, ?, ?, NULL, 1, ?, 'pending', 0)
                     """,
-                    (student_id, comp_id, selected_distance, selected_distance_name, coach_id)
+                    (student_id, competition_db_id, selected_distance, selected_distance_name, coach_id)
                 )
             await db.commit()
 
@@ -1482,6 +1606,7 @@ async def coach_skip_target_time(callback: CallbackQuery, state: FSMContext):
             f"📅 Дата: {formatted_date}\n"
             f"🏃 Вид: {comp_type}\n"
             f"📏 Дистанция: <b>{formatted_dist}</b>\n"
+            f"⏱ Целевое время: <i>не указано</i>\n"
             f"\n<b>Что вы решите?</b>"
         )
 
@@ -1512,21 +1637,33 @@ async def coach_skip_target_time(callback: CallbackQuery, state: FSMContext):
         student_is_coach = await is_user_coach(student_id)
         await callback.bot.send_message(
             student_id,
-            "📱 <b>Главное меню</b>",
-            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
-            parse_mode="HTML"
+            "Вы в главном меню",
+            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach)
         )
 
-        await callback.answer(
-            f"✅ Предложение отправлено ученику {student_display_name}!",
-            show_alert=True
+        # Подтверждение тренеру БЕЗ БЛОКИРУЮЩЕГО АЛЕРТА
+        await callback.message.edit_text(
+            f"✅ Предложение отправлено ученику {student_display_name}!"
         )
 
         await state.clear()
 
-        # Redirect to student's competitions menu
+        # Redirect to student's menu через новое сообщение
+        class FakeCallback:
+            def __init__(self, msg, user):
+                self.message = msg
+                self.from_user = user
+                self.data = f"coach:competitions_menu:{student_id}"
+
+            async def answer(self, text="", show_alert=False):
+                pass
+
+        new_msg = await callback.message.answer("⏳ Загрузка...")
+        await asyncio.sleep(0.2)
+
         from coach.coach_competitions_handlers import show_coach_competitions_menu
-        await show_coach_competitions_menu(callback, state)
+        fake_callback = FakeCallback(new_msg, callback.from_user)
+        await show_coach_competitions_menu(fake_callback, state)
 
     except Exception as e:
         logger.error(f"Error sending coach proposal without target time: {e}")
@@ -1652,9 +1789,11 @@ async def coach_process_target_time(message: Message, state: FSMContext):
                         callback_data=f"coach_comp:back_dist_time:{next_index-1}"
                     ))
                 elif len(distances_to_process) > 1:
+                    # Используем current_comp_index вместо comp_id для возврата к выбору дистанций
+                    comp_index_val2 = data.get('current_comp_index', 0)
                     builder.row(InlineKeyboardButton(
                         text="◀️ К выбору дистанций",
-                        callback_data=f"coach_comp:participate:{comp_id_val}"
+                        callback_data=f"coach_comp:participate:{comp_index_val2}"
                     ))
                 else:
                     builder.row(InlineKeyboardButton(
@@ -1725,11 +1864,13 @@ async def coach_process_target_time(message: Message, state: FSMContext):
             from competitions.competitions_queries import get_or_create_competition_from_api
 
             # Преобразуем данные соревнования в формат для API функции
+            # Используем реальный URL из API или comp_id как fallback
+            source_url3 = comp.get('url', comp_id)
             competition_db_id = await get_or_create_competition_from_api({
                 'id': comp_id,
                 'title': comp.get('title', ''),
                 'date': comp.get('begin_date', ''),
-                'url': comp_id,
+                'url': source_url3,
                 'city': comp.get('city', ''),
                 'place': comp.get('place', ''),
                 'distances': comp.get('distances', []),
@@ -1746,7 +1887,7 @@ async def coach_process_target_time(message: Message, state: FSMContext):
                     SELECT id FROM competition_participants
                     WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
                     """,
-                    (student_id, comp_id, selected_distance, selected_distance_name)
+                    (student_id, competition_db_id, selected_distance, selected_distance_name)
                 ) as cursor:
                     existing = await cursor.fetchone()
 
@@ -1758,7 +1899,7 @@ async def coach_process_target_time(message: Message, state: FSMContext):
                             proposed_by_coach = 1, proposed_by_coach_id = ?, reminders_enabled = 0
                         WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
                         """,
-                        (target_time, coach_id, student_id, comp_id, selected_distance, selected_distance_name)
+                        (target_time, coach_id, student_id, competition_db_id, selected_distance, selected_distance_name)
                     )
                 else:
                     await db.execute(
@@ -1768,7 +1909,7 @@ async def coach_process_target_time(message: Message, state: FSMContext):
                          proposed_by_coach, proposed_by_coach_id, proposal_status, reminders_enabled)
                         VALUES (?, ?, ?, ?, ?, 1, ?, 'pending', 0)
                         """,
-                        (student_id, comp_id, selected_distance, selected_distance_name, target_time, coach_id)
+                        (student_id, competition_db_id, selected_distance, selected_distance_name, target_time, coach_id)
                     )
                 await db.commit()
 
@@ -1801,10 +1942,6 @@ async def coach_process_target_time(message: Message, state: FSMContext):
                 callback_data=f"accept_coach_dist:{competition_db_id}:{coach_id}:0"
             ))
             builder.row(InlineKeyboardButton(
-                text="✏️ Изменить время",
-                callback_data=f"change_coach_dist_time:{competition_db_id}:{coach_id}:0"
-            ))
-            builder.row(InlineKeyboardButton(
                 text="❌ Отклонить",
                 callback_data=f"reject_coach_dist:{competition_db_id}:{coach_id}:0"
             ))
@@ -1824,9 +1961,8 @@ async def coach_process_target_time(message: Message, state: FSMContext):
             student_is_coach = await is_user_coach(student_id)
             await message.bot.send_message(
                 student_id,
-                "📱 <b>Главное меню</b>",
-                reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
-                parse_mode="HTML"
+                "Вы в главном меню",
+                reply_markup=get_main_menu_keyboard(is_coach=student_is_coach)
             )
 
             await message.answer(f"✅ Предложение отправлено ученику {student_display_name}!")

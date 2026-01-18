@@ -81,13 +81,26 @@ async def get_or_create_competition_from_api(api_comp: Dict[str, Any]) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id FROM competitions WHERE source_url = ? AND source_url != ''",
+            "SELECT id, name FROM competitions WHERE source_url = ? AND source_url != ''",
             (source_url,)
         ) as cursor:
             row = await cursor.fetchone()
             if row:
-                # Соревнование уже существует
-                return row['id']
+                # Соревнование уже существует - обновляем название если изменилось
+                existing_id = row['id']
+                existing_name = row['name']
+                new_name = api_comp.get('title', api_comp.get('name', existing_name))
+
+                # Обновляем название если оно изменилось
+                if new_name and new_name != existing_name:
+                    await db.execute(
+                        "UPDATE competitions SET name = ? WHERE id = ?",
+                        (new_name, existing_id)
+                    )
+                    await db.commit()
+                    logger.info(f"Updated competition name: '{existing_name}' -> '{new_name}' (ID: {existing_id})")
+
+                return existing_id
 
     # Соревнование не найдено - создаем новое
     # Преобразуем данные API в формат для add_competition
@@ -216,6 +229,66 @@ async def get_upcoming_competitions(limit: int = 50, offset: int = 0) -> List[Di
             return competitions
 
 
+async def get_student_competitions_for_coach(
+    student_id: int,
+    status_filter: str = None
+) -> List[Dict[str, Any]]:
+    """
+    Получить соревнования ученика для отображения тренеру
+    В отличие от get_user_competitions, показывает ВСЕ соревнования,
+    включая pending proposals
+
+    Args:
+        student_id: ID ученика
+        status_filter: Фильтр по статусу ('upcoming', 'finished')
+
+    Returns:
+        Список соревнований с данными участия
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        if status_filter == 'upcoming':
+            date_condition = "c.date >= date('now')"
+        elif status_filter == 'finished':
+            date_condition = "c.date < date('now')"
+        else:
+            date_condition = "1=1"
+
+        logger.info(f"get_student_competitions_for_coach: student_id={student_id}, status_filter={status_filter}")
+
+        # Получаем ВСЕ соревнования ученика, включая pending и rejected proposals
+        async with db.execute(
+            f"""
+            SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
+                   cp.place_overall, cp.place_age_category, cp.age_category,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
+                   cp.registered_at, cp.result_added_at, cp.proposal_status,
+                   cp.proposed_by_coach, cp.proposed_by_coach_id
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE cp.user_id = ? AND {date_condition}
+            ORDER BY c.date ASC
+            """,
+            (student_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            logger.info(f"Found {len(rows)} competitions for student {student_id}")
+            competitions = []
+            for row in rows:
+                comp = dict(row)
+                if comp.get('distances'):
+                    try:
+                        comp['distances'] = json.loads(comp['distances'])
+                    except:
+                        pass
+                competitions.append(comp)
+            return competitions
+
+
 async def search_competitions(
     query: str = None,
     city: str = None,
@@ -290,6 +363,66 @@ async def search_competitions(
             return competitions
 
 
+async def get_student_competitions_for_coach(
+    student_id: int,
+    status_filter: str = None
+) -> List[Dict[str, Any]]:
+    """
+    Получить соревнования ученика для отображения тренеру
+    В отличие от get_user_competitions, показывает ВСЕ соревнования,
+    включая pending proposals
+
+    Args:
+        student_id: ID ученика
+        status_filter: Фильтр по статусу ('upcoming', 'finished')
+
+    Returns:
+        Список соревнований с данными участия
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        if status_filter == 'upcoming':
+            date_condition = "c.date >= date('now')"
+        elif status_filter == 'finished':
+            date_condition = "c.date < date('now')"
+        else:
+            date_condition = "1=1"
+
+        logger.info(f"get_student_competitions_for_coach: student_id={student_id}, status_filter={status_filter}")
+
+        # Получаем ВСЕ соревнования ученика, включая pending и rejected proposals
+        async with db.execute(
+            f"""
+            SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
+                   cp.place_overall, cp.place_age_category, cp.age_category,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
+                   cp.registered_at, cp.result_added_at, cp.proposal_status,
+                   cp.proposed_by_coach, cp.proposed_by_coach_id
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE cp.user_id = ? AND {date_condition}
+            ORDER BY c.date ASC
+            """,
+            (student_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            logger.info(f"Found {len(rows)} competitions for student {student_id}")
+            competitions = []
+            for row in rows:
+                comp = dict(row)
+                if comp.get('distances'):
+                    try:
+                        comp['distances'] = json.loads(comp['distances'])
+                    except:
+                        pass
+                competitions.append(comp)
+            return competitions
+
+
 async def update_competition(competition_id: int, data: Dict[str, Any]) -> bool:
     """
     Обновить данные соревнования
@@ -333,7 +466,8 @@ async def register_for_competition(
     user_id: int,
     competition_id: int,
     distance: float,
-    target_time: str = None
+    target_time: str = None,
+    distance_name: str = None
 ) -> int:
     """
     Зарегистрировать пользователя на соревнование
@@ -341,23 +475,60 @@ async def register_for_competition(
     Args:
         user_id: ID пользователя
         competition_id: ID соревнования
-        distance: Выбранная дистанция
+        distance: Выбранная дистанция (в км)
         target_time: Целевое время (опционально)
+        distance_name: Название дистанции (опционально, например "5 км", "Полумарафон")
 
     Returns:
         ID записи участия
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
+        # Если distance_name не указано, используем distance как строку
+        if distance_name is None:
+            distance_name = str(distance)
+
+        # Проверяем существование записи с такими параметрами
+        async with db.execute(
             """
-            INSERT INTO competition_participants
-            (user_id, competition_id, distance, target_time, status)
-            VALUES (?, ?, ?, ?, 'registered')
+            SELECT id FROM competition_participants
+            WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
             """,
-            (user_id, competition_id, distance, target_time)
-        )
-        await db.commit()
-        return cursor.lastrowid
+            (user_id, competition_id, distance, distance_name)
+        ) as cursor:
+            existing = await cursor.fetchone()
+
+        if existing:
+            # Запись уже существует - обновляем только если нужно
+            logger.info(f"Registration already exists: user={user_id}, comp={competition_id}, dist={distance}, updating if needed")
+            if target_time:
+                await db.execute(
+                    """
+                    UPDATE competition_participants
+                    SET target_time = ?, status = 'registered',
+                        proposal_status = NULL, reminders_enabled = 1
+                    WHERE id = ?
+                    """,
+                    (target_time, existing[0])
+                )
+                await db.commit()
+            return existing[0]
+        else:
+            # Создаем новую запись
+            logger.info(f"Creating new registration: user={user_id}, comp={competition_id}, dist={distance}, dist_name={distance_name}")
+            cursor = await db.execute(
+                """
+                INSERT INTO competition_participants
+                (user_id, competition_id, distance, distance_name, target_time, status, reminders_enabled)
+                VALUES (?, ?, ?, ?, ?, 'registered', 1)
+                """,
+                (user_id, competition_id, distance, distance_name, target_time)
+            )
+            await db.commit()
+            logger.info(f"Registration created with id={cursor.lastrowid}")
+            return cursor.lastrowid
 
 
 async def unregister_from_competition(
@@ -535,6 +706,8 @@ async def get_user_competitions(
             now_row = await cursor.fetchone()
             logger.info(f"SQLite current date: {now_row[0]}")
 
+        # НОВАЯ УПРОЩЕННАЯ ЛОГИКА: показываем все зарегистрированные соревнования
+        # Исключаем только pending (ожидают решения) и rejected (отклонены)
         async with db.execute(
             f"""
             SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
@@ -543,13 +716,75 @@ async def get_user_competitions(
                    cp.registered_at, cp.result_added_at, cp.proposal_status
             FROM competitions c
             JOIN competition_participants cp ON c.id = cp.competition_id
-            WHERE cp.user_id = ? AND {date_condition} AND (cp.proposal_status IS NULL OR cp.proposal_status != 'pending')
+            WHERE cp.user_id = ? AND {date_condition}
+              AND (cp.proposal_status IS NULL
+                   OR cp.proposal_status NOT IN ('pending', 'rejected'))
             ORDER BY c.date ASC
             """,
             (user_id,)
         ) as cursor:
             rows = await cursor.fetchall()
             logger.info(f"Competitions after applying filter: {len(rows)}")
+            competitions = []
+            for row in rows:
+                comp = dict(row)
+                if comp.get('distances'):
+                    try:
+                        comp['distances'] = json.loads(comp['distances'])
+                    except:
+                        pass
+                competitions.append(comp)
+            return competitions
+
+
+async def get_student_competitions_for_coach(
+    student_id: int,
+    status_filter: str = None
+) -> List[Dict[str, Any]]:
+    """
+    Получить соревнования ученика для отображения тренеру
+    В отличие от get_user_competitions, показывает ВСЕ соревнования,
+    включая pending proposals
+
+    Args:
+        student_id: ID ученика
+        status_filter: Фильтр по статусу ('upcoming', 'finished')
+
+    Returns:
+        Список соревнований с данными участия
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        if status_filter == 'upcoming':
+            date_condition = "c.date >= date('now')"
+        elif status_filter == 'finished':
+            date_condition = "c.date < date('now')"
+        else:
+            date_condition = "1=1"
+
+        logger.info(f"get_student_competitions_for_coach: student_id={student_id}, status_filter={status_filter}")
+
+        # Получаем ВСЕ соревнования ученика, включая pending и rejected proposals
+        async with db.execute(
+            f"""
+            SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
+                   cp.place_overall, cp.place_age_category, cp.age_category,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
+                   cp.registered_at, cp.result_added_at, cp.proposal_status,
+                   cp.proposed_by_coach, cp.proposed_by_coach_id
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE cp.user_id = ? AND {date_condition}
+            ORDER BY c.date ASC
+            """,
+            (student_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            logger.info(f"Found {len(rows)} competitions for student {student_id}")
             competitions = []
             for row in rows:
                 comp = dict(row)
@@ -620,9 +855,73 @@ async def get_user_competitions_by_period(
             return competitions
 
 
+async def get_student_competitions_for_coach(
+    student_id: int,
+    status_filter: str = None
+) -> List[Dict[str, Any]]:
+    """
+    Получить соревнования ученика для отображения тренеру
+    В отличие от get_user_competitions, показывает ВСЕ соревнования,
+    включая pending proposals
+
+    Args:
+        student_id: ID ученика
+        status_filter: Фильтр по статусу ('upcoming', 'finished')
+
+    Returns:
+        Список соревнований с данными участия
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        if status_filter == 'upcoming':
+            date_condition = "c.date >= date('now')"
+        elif status_filter == 'finished':
+            date_condition = "c.date < date('now')"
+        else:
+            date_condition = "1=1"
+
+        logger.info(f"get_student_competitions_for_coach: student_id={student_id}, status_filter={status_filter}")
+
+        # Получаем ВСЕ соревнования ученика, включая pending и rejected proposals
+        async with db.execute(
+            f"""
+            SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
+                   cp.place_overall, cp.place_age_category, cp.age_category,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
+                   cp.registered_at, cp.result_added_at, cp.proposal_status,
+                   cp.proposed_by_coach, cp.proposed_by_coach_id
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE cp.user_id = ? AND {date_condition}
+            ORDER BY c.date ASC
+            """,
+            (student_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            logger.info(f"Found {len(rows)} competitions for student {student_id}")
+            competitions = []
+            for row in rows:
+                comp = dict(row)
+                if comp.get('distances'):
+                    try:
+                        comp['distances'] = json.loads(comp['distances'])
+                    except:
+                        pass
+                competitions.append(comp)
+            return competitions
+
+
 async def is_user_registered(user_id: int, competition_id: int, distance: float = None) -> bool:
     """
     Проверить зарегистрирован ли пользователь на соревнование
+
+    ВАЖНО: Не считаются зарегистрированными:
+    - Отклоненные предложения (proposal_status='rejected')
+    - Ожидающие решения (proposal_status='pending')
 
     Args:
         user_id: ID пользователя
@@ -630,7 +929,7 @@ async def is_user_registered(user_id: int, competition_id: int, distance: float 
         distance: Конкретная дистанция (опционально)
 
     Returns:
-        True если зарегистрирован
+        True если зарегистрирован (исключая rejected и pending)
     """
     async with aiosqlite.connect(DB_PATH) as db:
         if distance is not None:
@@ -638,6 +937,7 @@ async def is_user_registered(user_id: int, competition_id: int, distance: float 
                 """
                 SELECT COUNT(*) FROM competition_participants
                 WHERE user_id = ? AND competition_id = ? AND distance = ?
+                  AND (proposal_status IS NULL OR proposal_status NOT IN ('pending', 'rejected'))
                 """,
                 (user_id, competition_id, distance)
             ) as cursor:
@@ -648,6 +948,7 @@ async def is_user_registered(user_id: int, competition_id: int, distance: float 
                 """
                 SELECT COUNT(*) FROM competition_participants
                 WHERE user_id = ? AND competition_id = ?
+                  AND (proposal_status IS NULL OR proposal_status NOT IN ('pending', 'rejected'))
                 """,
                 (user_id, competition_id)
             ) as cursor:
@@ -1154,6 +1455,66 @@ async def get_user_competitions_with_details(
                 comp = dict(row)
                 # Используем participant_status как основной status
                 comp['status'] = comp.get('participant_status', 'registered')
+                if comp.get('distances'):
+                    try:
+                        comp['distances'] = json.loads(comp['distances'])
+                    except:
+                        pass
+                competitions.append(comp)
+            return competitions
+
+
+async def get_student_competitions_for_coach(
+    student_id: int,
+    status_filter: str = None
+) -> List[Dict[str, Any]]:
+    """
+    Получить соревнования ученика для отображения тренеру
+    В отличие от get_user_competitions, показывает ВСЕ соревнования,
+    включая pending proposals
+
+    Args:
+        student_id: ID ученика
+        status_filter: Фильтр по статусу ('upcoming', 'finished')
+
+    Returns:
+        Список соревнований с данными участия
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        if status_filter == 'upcoming':
+            date_condition = "c.date >= date('now')"
+        elif status_filter == 'finished':
+            date_condition = "c.date < date('now')"
+        else:
+            date_condition = "1=1"
+
+        logger.info(f"get_student_competitions_for_coach: student_id={student_id}, status_filter={status_filter}")
+
+        # Получаем ВСЕ соревнования ученика, включая pending и rejected proposals
+        async with db.execute(
+            f"""
+            SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,
+                   cp.place_overall, cp.place_age_category, cp.age_category,
+                   cp.result_comment, cp.result_photo, cp.heart_rate, cp.qualification, cp.status as participant_status,
+                   cp.registered_at, cp.result_added_at, cp.proposal_status,
+                   cp.proposed_by_coach, cp.proposed_by_coach_id
+            FROM competitions c
+            JOIN competition_participants cp ON c.id = cp.competition_id
+            WHERE cp.user_id = ? AND {date_condition}
+            ORDER BY c.date ASC
+            """,
+            (student_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            logger.info(f"Found {len(rows)} competitions for student {student_id}")
+            competitions = []
+            for row in rows:
+                comp = dict(row)
                 if comp.get('distances'):
                     try:
                         comp['distances'] = json.loads(comp['distances'])

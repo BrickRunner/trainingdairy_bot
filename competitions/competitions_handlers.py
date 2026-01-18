@@ -377,9 +377,28 @@ async def register_user_for_competition(callback: CallbackQuery, state: FSMConte
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
+    # Получаем distance_name из данных соревнования
+    distance_name = str(distance)  # Значение по умолчанию
+    try:
+        distances_json = comp.get('distances', '[]')
+        import json
+        distances = json.loads(distances_json) if isinstance(distances_json, str) else distances_json
+
+        # Ищем соответствующую дистанцию
+        for dist in distances:
+            if isinstance(dist, dict):
+                dist_val = dist.get('distance', 0)
+                if abs(float(dist_val) - float(distance)) < 0.01:  # Сравнение с погрешностью
+                    distance_name = dist.get('name', str(distance))
+                    break
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Could not parse distance_name from competition: {e}")
+
     # Регистрируем пользователя
     try:
-        await register_for_competition(user_id, competition_id, distance)
+        await register_for_competition(user_id, competition_id, distance, distance_name=distance_name)
 
         # Создаём напоминания о соревновании
         from competitions.reminder_scheduler import create_reminders_for_competition
@@ -434,7 +453,10 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
     user_id = callback.from_user.id
     logger.info(f"show_my_competitions called for user_id={user_id}, page={page}")
 
-    all_competitions = await get_user_competitions(user_id, status_filter='upcoming')
+    # Используем get_student_competitions_for_coach чтобы показывать ВСЕ соревнования
+    # (как в кабинете тренера) включая принятые предложения
+    from competitions.competitions_queries import get_student_competitions_for_coach
+    all_competitions = await get_student_competitions_for_coach(user_id, status_filter='upcoming')
     logger.info(f"Got {len(all_competitions)} upcoming competitions for user {user_id}")
 
     # Pagination - 10 competitions per page

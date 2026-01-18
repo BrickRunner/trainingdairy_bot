@@ -1083,6 +1083,10 @@ async def get_user_registered_distances(user_id: int, competition_id: str, all_d
     """
     Получить список индексов дистанций, на которые пользователь уже зарегистрирован
 
+    ВАЖНО: Не считаются зарегистрированными:
+    - Отклоненные предложения (proposal_status='rejected')
+    - Ожидающие решения (proposal_status='pending')
+
     Args:
         user_id: ID пользователя
         competition_id: ID соревнования (URL из API)
@@ -1098,6 +1102,7 @@ async def get_user_registered_distances(user_id: int, competition_id: str, all_d
             FROM competition_participants cp
             JOIN competitions c ON cp.competition_id = c.id
             WHERE c.source_url = ? AND cp.user_id = ?
+              AND (cp.proposal_status IS NULL OR cp.proposal_status NOT IN ('pending', 'rejected'))
             """,
             (competition_id, user_id)
         )
@@ -1141,6 +1146,10 @@ async def is_user_registered_all_distances(user_id: int, competition_id: str, to
     """
     Проверить, зарегистрирован ли пользователь на ВСЕ дистанции соревнования
 
+    ВАЖНО: Не считаются зарегистрированными:
+    - Отклоненные предложения (proposal_status='rejected')
+    - Ожидающие решения (proposal_status='pending')
+
     Args:
         user_id: ID пользователя
         competition_id: ID соревнования (URL из API)
@@ -1156,6 +1165,7 @@ async def is_user_registered_all_distances(user_id: int, competition_id: str, to
             FROM competition_participants cp
             JOIN competitions c ON cp.competition_id = c.id
             WHERE c.source_url = ? AND cp.user_id = ?
+              AND (cp.proposal_status IS NULL OR cp.proposal_status NOT IN ('pending', 'rejected'))
             """,
             (competition_id, user_id)
         )

@@ -2159,10 +2159,6 @@ async def coach_send_all_distance_proposals(callback: CallbackQuery, state: FSMC
                 callback_data=f"accept_coach_dist:{comp_id}:{coach_id}:{i}"
             ))
             builder.row(InlineKeyboardButton(
-                text="✏️ Изменить время",
-                callback_data=f"change_coach_dist_time:{comp_id}:{coach_id}:{i}"
-            ))
-            builder.row(InlineKeyboardButton(
                 text="❌ Отклонить",
                 callback_data=f"reject_coach_dist:{comp_id}:{coach_id}:{i}"
             ))
@@ -2456,10 +2452,6 @@ async def coach_send_all_distance_proposals_via_message(message: Message, state:
                 callback_data=f"accept_coach_dist:{comp_id}:{coach_id}:{i}"
             ))
             builder.row(InlineKeyboardButton(
-                text="✏️ Изменить время",
-                callback_data=f"change_coach_dist_time:{comp_id}:{coach_id}:{i}"
-            ))
-            builder.row(InlineKeyboardButton(
                 text="❌ Отклонить",
                 callback_data=f"reject_coach_dist:{comp_id}:{coach_id}:{i}"
             ))
@@ -2541,9 +2533,9 @@ async def show_student_competitions(callback: CallbackQuery, state: FSMContext):
 
     display_name = await get_student_display_name(coach_id, student_id)
 
-    # Получаем соревнования ученика из БД
-    from competitions.competitions_queries import get_user_competitions
-    all_competitions = await get_user_competitions(student_id, status_filter='upcoming')
+    # Получаем соревнования ученика из БД (включая pending proposals)
+    from competitions.competitions_queries import get_student_competitions_for_coach
+    all_competitions = await get_student_competitions_for_coach(student_id, status_filter='upcoming')
 
     if not all_competitions:
         text = (
@@ -3026,7 +3018,7 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
         parts = callback.data.split(":")
         comp_id = int(parts[1])
         coach_id = int(parts[2])
-        distance_idx = int(parts[3])
+        distance_km_from_callback = float(parts[3])
         student_id = callback.from_user.id
 
         import aiosqlite
@@ -3048,41 +3040,141 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
         except:
             distances = []
 
-        if distance_idx >= len(distances):
-            await callback.answer("❌ Дистанция не найдена", show_alert=True)
+        # Ищем дистанцию по distance_km вместо индекса
+        distance_km = None
+        distance_name = None
+        for dist in distances:
+            if isinstance(dist, dict):
+                dist_km = dist.get('distance', 0)
+                if abs(dist_km - distance_km_from_callback) < 0.01:  # Сравнение с погрешностью
+                    distance_km = dist_km
+                    distance_name = dist.get('name', 'Дистанция')
+                    break
+            else:
+                # Безопасно извлекаем число из текста или числа
+                try:
+                    dist_km = float(dist)
+                except (ValueError, TypeError):
+                    # Если это текст типа "10 км" - извлекаем число
+                    import re
+                    match = re.search(r'[\d.]+', str(dist))
+                    dist_km = float(match.group()) if match else 0
+
+                if abs(dist_km - distance_km_from_callback) < 0.01:
+                    distance_km = dist_km
+                    distance_name = str(dist)
+                    break
+
+        if distance_km is None:
+            logger.error(f"Distance {distance_km_from_callback} not found in competition {comp_id}")
+            logger.error(f"Available distances: {distances}")
+            await callback.answer("❌ Дистанция не найдена в соревновании", show_alert=True)
             return
 
-        # Получаем информацию о дистанции
-        dist = distances[distance_idx]
-        if isinstance(dist, dict):
-            distance_km = dist.get('distance', 0)
-            distance_name = dist.get('name', 'Дистанция')
-        else:
-            distance_km = float(dist)
-            distance_name = str(dist)
+        logger.info(f"🔍 ACCEPT PROPOSAL: student={student_id}, comp_id={comp_id}, distance_km={distance_km}")
+        logger.info(f"   Found distance: distance_km={distance_km}, distance_name='{distance_name}'")
 
         # Проверяем есть ли целевое время в предложении
         async with aiosqlite.connect(DB_PATH) as db:
+            # Сначала посмотрим ВСЕ записи для этого пользователя и соревнования
             async with db.execute(
                 """
-                SELECT target_time FROM competition_participants
+                SELECT id, distance, distance_name, target_time, proposal_status
+                FROM competition_participants
+                WHERE user_id = ? AND competition_id = ?
+                """,
+                (student_id, comp_id)
+            ) as cursor:
+                all_rows = await cursor.fetchall()
+                logger.info(f"   Found {len(all_rows)} total records for this user/comp:")
+                for r in all_rows:
+                    logger.info(f"     - id={r[0]}, dist={r[1]}, dist_name='{r[2]}', target='{r[3]}', proposal='{r[4]}'")
+
+            # Ищем запись - сначала точное совпадение, потом по distance + proposal_status
+            async with db.execute(
+                """
+                SELECT id, target_time, distance_name FROM competition_participants
                 WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
                 """,
                 (student_id, comp_id, distance_km, distance_name)
             ) as cursor:
                 row = await cursor.fetchone()
-                has_target_time = row and row[0] is not None and row[0] != ''
 
-            # Обновляем статус предложения на "accepted"
-            await db.execute(
+            # Если не найдено точное совпадение, ищем по distance и proposal_status='pending'
+            if not row:
+                logger.warning(f"⚠️ Exact match not found, trying fallback search by distance + pending status")
+                async with db.execute(
+                    """
+                    SELECT id, target_time, distance_name FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ? AND distance = ? AND proposal_status = 'pending'
+                    """,
+                    (student_id, comp_id, distance_km)
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        logger.info(f"   ✅ Found via fallback! Using distance_name='{row[2]}' from DB")
+                        # ВАЖНО: используем distance_name из БД, а не из API!
+                        distance_name = row[2]
+
+            if not row:
+                logger.error(f"❌ CRITICAL: Record NOT FOUND even with fallback!")
+                logger.error(f"   Searched: distance={distance_km}, distance_name='{distance_name}'")
+                await callback.answer("❌ Ошибка: запись не найдена в БД", show_alert=True)
+                return
+
+            record_id = row[0]
+            target_time_value = row[1]
+            logger.info(f"   ✅ Found record id={record_id}, distance_name='{row[2]}'")
+
+            # КРИТИЧЕСКАЯ ПРОВЕРКА: тренер указал целевое время?
+            # Время считается указанным ТОЛЬКО если оно не None, не пустая строка и не 'None'
+            has_target_time = (
+                target_time_value is not None
+                and target_time_value != ''
+                and str(target_time_value).lower() != 'none'
+            )
+
+            logger.info(
+                f"   ✅ Record FOUND! target_time='{target_time_value}', has_target_time={has_target_time}"
+            )
+
+            # Обновляем статус предложения: обнуляем proposal_status, так как предложение принято
+            logger.info(f"Accepting proposal: student={student_id}, comp={comp_id}, dist={distance_km}, dist_name='{distance_name}', has_target_time={has_target_time}")
+            logger.info(f"   Will UPDATE using record_id={record_id}")
+
+            # ВАЖНО: Используем record_id для UPDATE, а не distance_name!
+            # Это гарантирует что обновится именно та запись которую мы нашли
+            cursor = await db.execute(
                 """
                 UPDATE competition_participants
-                SET proposal_status = 'accepted', reminders_enabled = 1
-                WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
+                SET proposal_status = NULL, reminders_enabled = 1, status = 'registered'
+                WHERE id = ?
                 """,
-                (student_id, comp_id, distance_km, distance_name)
+                (record_id,)
             )
+            rows_updated = cursor.rowcount
+            logger.info(f"UPDATE rows_updated: {rows_updated}")
+
+            if rows_updated == 0:
+                logger.error(f"❌ CRITICAL: UPDATE failed! No rows updated for record_id={record_id}")
+                await callback.answer("❌ Ошибка при обновлении записи", show_alert=True)
+                return
+
             await db.commit()
+
+            # Проверяем состояние ПОСЛЕ обновления
+            async with db.execute(
+                """
+                SELECT id, target_time, proposal_status, status FROM competition_participants
+                WHERE id = ?
+                """,
+                (record_id,)
+            ) as check_cursor:
+                after_row = await check_cursor.fetchone()
+                if after_row:
+                    logger.info(f"✅ AFTER UPDATE: id={after_row[0]}, target_time='{after_row[1]}', proposal_status='{after_row[2]}', status='{after_row[3]}'")
+                else:
+                    logger.error(f"❌ CRITICAL: Record NOT FOUND after update!")
 
         # Уведомляем ученика
         from utils.unit_converter import safe_convert_distance_name
@@ -3098,14 +3190,7 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
         elif student_distance_unit == 'км' and 'км' not in formatted_dist and 'м' not in formatted_dist:
             formatted_dist = f"{formatted_dist} км"
 
-        await callback.message.edit_text(
-            f"✅ <b>Вы приняли предложение!</b>\n\n"
-            f"Соревнование добавлено в раздел 'Мои соревнования'.\n"
-            f"Дистанция: <b>{formatted_dist}</b>",
-            parse_mode="HTML"
-        )
-
-        # Если нет целевого времени - запросить у ученика
+        # Если тренер НЕ указал целевое время - запросить у ученика
         if not has_target_time:
             from bot.fsm import CompetitionStates
 
@@ -3125,7 +3210,13 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
 
             keyboard_builder = ReplyKeyboardBuilder()
             keyboard_builder.row(KeyboardButton(text="⏩ Пропустить"))
-            keyboard_builder.row(KeyboardButton(text="❌ Отменить"))
+
+            await callback.message.edit_text(
+                f"✅ <b>Вы приняли предложение!</b>\n\n"
+                f"Соревнование добавлено в раздел 'Мои соревнования'.\n"
+                f"Дистанция: <b>{formatted_dist}</b>",
+                parse_mode="HTML"
+            )
 
             await callback.message.answer(
                 f"📝 <b>Хотите установить целевое время для этой дистанции?</b>\n\n"
@@ -3141,6 +3232,12 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
             await state.set_state(CompetitionStates.waiting_for_target_time_after_accept)
             await callback.answer()
             return
+
+        # Если тренер УЖЕ указал целевое время - просто уведомляем и делаем редирект
+        await callback.answer(
+            f"✅ Вы приняли предложение! Соревнование добавлено.",
+            show_alert=True
+        )
 
         # Отправляем уведомление тренеру
         try:
@@ -3168,21 +3265,34 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
                 parse_mode="HTML"
             )
 
-            # Редирект в главное меню
+            # Редирект в главное меню для тренера
             from bot.keyboards import get_main_menu_keyboard
             from coach.coach_queries import is_user_coach
 
             coach_is_coach = await is_user_coach(coach_id)
             await callback.bot.send_message(
                 coach_id,
-                "📱 <b>Главное меню</b>",
-                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
-                parse_mode="HTML"
+                "Вы в главном меню",
+                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach)
             )
         except Exception as e:
             logger.error(f"Error sending notification to coach: {e}")
 
-        await callback.answer("✅ Принято", show_alert=True)
+        # Редирект ученика в глобальный раздел "Мои соревнования"
+        from competitions.competitions_handlers import show_my_competitions
+
+        # Редактируем текущее сообщение на "Мои соревнования" (без промежуточных сообщений)
+        class RedirectCallback:
+            def __init__(self, msg, user):
+                self.message = msg
+                self.from_user = user
+                self.data = "comp:my"
+
+            async def answer(self, text="", show_alert=False):
+                pass
+
+        redirect_callback = RedirectCallback(callback.message, callback.from_user)
+        await show_my_competitions(redirect_callback, state, page=1)
 
     except Exception as e:
         logger.error(f"Error accepting distance proposal: {e}")
@@ -3376,9 +3486,8 @@ async def process_changed_target_time(message: Message, state: FSMContext):
 
         student_is_coach = await is_user_coach(user_id)
         await message.answer(
-            "📱 <b>Главное меню</b>",
-            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
-            parse_mode="HTML"
+            "Вы в главном меню",
+            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach)
         )
 
         # Отправляем уведомление тренеру
@@ -3412,9 +3521,8 @@ async def process_changed_target_time(message: Message, state: FSMContext):
             coach_is_coach = await is_user_coach(coach_id)
             await message.bot.send_message(
                 coach_id,
-                "📱 <b>Главное меню</b>",
-                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
-                parse_mode="HTML"
+                "Вы в главном меню",
+                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach)
             )
         except Exception as e:
             logger.error(f"Error sending notification to coach: {e}")
@@ -3502,9 +3610,8 @@ async def process_target_time_after_accept(message: Message, state: FSMContext):
 
             student_is_coach = await is_user_coach(user_id)
             await message.answer(
-                "📱 <b>Главное меню</b>",
-                reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
-                parse_mode="HTML"
+                "Вы в главном меню",
+                reply_markup=get_main_menu_keyboard(is_coach=student_is_coach)
             )
             return
 
@@ -3525,8 +3632,9 @@ async def process_target_time_after_accept(message: Message, state: FSMContext):
             import os
             DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
+            logger.info(f"Updating target time after accept: student={user_id}, comp={comp_id}, dist={distance_km}, dist_name={distance_name}, target_time={target_time}")
             async with aiosqlite.connect(DB_PATH) as db:
-                await db.execute(
+                cursor = await db.execute(
                     """
                     UPDATE competition_participants
                     SET target_time = ?
@@ -3534,7 +3642,10 @@ async def process_target_time_after_accept(message: Message, state: FSMContext):
                     """,
                     (target_time, user_id, comp_id, distance_km, distance_name)
                 )
+                rows_updated = cursor.rowcount
+                logger.info(f"Target time update - rows updated: {rows_updated}")
                 await db.commit()
+                logger.info(f"Target time update committed to database")
 
             await message.answer(
                 f"✅ <b>Целевое время установлено!</b>\n\n"
@@ -3584,20 +3695,29 @@ async def process_target_time_after_accept(message: Message, state: FSMContext):
         coach_is_coach = await is_user_coach(coach_id)
         await message.bot.send_message(
             coach_id,
-            "📱 <b>Главное меню</b>",
-            reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
-            parse_mode="HTML"
+            "Вы в главном меню",
+            reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach)
         )
 
-        # Редирект в главное меню для ученика
-        student_is_coach = await is_user_coach(user_id)
-        await message.answer(
-            "📱 <b>Главное меню</b>",
-            reply_markup=get_main_menu_keyboard(is_coach=student_is_coach),
-            parse_mode="HTML"
-        )
+        # Редирект ученика в глобальный раздел "Мои соревнования"
+        from competitions.competitions_handlers import show_my_competitions
 
-        await state.clear()
+        # Отправляем сообщение с кнопками "Мои соревнования"
+        new_msg = await message.answer("📋 Мои соревнования")
+
+        # Создаем callback для show_my_competitions
+        class RedirectCallback:
+            def __init__(self, msg, user, bot):
+                self.message = msg
+                self.from_user = user
+                self.data = "comp:my"
+                self.bot = bot
+
+            async def answer(self, text="", show_alert=False):
+                pass
+
+        redirect_callback = RedirectCallback(new_msg, message.from_user, message.bot)
+        await show_my_competitions(redirect_callback, state, page=1)
 
     except Exception as e:
         logger.error(f"Error processing target time after accept: {e}")
@@ -3615,7 +3735,7 @@ async def reject_coach_distance_proposal(callback: CallbackQuery):
         parts = callback.data.split(":")
         comp_id = int(parts[1])
         coach_id = int(parts[2])
-        distance_idx = int(parts[3])
+        distance_km_from_callback = float(parts[3])
         student_id = callback.from_user.id
 
         import aiosqlite
@@ -3637,18 +3757,36 @@ async def reject_coach_distance_proposal(callback: CallbackQuery):
         except:
             distances = []
 
-        if distance_idx >= len(distances):
-            await callback.answer("❌ Дистанция не найдена", show_alert=True)
-            return
+        # Ищем дистанцию по distance_km вместо индекса
+        distance_km = None
+        distance_name = None
+        for dist in distances:
+            if isinstance(dist, dict):
+                dist_km = dist.get('distance', 0)
+                if abs(dist_km - distance_km_from_callback) < 0.01:
+                    distance_km = dist_km
+                    distance_name = dist.get('name', 'Дистанция')
+                    break
+            else:
+                # Безопасно извлекаем число из текста или числа
+                try:
+                    dist_km = float(dist)
+                except (ValueError, TypeError):
+                    # Если это текст типа "10 км" - извлекаем число
+                    import re
+                    match = re.search(r'[\d.]+', str(dist))
+                    dist_km = float(match.group()) if match else 0
 
-        # Получаем информацию о дистанции
-        dist = distances[distance_idx]
-        if isinstance(dist, dict):
-            distance_km = dist.get('distance', 0)
-            distance_name = dist.get('name', 'Дистанция')
-        else:
-            distance_km = float(dist)
-            distance_name = str(dist)
+                if abs(dist_km - distance_km_from_callback) < 0.01:
+                    distance_km = dist_km
+                    distance_name = str(dist)
+                    break
+
+        if distance_km is None:
+            logger.error(f"Distance {distance_km_from_callback} not found in competition {comp_id}")
+            logger.error(f"Available distances: {distances}")
+            await callback.answer("❌ Дистанция не найдена в соревновании", show_alert=True)
+            return
 
         # Удаляем предложение из БД
         async with aiosqlite.connect(DB_PATH) as db:
@@ -3714,9 +3852,8 @@ async def reject_coach_distance_proposal(callback: CallbackQuery):
             coach_is_coach = await is_user_coach(coach_id)
             await callback.bot.send_message(
                 coach_id,
-                "📱 <b>Главное меню</b>",
-                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach),
-                parse_mode="HTML"
+                "Вы в главном меню",
+                reply_markup=get_main_menu_keyboard(is_coach=coach_is_coach)
             )
         except Exception as e:
             logger.error(f"Error sending notification to coach: {e}")

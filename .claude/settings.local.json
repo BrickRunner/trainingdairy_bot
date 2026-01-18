@@ -90,7 +90,12 @@
       "Bash(venv/bin/python:*)",
       "Bash(venvScriptspython.exe -m py_compile coachcoach_competitions_handlers.py)",
       "Bash(venvScriptspython.exe -m py_compile coachcoach_keyboards.py coachcoach_competitions_handlers.py)",
-      "Bash(venvScriptspython.exe -m py_compile coachcoach_competitions_handlers.py competitionscompetitions_queries.py)"
+      "Bash(venvScriptspython.exe -m py_compile coachcoach_competitions_handlers.py competitionscompetitions_queries.py)",
+      "Bash(powershell -Command \"$content = Get-Content competitions\\competitions_queries.py; Write-Output $content.Count\")",
+      "Bash(powershell -Command \"(Get-Content ''D:\\desktop\\coding\\trainingdairy_bot-3\\competitions\\competitions_queries.py'' | Measure-Object -Line).Lines\")",
+      "Bash(venvScriptspython.exe diagnose_proposal_issue.py)",
+      "Bash(venvScriptspython.exe -m py_compile coach/coach_upcoming_competitions_handlers.py coach/coach_competitions_handlers.py)",
+      "Bash(venvScriptspython.exe check_competition_18.py)"
     ],
     "deny": [],
     "ask": []
