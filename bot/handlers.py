@@ -1091,7 +1091,9 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "cancel")
 async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
     """Отмена текущей операции с контекстно-зависимой навигацией"""
+    logger.warning(f"🔴 GLOBAL cancel_handler called!")
     current_state = await state.get_state()
+    logger.warning(f"🔴 GLOBAL cancel_handler - current_state: {current_state}")
 
     if current_state is None:
         if isinstance(message, Message):

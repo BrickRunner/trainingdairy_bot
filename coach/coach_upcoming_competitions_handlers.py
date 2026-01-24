@@ -1613,13 +1613,16 @@ async def coach_skip_target_time(callback: CallbackQuery, state: FSMContext):
         # Кнопки для ученика (без "Изменить время", т.к. тренер пропустил целевое время)
         builder = InlineKeyboardBuilder()
 
+        # Используем selected_distance or 0 для соревнований без дистанций
+        distance_for_callback = selected_distance if selected_distance is not None else 0
+
         builder.row(InlineKeyboardButton(
             text="✅ Принять",
-            callback_data=f"accept_coach_dist:{competition_db_id}:{coach_id}:0"
+            callback_data=f"accept_coach_dist:{competition_db_id}:{coach_id}:{distance_for_callback}"
         ))
         builder.row(InlineKeyboardButton(
             text="❌ Отклонить",
-            callback_data=f"reject_coach_dist:{competition_db_id}:{coach_id}:0"
+            callback_data=f"reject_coach_dist:{competition_db_id}:{coach_id}:{distance_for_callback}"
         ))
 
         # Отправляем предложение ученику
@@ -1937,13 +1940,16 @@ async def coach_process_target_time(message: Message, state: FSMContext):
             # Кнопки для ученика
             builder = InlineKeyboardBuilder()
 
+            # Используем selected_distance or 0 для соревнований без дистанций
+            distance_for_callback = selected_distance if selected_distance is not None else 0
+
             builder.row(InlineKeyboardButton(
                 text="✅ Принять",
-                callback_data=f"accept_coach_dist:{competition_db_id}:{coach_id}:0"
+                callback_data=f"accept_coach_dist:{competition_db_id}:{coach_id}:{distance_for_callback}"
             ))
             builder.row(InlineKeyboardButton(
                 text="❌ Отклонить",
-                callback_data=f"reject_coach_dist:{competition_db_id}:{coach_id}:0"
+                callback_data=f"reject_coach_dist:{competition_db_id}:{coach_id}:{distance_for_callback}"
             ))
 
             # Отправляем предложение ученику

@@ -66,9 +66,9 @@ async def main():
     dp.include_router(coach_router)  # Роутер тренеров
     dp.include_router(coach_add_training_router)  # Роутер добавления тренировок для учеников
     dp.include_router(coach_upcoming_competitions_router)  # Роутер предстоящих соревнований для тренера
-    dp.include_router(coach_competitions_router)  # Роутер предложения соревнований от тренера (ПЕРЕД custom!)
+    dp.include_router(custom_competitions_router)  # Роутер пользовательских соревнований (ПЕРЕД coach!)
+    dp.include_router(coach_competitions_router)  # Роутер предложения соревнований от тренера
     dp.include_router(competitions_router)  # Роутер соревнований
-    dp.include_router(custom_competitions_router)  # Роутер пользовательских соревнований
     dp.include_router(search_competitions_router)  # Роутер поиска соревнований
     dp.include_router(health_calendar_export_router)  # Роутер календарей экспорта здоровья
     dp.include_router(health_router)

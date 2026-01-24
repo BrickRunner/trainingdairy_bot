@@ -453,10 +453,9 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
     user_id = callback.from_user.id
     logger.info(f"show_my_competitions called for user_id={user_id}, page={page}")
 
-    # Используем get_student_competitions_for_coach чтобы показывать ВСЕ соревнования
-    # (как в кабинете тренера) включая принятые предложения
-    from competitions.competitions_queries import get_student_competitions_for_coach
-    all_competitions = await get_student_competitions_for_coach(user_id, status_filter='upcoming')
+    # Используем get_user_competitions для показа только зарегистрированных соревнований
+    # (исключая pending и rejected proposals)
+    all_competitions = await get_user_competitions(user_id, status_filter='upcoming')
     logger.info(f"Got {len(all_competitions)} upcoming competitions for user {user_id}")
 
     # Pagination - 10 competitions per page
@@ -474,12 +473,17 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
         text = (
             "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
             "У вас пока нет запланированных соревнований.\n\n"
-            "Перейдите в раздел 'Найти соревнования' чтобы зарегистрироваться на забег!"
+            "Вы можете:\n"
+            "• Посмотреть предстоящие соревнования\n"
+            "• Найти соревнование вручную для регистрации"
         )
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         builder = InlineKeyboardBuilder()
         builder.row(
-            InlineKeyboardButton(text="🔍 Найти соревнования", callback_data="comp:search")
+            InlineKeyboardButton(text="📅 Предстоящие соревнования", callback_data="comp:upcoming")
+        )
+        builder.row(
+            InlineKeyboardButton(text="🔍 Найти соревнование вручную", callback_data="comp:create_custom")
         )
         builder.row(
             InlineKeyboardButton(text="◀️ Назад", callback_data="comp:menu")
@@ -603,8 +607,12 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
                 target_time_str = target_time
                 # Рассчитываем темп для целевого времени
                 from utils.time_formatter import calculate_pace_with_unit
-                target_pace = await calculate_pace_with_unit(target_time, comp['distance'], user_id)
-                target_pace_str = f" ({target_pace})" if target_pace else ''
+                # Проверяем, что distance валидна перед вычислением темпа
+                if comp.get('distance') and comp['distance'] > 0:
+                    target_pace = await calculate_pace_with_unit(target_time, comp['distance'], user_id)
+                    target_pace_str = f" ({target_pace})" if target_pace else ''
+                else:
+                    target_pace_str = ''
 
             text += (
                 f"{i}. <b>{comp['name']}</b>\n"
@@ -810,10 +818,14 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
         target_time_str = target_time
         # Рассчитываем темп для целевого времени
         from utils.time_formatter import calculate_pace_with_unit
-        target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
-        logger.info(f"DEBUG: target_pace calculated = {target_pace}")
-        target_pace_str = f"⚡ Целевой темп: {target_pace}\n" if target_pace else ''
-        logger.info(f"DEBUG: target_pace_str = {target_pace_str}")
+        # Проверяем, что distance валидна перед вычислением темпа
+        if distance and distance > 0:
+            target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
+            logger.info(f"DEBUG: target_pace calculated = {target_pace}")
+            target_pace_str = f"⚡ Целевой темп: {target_pace}\n" if target_pace else ''
+            logger.info(f"DEBUG: target_pace_str = {target_pace_str}")
+        else:
+            target_pace_str = ''
 
     text = (
         f"🏃 <b>{competition['name']}</b>\n\n"
@@ -946,7 +958,11 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
 
     # Рассчитываем темп
     from utils.time_formatter import calculate_pace_with_unit
-    pace = await calculate_pace_with_unit(comp['finish_time'], comp['distance'], user_id)
+    # Проверяем, что distance валидна перед вычислением темпа
+    if comp.get('distance') and comp['distance'] > 0:
+        pace = await calculate_pace_with_unit(comp['finish_time'], comp['distance'], user_id)
+    else:
+        pace = None
 
     text = (
         f"🏆 <b>{competition['name']}</b>\n\n"
@@ -1104,9 +1120,14 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("comp:edit_target:"))
 async def edit_target_time(callback: CallbackQuery, state: FSMContext):
     """Начать изменение целевого времени"""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"🟢 edit_target_time called with callback_data: {callback.data}")
+
     parts = callback.data.split(":")
     competition_id = int(parts[2])
     distance = float(parts[3])
+    logger.warning(f"🟢 Parsed: competition_id={competition_id}, distance={distance}")
 
     # Получаем информацию о соревновании
     competition = await get_competition(competition_id)
@@ -1148,6 +1169,7 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
         edit_target_comp_id=competition_id,
         edit_target_distance=distance
     )
+    logger.warning(f"🟢 State updated with: edit_target_comp_id={competition_id}, edit_target_distance={distance}")
 
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units
     from database.queries import get_user_settings
@@ -1186,37 +1208,351 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
         f"• 1:30:15 (1 час 30 минут 15 секунд)</i>"
     )
 
+    # НОВЫЙ ПОДХОД: Используем Inline-клавиатуру вместо Reply
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    cancel_builder = InlineKeyboardBuilder()
+    cancel_builder.row(
+        InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_edit_target")
+    )
+
     await callback.message.answer(
         text,
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=cancel_builder.as_markup()
     )
     await state.set_state(CompetitionStates.waiting_for_target_time_edit)
+    logger.warning(f"🟢 State set to CompetitionStates.waiting_for_target_time_edit")
+
+    # Проверяем, что состояние установлено
+    current_state = await state.get_state()
+    logger.warning(f"🟢 Current state after setting: {current_state}")
+
+    # ВАЖНО: Проверяем данные в состоянии после установки
+    check_data = await state.get_data()
+    logger.warning(f"🟢 State data verification: {check_data}")
+
     await callback.answer()
+
+
+@router.callback_query(F.data == "cancel_edit_target")
+async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработчик inline-кнопки Отменить для редактирования целевого времени"""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"🟡 cancel_edit_target_callback called!")
+
+    # Получаем данные из состояния
+    data = await state.get_data()
+    competition_id = data.get('edit_target_comp_id')
+    distance = data.get('edit_target_distance')
+    user_id = callback.from_user.id
+
+    logger.warning(f"🟡 State data: competition_id={competition_id}, distance={distance}")
+
+    await state.clear()
+
+    # Удаляем сообщение с кнопкой отмены
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    await callback.answer("❌ Изменение целевого времени отменено")
+
+    # Возврат к детальной информации о событии
+    if competition_id is not None:
+        # Получаем информацию о соревновании
+        competition = await get_competition(competition_id)
+
+        if competition:
+            # Получаем данные участия пользователя
+            from competitions.competitions_queries import get_user_competitions
+            user_comps = await get_user_competitions(user_id)
+
+            # Находим нужную регистрацию
+            registration = None
+            for comp in user_comps:
+                comp_distance = comp.get('distance')
+                if comp['id'] == competition_id:
+                    if (comp_distance == distance) or \
+                       (comp_distance in (None, 0) and distance in (None, 0)):
+                        registration = comp
+                        break
+
+            if not registration:
+                registrations_for_comp = [c for c in user_comps if c['id'] == competition_id]
+                if len(registrations_for_comp) == 1:
+                    registration = registrations_for_comp[0]
+
+            if registration:
+                # Форматируем информацию с учетом настроек пользователя
+                from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+                from database.queries import get_user_settings
+                from utils.unit_converter import safe_convert_distance_name
+
+                time_until = format_time_until_competition(competition['date'])
+
+                # Получаем distance_name из регистрации
+                distance_name = registration.get('distance_name')
+
+                # Нормализация distance_name
+                if distance_name and isinstance(distance_name, str):
+                    distance_name = distance_name.strip()
+                    if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
+                        distance_name = None
+                    elif competition.get('distances') and isinstance(competition['distances'], list):
+                        import re
+                        if re.match(r'^\d+(\.\d+)?$', distance_name):
+                            try:
+                                num_value = float(distance_name)
+                                for dist_obj in competition['distances']:
+                                    if isinstance(dist_obj, dict) and dist_obj.get('distance') == num_value:
+                                        found_name = dist_obj.get('name', '')
+                                        if found_name and found_name != distance_name:
+                                            distance_name = found_name
+                                        break
+                            except ValueError:
+                                pass
+
+                # Если distance_name все еще None, пытаемся найти в массиве distances
+                if (not distance_name or not distance_name.strip()) and competition.get('distances'):
+                    for dist_obj in competition['distances']:
+                        if isinstance(dist_obj, dict) and dist_obj.get('distance') == distance:
+                            distance_name = dist_obj.get('name', '')
+                            if distance_name:
+                                break
+
+                if distance_name and distance_name.strip():
+                    settings = await get_user_settings(user_id)
+                    distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+                    import re
+                    if re.match(r'^\d+(\.\d+)?$', distance_name):
+                        dist_str = f"{distance_name} {distance_unit}"
+                    else:
+                        dist_str = safe_convert_distance_name(distance_name, distance_unit)
+                elif distance is not None and distance > 0:
+                    dist_str = await format_dist_with_units(distance, user_id)
+                else:
+                    dist_str = 'Не указана'
+
+                date_str = await format_competition_date(competition['date'], user_id)
+
+                # Форматируем целевое время
+                target_time = registration.get('target_time')
+
+                if target_time is None or target_time == 'None' or target_time == '':
+                    target_time_str = 'Нет цели'
+                    target_pace_str = ''
+                else:
+                    target_time_str = target_time
+                    from utils.time_formatter import calculate_pace_with_unit
+                    # Проверяем, что distance валидна перед вычислением темпа
+                    if distance and distance > 0:
+                        target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
+                        target_pace_str = f"⚡ Целевой темп: {target_pace}\n" if target_pace else ''
+                    else:
+                        target_pace_str = ''
+
+                text = (
+                    f"🏃 <b>{competition['name']}</b>\n\n"
+                    f"📍 Город: {competition.get('city', 'не указан')}\n"
+                    f"📅 Дата: {date_str}\n"
+                    f"⏰ До старта: {time_until}\n\n"
+                    f"📏 Ваша дистанция: {dist_str}\n"
+                    f"🎯 Целевое время: {target_time_str}\n"
+                    f"{target_pace_str}"
+                )
+
+                if competition.get('description'):
+                    text += f"ℹ️ {competition['description']}\n\n"
+
+                # Создаём клавиатуру
+                from aiogram.utils.keyboard import InlineKeyboardBuilder
+                from datetime import datetime
+                builder = InlineKeyboardBuilder()
+
+                # Проверяем, прошло ли соревнование
+                try:
+                    comp_date = datetime.strptime(competition['date'], '%Y-%m-%d').date()
+                    today = datetime.now().date()
+                    is_finished = comp_date < today
+                except:
+                    is_finished = False
+
+                has_result = registration.get('finish_time') is not None
+
+                if is_finished:
+                    if not has_result:
+                        builder.row(
+                            InlineKeyboardButton(
+                                text="🏆 Добавить результат",
+                                callback_data=f"comp:add_result:{competition_id}"
+                            )
+                        )
+                    else:
+                        builder.row(
+                            InlineKeyboardButton(
+                                text="📊 Посмотреть результат",
+                                callback_data=f"comp:view_result:{competition_id}"
+                            )
+                        )
+                        builder.row(
+                            InlineKeyboardButton(
+                                text="✏️ Изменить результат",
+                                callback_data=f"comp:edit_result:{competition_id}"
+                            )
+                        )
+                else:
+                    builder.row(
+                        InlineKeyboardButton(
+                            text="✏️ Изменить целевое время",
+                            callback_data=f"comp:edit_target:{competition_id}:{distance}"
+                        )
+                    )
+                    builder.row(
+                        InlineKeyboardButton(
+                            text="❌ Отменить участие",
+                            callback_data=f"comp:cancel_reg_ask:{competition_id}:{distance}"
+                        )
+                    )
+
+                if competition.get('official_url'):
+                    builder.row(
+                        InlineKeyboardButton(
+                            text="🌐 Официальный сайт",
+                            url=competition['official_url']
+                        )
+                    )
+
+                builder.row(
+                    InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my")
+                )
+
+                # Отправляем новое сообщение
+                await callback.message.answer(
+                    text,
+                    reply_markup=builder.as_markup(),
+                    parse_mode="HTML"
+                )
+                return
+
+    # Если не удалось показать детали, возвращаемся в "Мои соревнования"
+    is_coach = await is_user_coach(callback.from_user.id)
+    await callback.message.answer(
+        "Вернитесь в раздел 'Мои соревнования' для просмотра событий.",
+        reply_markup=get_main_menu_keyboard(is_coach)
+    )
 
 
 @router.message(CompetitionStates.waiting_for_target_time_edit)
 async def process_target_time_edit(message: Message, state: FSMContext):
     """Обработать новое целевое время"""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"🔵 process_target_time_edit called with text: '{message.text}'")
+
     from utils.time_formatter import validate_time_format
 
+    # Текстовая кнопка "❌ Отмена" больше не используется - теперь inline кнопка "cancel_edit_target"
+    # Проверяем, не была ли нажата старая текстовая кнопка (на случай если она осталась)
     if message.text == "❌ Отмена":
-        # Получаем данные из состояния
-        data = await state.get_data()
-        competition_id = data.get('edit_target_comp_id')
-        distance = data.get('edit_target_distance')
-        user_id = message.from_user.id
-
-        await state.clear()
+        logger.warning("🔵 Old text cancel button detected - redirecting to inline cancel")
         await message.answer(
-            "❌ Изменение целевого времени отменено",
-            reply_markup=ReplyKeyboardRemove()
+            "⚠️ Пожалуйста, используйте кнопку 'Отменить' под сообщением с запросом времени"
         )
+        return
 
-        # Возврат к детальной информации о событии
-        if competition_id is not None:
-            # Получаем информацию о соревновании
-            competition = await get_competition(competition_id)
+    # Обрабатываем ввод времени
+    time_text = message.text.strip()
+    logger.warning(f"🔵 Processing time input: '{time_text}'")
+
+    # Получаем данные из состояния ПЕРЕД валидацией
+    data = await state.get_data()
+    logger.warning(f"🔵 Full state data: {data}")
+
+    competition_id = data.get('edit_target_comp_id')
+    distance = data.get('edit_target_distance')
+    user_id = message.from_user.id
+
+    logger.warning(f"🔵 State data: competition_id={competition_id}, distance={distance}")
+
+    # Проверяем наличие данных в состоянии
+    if competition_id is None:
+        logger.error("❌ No competition_id in state!")
+        await state.clear()
+        from bot.handlers import is_user_coach
+        is_coach = await is_user_coach(user_id)
+        await message.answer(
+            "❌ Данные не найдены. Пожалуйста, попробуйте снова.",
+            reply_markup=get_main_menu_keyboard(is_coach)
+        )
+        return
+
+    # Валидация формата
+    if not validate_time_format(time_text):
+        await message.answer(
+            "❌ Некорректный формат времени.\n"
+            "Используйте формат ЧЧ:ММ:СС или ММ:СС\n\n"
+            "Примеры: 03:30:00 или 45:00 или 1:30:15"
+        )
+        return
+
+    # Нормализуем время
+    normalized_time = normalize_time(time_text)
+    logger.warning(f"🔵 Normalized time: {normalized_time}")
+
+    # Обновляем целевое время
+    from competitions.competitions_queries import update_target_time
+    success = await update_target_time(user_id, competition_id, distance, normalized_time)
+
+    await state.clear()
+
+    if success:
+        # Проверяем, было ли соревнование предложено тренером
+        import aiosqlite
+        import os
+        DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Используем гибкий поиск для distance=0/None (HeroLeague, reg.place)
+            if distance in (0, 0.0, None):
+                async with db.execute(
+                    """
+                    SELECT proposed_by_coach_id FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ?
+                      AND (distance = 0 OR distance IS NULL)
+                      AND proposed_by_coach = 1
+                    """,
+                    (user_id, competition_id)
+                ) as cursor:
+                    result = await cursor.fetchone()
+            else:
+                async with db.execute(
+                    """
+                    SELECT proposed_by_coach_id FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ? AND distance = ? AND proposed_by_coach = 1
+                    """,
+                    (user_id, competition_id, distance)
+                ) as cursor:
+                    result = await cursor.fetchone()
+
+        if result and result[0]:
+            # Есть тренер - отправляем уведомление
+            coach_id = result[0]
+
+            # Получаем данные ученика и соревнования
+            from database.queries import get_user_settings
+            student_settings = await get_user_settings(user_id)
+            student_name = student_settings.get('name') if student_settings else None
+
+            if not student_name:
+                from database.queries import get_user
+                student = await get_user(user_id)
+                student_name = student.get('name') or student.get('username') or 'Ученик'
+
+            # Получаем соревнование
+            comp = await get_competition(competition_id)
 
             if competition:
                 # Получаем данные участия пользователя
@@ -1304,8 +1640,12 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                     else:
                         target_time_str = target_time
                         from utils.time_formatter import calculate_pace_with_unit
-                        target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
-                        target_pace_str = f"⚡ Целевой темп: {target_pace}\n" if target_pace else ''
+                        # Проверяем, что distance валидна перед вычислением темпа
+                        if distance and distance > 0:
+                            target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
+                            target_pace_str = f"⚡ Целевой темп: {target_pace}\n" if target_pace else ''
+                        else:
+                            target_pace_str = ''
 
                     text = (
                         f"🏃 <b>{competition['name']}</b>\n\n"
@@ -1399,6 +1739,27 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         return
 
     time_text = message.text.strip()
+    logger.info(f"🔵 Processing time input: '{time_text}'")
+
+    # Получаем данные из состояния ПЕРЕД валидацией
+    data = await state.get_data()
+    competition_id = data.get('edit_target_comp_id')
+    distance = data.get('edit_target_distance')
+    user_id = message.from_user.id
+
+    logger.info(f"🔵 State data: competition_id={competition_id}, distance={distance}")
+
+    # Проверяем наличие данных в состоянии
+    if competition_id is None:
+        logger.error("❌ No competition_id in state!")
+        await state.clear()
+        from bot.handlers import is_user_coach
+        is_coach = await is_user_coach(user_id)
+        await message.answer(
+            "❌ Данные не найдены. Пожалуйста, попробуйте снова.",
+            reply_markup=get_main_menu_keyboard(is_coach)
+        )
+        return
 
     # Валидация формата
     if not validate_time_format(time_text):
@@ -1411,12 +1772,7 @@ async def process_target_time_edit(message: Message, state: FSMContext):
 
     # Нормализуем время
     normalized_time = normalize_time(time_text)
-
-    # Получаем данные из состояния
-    data = await state.get_data()
-    competition_id = data.get('edit_target_comp_id')
-    distance = data.get('edit_target_distance')
-    user_id = message.from_user.id
+    logger.warning(f"🔵 Normalized time: {normalized_time}")
 
     # Обновляем целевое время
     from competitions.competitions_queries import update_target_time
@@ -1431,14 +1787,27 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
         async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute(
-                """
-                SELECT proposed_by_coach_id FROM competition_participants
-                WHERE user_id = ? AND competition_id = ? AND distance = ? AND proposed_by_coach = 1
-                """,
-                (user_id, competition_id, distance)
-            ) as cursor:
-                result = await cursor.fetchone()
+            # Используем гибкий поиск для distance=0/None (HeroLeague, reg.place)
+            if distance in (0, 0.0, None):
+                async with db.execute(
+                    """
+                    SELECT proposed_by_coach_id FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ?
+                      AND (distance = 0 OR distance IS NULL)
+                      AND proposed_by_coach = 1
+                    """,
+                    (user_id, competition_id)
+                ) as cursor:
+                    result = await cursor.fetchone()
+            else:
+                async with db.execute(
+                    """
+                    SELECT proposed_by_coach_id FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ? AND distance = ? AND proposed_by_coach = 1
+                    """,
+                    (user_id, competition_id, distance)
+                ) as cursor:
+                    result = await cursor.fetchone()
 
         if result and result[0]:
             # Есть тренер - отправляем уведомление
@@ -1490,7 +1859,7 @@ async def process_target_time_edit(message: Message, state: FSMContext):
 
         # Показываем карточку соревнования с обновленными данными
         competition = await get_competition(competition_id)
-        participant = await get_user_competition_registration(user_id, competition_id)
+        participant = await get_user_competition_registration(user_id, competition_id, distance)
 
         if competition and participant:
             # Объединяем данные соревнования и участника
@@ -1852,9 +2221,11 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
 
                     # Добавляем темп с учетом единиц измерения
                     from utils.time_formatter import calculate_pace_with_unit
-                    pace = await calculate_pace_with_unit(comp['finish_time'], comp['distance'], user_id)
-                    if pace:
-                        result_line += f" • 🏃 {pace}"
+                    # Проверяем, что distance валидна перед вычислением темпа
+                    if comp.get('distance') and comp['distance'] > 0:
+                        pace = await calculate_pace_with_unit(comp['finish_time'], comp['distance'], user_id)
+                        if pace:
+                            result_line += f" • 🏃 {pace}"
 
                     # Добавляем места
                     if comp.get('place_overall'):
@@ -1955,9 +2326,11 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
 
             # Добавляем темп с учетом единиц измерения
             from utils.time_formatter import calculate_pace_with_unit
-            pace = await calculate_pace_with_unit(record['best_time'], distance, user_id)
-            if pace:
-                text += f"⚡ Темп: {pace}\n"
+            # Проверяем, что distance валидна перед вычислением темпа
+            if distance and distance > 0:
+                pace = await calculate_pace_with_unit(record['best_time'], distance, user_id)
+                if pace:
+                    text += f"⚡ Темп: {pace}\n"
 
             # Добавляем разряд
             if record.get('qualification'):
@@ -2504,7 +2877,11 @@ async def process_heart_rate(message: Message, state: FSMContext):
 
         # Рассчитываем темп
         from utils.time_formatter import calculate_pace_with_unit
-        pace = await calculate_pace_with_unit(data['result_finish_time'], distance, user_id)
+        # Проверяем, что distance валидна перед вычислением темпа
+        if distance and distance > 0:
+            pace = await calculate_pace_with_unit(data['result_finish_time'], distance, user_id)
+        else:
+            pace = None
 
         text = (
             "✅ <b>РЕЗУЛЬТАТ ДОБАВЛЕН!</b>\n\n"

@@ -155,3 +155,9 @@ class CoachStates(StatesGroup):
     waiting_for_student_training_max_pulse = State()# Максимальный пульс
     waiting_for_student_training_comment = State()  # Комментарий тренера
     waiting_for_student_training_fatigue = State()  # Уровень усилий
+
+    # Соревнования ученика (тренер редактирует)
+    waiting_for_student_target_time = State()       # Изменение целевого времени ученика
+    waiting_for_student_result_time = State()       # Добавление результата ученика
+    waiting_for_student_result_place = State()      # Место ученика
+    waiting_for_student_result_heart_rate = State() # Пульс ученика на соревновании

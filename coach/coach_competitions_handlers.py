@@ -6,12 +6,12 @@ import logging
 import json
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.fsm import CompetitionStates
-from bot.keyboards import get_main_menu_keyboard
+from bot.fsm import CompetitionStates, CoachStates
+from bot.keyboards import get_main_menu_keyboard, get_cancel_keyboard
 from coach.coach_training_queries import can_coach_access_student, get_student_display_name
 from competitions.competitions_queries import add_competition, get_competition, get_upcoming_competitions
 from competitions.competitions_fetcher import fetch_all_competitions, SERVICE_CODES
@@ -19,6 +19,15 @@ from database.queries import get_user
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+# Кастомный фильтр для проверки что это flow от тренера
+def is_coach_propose_flow():
+    """Фильтр: проверяет что это предложение соревнования от тренера"""
+    async def check(message: Message, state: FSMContext) -> bool:
+        data = await state.get_data()
+        return 'propose_student_id' in data
+    return check
 
 
 # ========== ГЛАВНОЕ МЕНЮ СОРЕВНОВАНИЙ ДЛЯ ТРЕНЕРА ==========
@@ -2523,7 +2532,10 @@ async def coach_send_all_distance_proposals_via_message(message: Message, state:
 async def show_student_competitions(callback: CallbackQuery, state: FSMContext):
     """Показать соревнования ученика (адаптация раздела 'Мои соревнования')"""
 
-    student_id = int(callback.data.split(":")[2])
+    parts = callback.data.split(":")
+    student_id = int(parts[2])
+    # Поддержка пагинации: coach:student_competitions:{student_id}:{page}
+    page = int(parts[3]) if len(parts) > 3 else 1
     coach_id = callback.from_user.id
 
     # Проверяем доступ
@@ -2533,9 +2545,18 @@ async def show_student_competitions(callback: CallbackQuery, state: FSMContext):
 
     display_name = await get_student_display_name(coach_id, student_id)
 
-    # Получаем соревнования ученика из БД (включая pending proposals)
-    from competitions.competitions_queries import get_student_competitions_for_coach
-    all_competitions = await get_student_competitions_for_coach(student_id, status_filter='upcoming')
+    # Получаем соревнования ученика из БД (исключая pending/rejected proposals, как в "Мои соревнования")
+    from competitions.competitions_queries import get_user_competitions
+    all_competitions = await get_user_competitions(student_id, status_filter='upcoming')
+
+    # Пагинация - 10 соревнований на страницу (как в "Мои соревнования")
+    ITEMS_PER_PAGE = 10
+    total_pages = (len(all_competitions) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE if all_competitions else 1
+    page = max(1, min(page, total_pages))  # Ensure page is within valid range
+
+    start_idx = (page - 1) * ITEMS_PER_PAGE
+    end_idx = start_idx + ITEMS_PER_PAGE
+    competitions = all_competitions[start_idx:end_idx]
 
     if not all_competitions:
         text = (
@@ -2579,11 +2600,15 @@ async def show_student_competitions(callback: CallbackQuery, state: FSMContext):
     coach_settings = await get_user_settings(coach_id)
     distance_unit = coach_settings.get('distance_unit', 'км') if coach_settings else 'км'
 
-    text = f"📋 <b>СОРЕВНОВАНИЯ УЧЕНИКА</b>\n\n"
+    # Показываем пагинацию если страниц больше одной
+    if total_pages > 1:
+        text = f"📋 <b>СОРЕВНОВАНИЯ УЧЕНИКА</b> (стр. {page}/{total_pages})\n\n"
+    else:
+        text = f"📋 <b>СОРЕВНОВАНИЯ УЧЕНИКА</b>\n\n"
     text += f"Ученик: <b>{display_name}</b>\n\n"
 
-    # Показываем соревнования (максимум 15)
-    for i, comp in enumerate(all_competitions[:15], 1):
+    # Показываем соревнования текущей страницы
+    for i, comp in enumerate(competitions, start_idx + 1):
         time_until = format_time_until_competition(comp['date'])
 
         # Получаем название дистанции
@@ -2659,19 +2684,32 @@ async def show_student_competitions(callback: CallbackQuery, state: FSMContext):
 
     builder = InlineKeyboardBuilder()
 
-    # Кнопки для просмотра деталей соревнований
-    for comp in all_competitions[:15]:
-        # Короткое название для кнопки
-        short_name = comp['name'][:30] + '...' if len(comp['name']) > 30 else comp['name']
-        # Передаем distance и distance_name для правильной идентификации регистрации
-        distance = comp.get('distance', 0)
-        distance_name = comp.get('distance_name', '')
+    # Кнопки для просмотра деталей соревнований текущей страницы
+    for comp in competitions:
+        # Используем 0 если distance = None
+        distance_for_callback = comp.get('distance') or 0
         builder.row(
             InlineKeyboardButton(
-                text=f"📋 {short_name}",
-                callback_data=f"coach:view_student_comp:{student_id}:{comp['id']}:{distance}:{distance_name}"
+                text=f"{comp['name'][:40]}..." if len(comp['name']) > 40 else comp['name'],
+                callback_data=f"coach:view_student_comp:{student_id}:{comp['id']}:{distance_for_callback}"
             )
         )
+
+    # Pagination buttons (как в "Мои соревнования")
+    if total_pages > 1:
+        pagination_buttons = []
+        if page > 1:
+            pagination_buttons.append(
+                InlineKeyboardButton(text="⬅️ Назад", callback_data=f"coach:student_competitions:{student_id}:{page-1}")
+            )
+        pagination_buttons.append(
+            InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="coach:stud_comp_noop")
+        )
+        if page < total_pages:
+            pagination_buttons.append(
+                InlineKeyboardButton(text="Вперед ➡️", callback_data=f"coach:student_competitions:{student_id}:{page+1}")
+            )
+        builder.row(*pagination_buttons)
 
     builder.row(
         InlineKeyboardButton(
@@ -2688,9 +2726,15 @@ async def show_student_competitions(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == "coach:stud_comp_noop")
+async def student_competitions_noop(callback: CallbackQuery):
+    """No-op callback для индикатора текущей страницы"""
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("coach:view_student_comp:"))
 async def view_student_competition_details(callback: CallbackQuery):
-    """Показать детали соревнования ученика (только чтение)"""
+    """Показать детали соревнования ученика с возможностью редактирования"""
 
     parts = callback.data.split(":")
     student_id = int(parts[2])
@@ -2809,8 +2853,56 @@ async def view_student_competition_details(callback: CallbackQuery):
 
     text += proposal_status_text
 
-    # Если есть официальный сайт
+    # Создаём клавиатуру с действиями (как в "Мои соревнования")
     builder = InlineKeyboardBuilder()
+
+    # Проверяем, прошло ли соревнование
+    try:
+        comp_date_obj = datetime.strptime(comp['date'], '%Y-%m-%d').date()
+        today = datetime.now().date()
+        is_finished = comp_date_obj < today
+    except:
+        is_finished = False
+
+    # Проверяем наличие результата
+    has_result = registration.get('finish_time') is not None
+
+    if is_finished:
+        # Для прошедших соревнований
+        if not has_result:
+            builder.row(
+                InlineKeyboardButton(
+                    text="🏆 Добавить результат",
+                    callback_data=f"coach:add_student_result:{student_id}:{competition_id}:{distance or 0}"
+                )
+            )
+        else:
+            builder.row(
+                InlineKeyboardButton(
+                    text="📊 Посмотреть результат",
+                    callback_data=f"coach:view_student_result:{student_id}:{competition_id}:{distance or 0}"
+                )
+            )
+            builder.row(
+                InlineKeyboardButton(
+                    text="✏️ Изменить результат",
+                    callback_data=f"coach:edit_student_result:{student_id}:{competition_id}:{distance or 0}"
+                )
+            )
+    else:
+        # Для предстоящих соревнований
+        builder.row(
+            InlineKeyboardButton(
+                text="✏️ Изменить целевое время",
+                callback_data=f"coach:edit_student_target:{student_id}:{competition_id}:{distance or 0}"
+            )
+        )
+        builder.row(
+            InlineKeyboardButton(
+                text="❌ Отменить участие",
+                callback_data=f"coach:cancel_student_reg:{student_id}:{competition_id}:{distance or 0}"
+            )
+        )
 
     if comp.get('official_url'):
         builder.row(
@@ -3198,7 +3290,6 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
             await state.update_data(
                 accept_proposal_comp_id=comp_id,
                 accept_proposal_coach_id=coach_id,
-                accept_proposal_distance_idx=distance_idx,
                 accept_proposal_distance_km=distance_km,
                 accept_proposal_distance_name=distance_name,
                 accept_proposal_competition=competition
@@ -3278,10 +3369,23 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
         except Exception as e:
             logger.error(f"Error sending notification to coach: {e}")
 
-        # Редирект ученика в глобальный раздел "Мои соревнования"
-        from competitions.competitions_handlers import show_my_competitions
+        # Удаляем старое сообщение и отправляем ученику новое с разделом "Мои соревнования"
+        try:
+            await callback.message.delete()
+        except:
+            pass  # Если не удалось удалить - не критично
 
-        # Редактируем текущее сообщение на "Мои соревнования" (без промежуточных сообщений)
+        # Отправляем новое сообщение с разделом "Мои соревнования"
+        from competitions.competitions_handlers import show_my_competitions
+        from aiogram.types import Message
+
+        # Создаем новое сообщение для редиректа
+        new_message = await callback.bot.send_message(
+            callback.from_user.id,
+            "⏳ Загрузка..."
+        )
+
+        # Создаем объект callback для вызова show_my_competitions
         class RedirectCallback:
             def __init__(self, msg, user):
                 self.message = msg
@@ -3291,7 +3395,7 @@ async def accept_coach_distance_proposal(callback: CallbackQuery, state: FSMCont
             async def answer(self, text="", show_alert=False):
                 pass
 
-        redirect_callback = RedirectCallback(callback.message, callback.from_user)
+        redirect_callback = RedirectCallback(new_message, callback.from_user)
         await show_my_competitions(redirect_callback, state, page=1)
 
     except Exception as e:
@@ -3573,6 +3677,54 @@ async def process_target_time_after_accept(message: Message, state: FSMContext):
         if text == "⏩ Пропустить":
             # Пропускаем ввод целевого времени
             target_time = None
+
+            # ПРОВЕРЯЕМ и ИСПРАВЛЯЕМ статус в БД
+            import aiosqlite
+            import os
+            DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+            async with aiosqlite.connect(DB_PATH) as db:
+                # Сначала проверим ВСЕ записи для этого пользователя и соревнования
+                async with db.execute(
+                    """
+                    SELECT id, distance, distance_name, proposal_status, status FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ?
+                    """,
+                    (user_id, comp_id)
+                ) as cursor:
+                    all_rows = await cursor.fetchall()
+                    logger.info(f"SKIP: Found {len(all_rows)} records for user={user_id}, comp={comp_id}")
+                    for row in all_rows:
+                        logger.info(f"  - id={row[0]}, dist={row[1]}, dist_name='{row[2]}', proposal_status='{row[3]}', status='{row[4]}'")
+
+                # Теперь ищем нужную запись
+                async with db.execute(
+                    """
+                    SELECT id, proposal_status, status FROM competition_participants
+                    WHERE user_id = ? AND competition_id = ? AND distance = ? AND distance_name = ?
+                    """,
+                    (user_id, comp_id, distance_km, distance_name)
+                ) as cursor:
+                    check_row = await cursor.fetchone()
+                    if check_row:
+                        record_id, prop_status, status = check_row
+                        logger.info(f"SKIP: Found record id={record_id}, proposal_status='{prop_status}', status='{status}'")
+
+                        # Если статус не 'registered' или proposal_status не NULL, исправляем
+                        if prop_status is not None or status != 'registered':
+                            logger.warning(f"SKIP: FIXING status! Was: proposal_status='{prop_status}', status='{status}'")
+                            await db.execute(
+                                """
+                                UPDATE competition_participants
+                                SET proposal_status = NULL, status = 'registered', reminders_enabled = 1
+                                WHERE id = ?
+                                """,
+                                (record_id,)
+                            )
+                            await db.commit()
+                            logger.info(f"SKIP: Status FIXED! Now: proposal_status=NULL, status='registered'")
+                    else:
+                        logger.error(f"SKIP: Record NOT FOUND! user={user_id}, comp={comp_id}, dist={distance_km}, dist_name='{distance_name}'")
 
             await message.answer(
                 "✅ <b>Вы приняли предложение!</b>\n\n"
@@ -3863,3 +4015,494 @@ async def reject_coach_distance_proposal(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error rejecting distance proposal: {e}")
         await callback.answer("❌ Ошибка при отклонении предложения", show_alert=True)
+
+# ========== ДЕЙСТВИЯ ТРЕНЕРА С СОРЕВНОВАНИЯМИ УЧЕНИКА ==========
+
+@router.callback_query(F.data.startswith("coach:edit_student_target:"))
+async def edit_student_target_time(callback: CallbackQuery, state: FSMContext):
+    """Тренер изменяет целевое время ученика"""
+    parts = callback.data.split(":")
+    student_id = int(parts[2])
+    competition_id = int(parts[3])
+    distance = float(parts[4])
+    coach_id = callback.from_user.id
+
+    # Проверяем доступ
+    if not await can_coach_access_student(coach_id, student_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    display_name = await get_student_display_name(coach_id, student_id)
+
+    # Получаем информацию о соревновании
+    from competitions.competitions_queries import get_competition
+    competition = await get_competition(competition_id)
+
+    if not competition:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    # Получаем регистрацию ученика
+    from competitions.competitions_queries import get_user_competitions
+    user_comps = await get_user_competitions(student_id)
+
+    # Находим нужную регистрацию (с учетом distance=0)
+    registration = None
+    for comp in user_comps:
+        comp_distance = comp.get('distance')
+        if comp['id'] == competition_id:
+            if (comp_distance == distance) or \
+               (comp_distance in (None, 0) and distance in (None, 0)):
+                registration = comp
+                break
+
+    if not registration:
+        registrations_for_comp = [c for c in user_comps if c['id'] == competition_id]
+        if len(registrations_for_comp) == 1:
+            registration = registrations_for_comp[0]
+        else:
+            await callback.answer("❌ Регистрация не найдена", show_alert=True)
+            return
+
+    # Сохраняем данные в состоянии
+    await state.update_data(
+        edit_student_target_comp_id=competition_id,
+        edit_student_target_distance=distance,
+        edit_student_target_student_id=student_id
+    )
+
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
+
+    # Форматируем дистанцию
+    distance_name = registration.get('distance_name') if registration else None
+    if distance_name and isinstance(distance_name, str):
+        distance_name = distance_name.strip()
+        if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
+            distance_name = None
+
+    if distance_name and distance_name.strip():
+        settings = await get_user_settings(coach_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+        import re
+        if re.match(r'^\d+(\.\d+)?$', distance_name):
+            dist_str = f"{distance_name} {distance_unit}"
+        else:
+            dist_str = safe_convert_distance_name(distance_name, distance_unit)
+    else:
+        dist_str = await format_dist_with_units(distance, coach_id)
+
+    text = (
+        f"👤 Ученик: <b>{display_name}</b>\n\n"
+        f"🏃 <b>{competition['name']}</b>\n"
+        f"📏 Дистанция: {dist_str}\n\n"
+        f"Введите новое целевое время в формате ЧЧ:ММ:СС или ММ:СС:\n\n"
+        f"<i>Например:\n"
+        f"• 03:30:00 (3 часа 30 минут)\n"
+        f"• 45:00 (45 минут)\n"
+        f"• 1:30:15 (1 час 30 минут 15 секунд)</i>"
+    )
+
+    await callback.message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(CoachStates.waiting_for_student_target_time)
+    await callback.answer()
+
+
+@router.message(CoachStates.waiting_for_student_target_time)
+async def process_student_target_time_edit(message: Message, state: FSMContext):
+    """Обработать новое целевое время ученика"""
+    from utils.time_formatter import validate_time_format
+
+    if message.text == "❌ Отменить":
+        # Получаем данные для редиректа
+        data = await state.get_data()
+        student_id = data.get('edit_student_target_student_id')
+
+        await message.answer("❌ Изменение отменено", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+
+        # Редирект тренера обратно в раздел соревнований ученика
+        if student_id:
+            import asyncio
+            from types import SimpleNamespace
+
+            cancel_msg = await message.answer("Возвращаю в раздел соревнований ученика...")
+
+            fake_callback = SimpleNamespace(
+                data=f"coach:student_competitions:{student_id}",
+                from_user=message.from_user,
+                message=cancel_msg,
+                answer=lambda *args, **kwargs: asyncio.sleep(0),
+                bot=message.bot
+            )
+            await show_student_competitions(fake_callback, state)
+        return
+
+    # Валидация времени
+    time_text = message.text.strip()
+
+    if not validate_time_format(time_text):
+        await message.answer(
+            "❌ Неверный формат времени. Используйте ЧЧ:ММ:СС или ММ:СС\n"
+            "Например: 03:30:00 или 45:00"
+        )
+        return
+
+    # Нормализуем время
+    from utils.time_formatter import normalize_time
+    time_str = normalize_time(time_text)
+
+    data = await state.get_data()
+    competition_id = data.get('edit_student_target_comp_id')
+    distance = data.get('edit_student_target_distance')
+    student_id = data.get('edit_student_target_student_id')
+    coach_id = message.from_user.id
+
+    # Проверяем доступ
+    if not await can_coach_access_student(coach_id, student_id):
+        await message.answer("❌ Нет доступа", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    # Обновляем целевое время
+    from competitions.competitions_queries import update_target_time
+    success = await update_target_time(student_id, competition_id, distance, time_str)
+
+    if success:
+        # Получаем информацию для уведомления
+        from competitions.competitions_queries import get_competition
+        comp = await get_competition(competition_id)
+        display_name = await get_student_display_name(coach_id, student_id)
+
+        # Уведомляем ученика и отправляем его в главное меню
+        try:
+            from bot.keyboards import get_main_menu_keyboard
+            from coach.coach_queries import is_user_coach
+            from aiogram.types import ReplyKeyboardRemove
+            student_is_coach = await is_user_coach(student_id)
+
+            # Отправляем уведомление без клавиатуры
+            await message.bot.send_message(
+                student_id,
+                f"👨‍🏫 <b>Изменение целевого времени</b>\n\n"
+                f"Ваш тренер изменил целевое время для соревнования:\n\n"
+                f"🏆 <b>{comp['name']}</b>\n"
+                f"🎯 Новое целевое время: <b>{time_str}</b>",
+                parse_mode="HTML"
+            )
+
+            # Очищаем любые reply клавиатуры
+            await message.bot.send_message(
+                student_id,
+                "⏳ Возвращаю вас в главное меню...",
+                reply_markup=ReplyKeyboardRemove()
+            )
+
+            # Отправляем главное меню
+            await message.bot.send_message(
+                student_id,
+                "Вы в главном меню",
+                reply_markup=get_main_menu_keyboard(is_coach=student_is_coach)
+            )
+        except Exception as e:
+            logger.error(f"Error sending notification to student: {e}")
+
+        # Сообщение об успехе
+        await message.answer(
+            f"✅ Целевое время для ученика <b>{display_name}</b> обновлено на {time_str}",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove()
+        )
+
+        await state.clear()
+
+        # Редирект в раздел соревнований ученика
+        import asyncio
+        from types import SimpleNamespace
+
+        # Отправляем временное сообщение, которое будет отредактировано
+        redirect_msg = await message.answer("Возвращаю в раздел соревнований ученика...")
+
+        fake_callback = SimpleNamespace(
+            data=f"coach:student_competitions:{student_id}",
+            from_user=message.from_user,
+            message=redirect_msg,
+            answer=lambda *args, **kwargs: asyncio.sleep(0),
+            bot=message.bot
+        )
+        await show_student_competitions(fake_callback, state)
+    else:
+        await message.answer(
+            "❌ Не удалось обновить целевое время",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await state.clear()
+
+
+@router.callback_query(F.data.startswith("coach:cancel_student_reg:"))
+async def cancel_student_registration(callback: CallbackQuery):
+    """Тренер отменяет участие ученика в соревновании - показать подтверждение"""
+    parts = callback.data.split(":")
+    student_id = int(parts[2])
+    competition_id = int(parts[3])
+    distance = float(parts[4])
+    coach_id = callback.from_user.id
+
+    # Проверяем доступ
+    if not await can_coach_access_student(coach_id, student_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    display_name = await get_student_display_name(coach_id, student_id)
+
+    # Получаем информацию о соревновании
+    from competitions.competitions_queries import get_competition
+    competition = await get_competition(competition_id)
+
+    if not competition:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    # Получаем регистрацию для форматирования дистанции
+    from competitions.competitions_queries import get_user_competitions
+    user_comps = await get_user_competitions(student_id)
+
+    registration = None
+    for comp in user_comps:
+        comp_distance = comp.get('distance')
+        if comp['id'] == competition_id:
+            if (comp_distance == distance) or \
+               (comp_distance in (None, 0) and distance in (None, 0)):
+                registration = comp
+                break
+
+    if not registration:
+        registrations_for_comp = [c for c in user_comps if c['id'] == competition_id]
+        if len(registrations_for_comp) == 1:
+            registration = registrations_for_comp[0]
+        else:
+            await callback.answer("❌ Регистрация не найдена", show_alert=True)
+            return
+
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
+
+    # Форматируем дистанцию
+    distance_name = registration.get('distance_name') if registration else None
+    if distance_name and isinstance(distance_name, str):
+        distance_name = distance_name.strip()
+        if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
+            distance_name = None
+
+    if distance_name and distance_name.strip():
+        settings = await get_user_settings(coach_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+
+        import re
+        if re.match(r'^\d+(\.\d+)?$', distance_name):
+            dist_str = f"{distance_name} {distance_unit}"
+        else:
+            dist_str = safe_convert_distance_name(distance_name, distance_unit)
+    else:
+        dist_str = await format_dist_with_units(distance, coach_id)
+
+    # Показываем подтверждение
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="✅ Да, отменить",
+            callback_data=f"coach:cancel_student_reg_confirm:{student_id}:{competition_id}:{distance}"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="❌ Нет, вернуться",
+            callback_data=f"coach:view_student_comp:{student_id}:{competition_id}:{distance}"
+        )
+    )
+
+    text = (
+        f"⚠️ <b>ПОДТВЕРЖДЕНИЕ</b>\n\n"
+        f"Отменить участие ученика <b>{display_name}</b> в соревновании?\n\n"
+        f"🏆 <b>{competition['name']}</b>\n"
+        f"📏 Дистанция: {dist_str}\n\n"
+        f"<i>Ученик получит уведомление об отмене.</i>"
+    )
+
+    await callback.answer()
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+
+
+@router.callback_query(F.data.startswith("coach:cancel_student_reg_confirm:"))
+async def confirm_cancel_student_registration(callback: CallbackQuery):
+    """Подтвердить отмену участия ученика"""
+    parts = callback.data.split(":")
+    student_id = int(parts[2])
+    competition_id = int(parts[3])
+    distance = float(parts[4])
+    coach_id = callback.from_user.id
+
+    # Проверяем доступ
+    if not await can_coach_access_student(coach_id, student_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    display_name = await get_student_display_name(coach_id, student_id)
+
+    await callback.answer()
+
+    # Отменяем регистрацию
+    from competitions.competitions_queries import unregister_from_competition_with_distance, get_competition
+    success = await unregister_from_competition_with_distance(student_id, competition_id, distance)
+
+    if success:
+        comp = await get_competition(competition_id)
+
+        # Уведомляем ученика
+        try:
+            from bot.keyboards import get_main_menu_keyboard
+            from coach.coach_queries import is_user_coach
+            student_is_coach = await is_user_coach(student_id)
+
+            await callback.bot.send_message(
+                student_id,
+                f"👨‍🏫 <b>Отмена регистрации</b>\n\n"
+                f"Ваш тренер отменил вашу регистрацию на соревнование:\n\n"
+                f"🏆 <b>{comp['name']}</b>\n\n"
+                f"<i>Вы можете зарегистрироваться снова самостоятельно.</i>",
+                parse_mode="HTML",
+                reply_markup=get_main_menu_keyboard(is_coach=student_is_coach)
+            )
+        except Exception as e:
+            logger.error(f"Error sending notification to student: {e}")
+
+        # Возвращаемся к списку соревнований ученика
+        await callback.message.edit_text(
+            f"✅ Участие ученика <b>{display_name}</b> отменено",
+            parse_mode="HTML"
+        )
+
+        # Показываем список соревнований
+        from types import SimpleNamespace
+        fake_callback = SimpleNamespace(
+            data=f"coach:student_competitions:{student_id}",
+            from_user=callback.from_user,
+            message=callback.message,
+            answer=callback.answer,
+            bot=callback.bot
+        )
+        from aiogram.fsm.context import FSMContext as FSMContextType
+        fake_state = FSMContextType(
+            storage=callback.bot.get("state").storage if hasattr(callback.bot, "get") else None,
+            key=callback.message.chat.id
+        )
+        await show_student_competitions(fake_callback, fake_state)
+    else:
+        await callback.message.edit_text("❌ Не удалось отменить регистрацию")
+
+
+@router.callback_query(F.data.startswith("coach:view_student_result:"))
+async def view_student_result(callback: CallbackQuery):
+    """Просмотр результата соревнования ученика"""
+    parts = callback.data.split(":")
+    student_id = int(parts[2])
+    competition_id = int(parts[3])
+    distance = float(parts[4])
+    coach_id = callback.from_user.id
+
+    # Проверяем доступ
+    if not await can_coach_access_student(coach_id, student_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    display_name = await get_student_display_name(coach_id, student_id)
+
+    # Получаем информацию о соревновании и результате
+    from competitions.competitions_queries import get_user_competitions, get_competition
+    user_comps = await get_user_competitions(student_id, competition_id=competition_id)
+
+    if not user_comps:
+        await callback.answer("❌ Результат не найден", show_alert=True)
+        return
+
+    comp_result = user_comps[0]
+    competition = await get_competition(competition_id)
+
+    if not competition:
+        await callback.answer("❌ Соревнование не найдено", show_alert=True)
+        return
+
+    # Форматируем результат
+    from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
+    from utils.date_formatter import get_user_date_format
+    from database.queries import get_user_settings
+    from utils.unit_converter import safe_convert_distance_name
+    from utils.time_formatter import normalize_time, calculate_pace_with_unit
+    from competitions.competitions_keyboards import format_qualification
+
+    coach_date_format = await get_user_date_format(coach_id)
+
+    # Форматируем дистанцию
+    distance_name = comp_result.get('distance_name')
+
+    if distance_name:
+        settings = await get_user_settings(coach_id)
+        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+        dist_str = safe_convert_distance_name(distance_name, distance_unit)
+    else:
+        dist_str = await format_dist_with_units(comp_result['distance'], coach_id)
+
+    date_str = await format_competition_date(comp_result['date'], coach_id)
+
+    # Рассчитываем темп
+    pace = await calculate_pace_with_unit(comp_result['finish_time'], comp_result['distance'], coach_id)
+
+    text = (
+        f"👤 Ученик: <b>{display_name}</b>\n\n"
+        f"🏆 <b>{competition['name']}</b>\n\n"
+        f"📅 Дата: {date_str}\n"
+        f"📏 Дистанция: {dist_str}\n"
+        f"⏱️ Время: {normalize_time(comp_result['finish_time'])}\n"
+    )
+
+    if pace:
+        text += f"⚡ Темп: {pace}\n"
+
+    if comp_result.get('place_overall'):
+        text += f"🏆 Место общее: {comp_result['place_overall']}\n"
+    if comp_result.get('place_age_category'):
+        text += f"🏅 Место в категории: {comp_result['place_age_category']}\n"
+    if comp_result.get('qualification'):
+        text += f"🎖️ Разряд: {format_qualification(comp_result['qualification'])}\n"
+    if comp_result.get('heart_rate'):
+        text += f"❤️ Средний пульс: {comp_result['heart_rate']} уд/мин\n"
+
+    # Кнопка возврата
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="◀️ Назад к соревнованию",
+            callback_data=f"coach:view_student_comp:{student_id}:{competition_id}:{distance}"
+        )
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+

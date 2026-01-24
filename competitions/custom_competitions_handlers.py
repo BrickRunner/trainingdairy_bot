@@ -56,7 +56,12 @@ async def start_create_custom_competition(callback: CallbackQuery, state: FSMCon
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
     await callback.message.delete()
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=reply_builder.as_markup(resize_keyboard=True))
+    await callback.bot.send_message(
+        chat_id=callback.message.chat.id,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=reply_builder.as_markup(resize_keyboard=True)
+    )
     await state.set_state(CompetitionStates.waiting_for_comp_name)
     await callback.answer()
 
@@ -126,21 +131,16 @@ async def process_comp_city(message: Message, state: FSMContext):
     # Проверка на отмену
     if comp_city == "❌ Отменить":
         await state.clear()
-        from competitions.competitions_handlers import show_competitions_menu
+        await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
-            "Отменено",
-            reply_markup=ReplyKeyboardRemove()
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
         )
-        # Нужно создать callback-подобный объект для show_competitions_menu
-        from types import SimpleNamespace
-        fake_callback = SimpleNamespace(
-            message=message,
-            from_user=message.from_user,
-            answer=lambda *args, **kwargs: None
-        )
-        from aiogram.fsm.context import FSMContext as FSM
-        temp_state = await state.get_state()
-        await show_competitions_menu(fake_callback, state)
         return
 
     if not comp_city or len(comp_city) < 2:
@@ -893,18 +893,16 @@ async def process_past_comp_city(message: Message, state: FSMContext):
     # Проверка на отмену
     if comp_city == "❌ Отменить":
         await state.clear()
-        from competitions.competitions_handlers import show_competitions_menu
+        await message.answer("❌ Добавление результата отменено", reply_markup=ReplyKeyboardRemove())
+
+        # Показываем главное меню соревнований
+        from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
-            "Отменено",
-            reply_markup=ReplyKeyboardRemove()
+            "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
+            "Выберите раздел:",
+            parse_mode="HTML",
+            reply_markup=get_competitions_main_menu()
         )
-        from types import SimpleNamespace
-        fake_callback = SimpleNamespace(
-            message=message,
-            from_user=message.from_user,
-            answer=lambda *args, **kwargs: None
-        )
-        await show_competitions_menu(fake_callback, state)
         return
 
     if not comp_city or len(comp_city) < 2:

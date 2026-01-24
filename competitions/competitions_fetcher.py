@@ -9,6 +9,7 @@ from competitions.parser import fetch_competitions as fetch_russiarunning
 from competitions.timerman_parser import fetch_competitions as fetch_timerman
 from competitions.heroleague_parser import fetch_competitions as fetch_heroleague
 from competitions.regplace_parser import fetch_competitions as fetch_regplace
+from competitions.runc_parser import fetch_competitions as fetch_runc
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ async def fetch_all_competitions(
     sport: Optional[str] = None,
     limit: int = 50,
     period_months: Optional[int] = None,
-    service: Optional[str] = None  # "RussiaRunning", "Timerman", "HeroLeague", "reg.place", "all"
+    service: Optional[str] = None  # "RussiaRunning", "Timerman", "HeroLeague", "reg.place", "RunC", "all"
 ) -> List[Dict]:
     """
     Получить список соревнований из всех или выбранного сервиса
@@ -28,7 +29,7 @@ async def fetch_all_competitions(
         sport: Код вида спорта ("run", "bike", "swim", "all")
         limit: Максимальное количество результатов
         period_months: Период в месяцах для фильтрации
-        service: Сервис для регистрации ("RussiaRunning", "Timerman", "HeroLeague", "reg.place", "all" или None)
+        service: Сервис для регистрации ("RussiaRunning", "Timerman", "HeroLeague", "reg.place", "RunC", "all" или None)
 
     Returns:
         Объединенный список соревнований из всех источников
@@ -40,6 +41,7 @@ async def fetch_all_competitions(
     use_timerman = service is None or service == "all" or service == "Timerman"
     use_heroleague = service is None or service == "all" or service == "HeroLeague"
     use_regplace = service is None or service == "all" or service == "reg.place"
+    use_runc = service is None or service == "all" or service == "RunC"
 
     # Получаем соревнования из RussiaRunning
     if use_russiarunning:
@@ -101,6 +103,21 @@ async def fetch_all_competitions(
         except Exception as e:
             logger.error(f"Error fetching from reg.place: {e}")
 
+    # Получаем соревнования из RunC
+    if use_runc:
+        try:
+            logger.info("Fetching competitions from RunC...")
+            runc_comps = await fetch_runc(
+                city=city,
+                sport=sport,
+                limit=limit if service == "RunC" else 1000,
+                period_months=period_months
+            )
+            logger.info(f"Received {len(runc_comps)} competitions from RunC")
+            all_competitions.extend(runc_comps)
+        except Exception as e:
+            logger.error(f"Error fetching from RunC: {e}")
+
     # Сортируем по дате (самые близкие сначала)
     all_competitions.sort(key=lambda x: x.get('begin_date', '9999-12-31'))
 
@@ -119,6 +136,7 @@ SERVICE_CODES = {
     "Timerman": "Timerman",
     "Лига Героев": "HeroLeague",
     "Reg.place": "reg.place",
+    "RunC": "RunC",
     "Все сервисы": "all",
 }
 

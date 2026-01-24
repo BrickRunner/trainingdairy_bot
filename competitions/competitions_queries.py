@@ -1213,9 +1213,13 @@ async def get_user_competition_registration(
             conditions = ["user_id = ?", "competition_id = ?"]
             params = [user_id, competition_id]
 
+            # Для distance=0/None используем гибкий поиск (как в update_target_time)
             if distance is not None:
-                conditions.append("distance = ?")
-                params.append(distance)
+                if distance in (0, 0.0):
+                    conditions.append("(distance = 0 OR distance IS NULL)")
+                else:
+                    conditions.append("distance = ?")
+                    params.append(distance)
 
             if distance_name:
                 conditions.append("distance_name = ?")
