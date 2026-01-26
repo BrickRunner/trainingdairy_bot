@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from datetime import datetime
+from typing import Union
 import re
 import logging
 
@@ -242,6 +243,72 @@ async def start_add_training(message: Message, state: FSMContext):
         )
         return
 
+    # Проверяем, есть ли запланированные тренировки на сегодня
+    from datetime import datetime
+    today = datetime.now().date().isoformat()
+
+    import aiosqlite
+    import os
+    DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT id, type, distance, avg_pace, pace_unit, exercises, intervals, comment
+            FROM trainings
+            WHERE user_id = ? AND date = ? AND is_planned = 1 AND duration IS NULL
+            ORDER BY id DESC
+            """,
+            (user_id, today)
+        ) as cursor:
+            planned_trainings = await cursor.fetchall()
+
+    if planned_trainings:
+        # Есть запланированные тренировки - показываем их
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        from aiogram.types import InlineKeyboardButton
+
+        text = "📋 <b>Запланированные тренировки на сегодня</b>\n\n"
+        text += "Выберите тренировку для выполнения или добавьте новую:\n\n"
+
+        builder = InlineKeyboardBuilder()
+
+        for i, training in enumerate(planned_trainings, 1):
+            training_dict = dict(training)
+            desc = f"📝 {training_dict['type'].capitalize()}"
+
+            if training_dict.get('distance'):
+                desc += f" • {training_dict['distance']} км"
+            if training_dict.get('avg_pace'):
+                desc += f" • темп {training_dict['avg_pace']}"
+            if training_dict.get('exercises'):
+                desc += f" • {training_dict['exercises'][:30]}..."
+            if training_dict.get('intervals'):
+                desc += f" • {training_dict['intervals'][:30]}..."
+
+            text += f"{i}. {desc}\n"
+
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"✅ Выполнить: {training_dict['type'].capitalize()}",
+                    callback_data=f"complete_planned:{training_dict['id']}"
+                )
+            )
+
+        text += "\n💡 Или добавьте новую тренировку:"
+
+        builder.row(
+            InlineKeyboardButton(
+                text="➕ Добавить новую тренировку",
+                callback_data="add_new_training"
+            )
+        )
+
+        await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+        return
+
+    # Нет запланированных тренировок - обычный flow
     await message.answer(
         "🏋️ **Добавление тренировки**\n\n"
         "Выберите тип тренировки:",
@@ -249,6 +316,95 @@ async def start_add_training(message: Message, state: FSMContext):
         parse_mode="Markdown"
     )
     await state.set_state(AddTrainingStates.waiting_for_type)
+
+
+@router.callback_query(F.data == "add_new_training")
+async def add_new_training_callback(callback: CallbackQuery, state: FSMContext):
+    """Добавить новую тренировку (минуя запланированные)"""
+    user_id = callback.from_user.id
+
+    # Получаем основные типы тренировок из настроек пользователя
+    main_types = await get_main_training_types(user_id)
+
+    await callback.message.edit_text(
+        "🏋️ **Добавление тренировки**\n\n"
+        "Выберите тип тренировки:",
+        reply_markup=get_training_types_keyboard(main_types),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddTrainingStates.waiting_for_type)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("complete_planned:"))
+async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
+    """Начать выполнение запланированной тренировки"""
+    training_id = int(callback.data.split(":")[1])
+    user_id = callback.from_user.id
+
+    # Получаем данные запланированной тренировки
+    import aiosqlite
+    import os
+    DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT * FROM trainings
+            WHERE id = ? AND user_id = ? AND is_planned = 1 AND duration IS NULL
+            """,
+            (training_id, user_id)
+        ) as cursor:
+            planned = await cursor.fetchone()
+
+    if not planned:
+        await callback.answer("❌ Тренировка не найдена", show_alert=True)
+        return
+
+    planned_dict = dict(planned)
+
+    # Сохраняем данные в состояние
+    await state.update_data(
+        planned_training_id=training_id,
+        training_type=planned_dict['type'],  # используем training_type для согласованности
+        date=planned_dict['date'],
+        planned_distance=planned_dict.get('distance'),
+        planned_pace=planned_dict.get('avg_pace'),
+        planned_exercises=planned_dict.get('exercises'),
+        planned_intervals=planned_dict.get('intervals'),
+        coach_comment=planned_dict.get('comment')
+    )
+
+    # Показываем план и запрашиваем время начала
+    text = f"✅ <b>Выполнение тренировки</b>\n\n"
+    text += f"📝 <b>Тип:</b> {planned_dict['type'].capitalize()}\n"
+    text += f"📅 <b>Дата:</b> {planned_dict['date']}\n\n"
+
+    if planned_dict.get('distance'):
+        text += f"📏 <b>Плановая дистанция:</b> {planned_dict['distance']} км\n"
+    if planned_dict.get('avg_pace'):
+        text += f"⏱ <b>Желаемый темп:</b> {planned_dict['avg_pace']} {planned_dict.get('pace_unit', 'мин/км')}\n"
+    if planned_dict.get('exercises'):
+        text += f"💪 <b>Плановые упражнения:</b> {planned_dict['exercises']}\n"
+    if planned_dict.get('intervals'):
+        text += f"🔄 <b>Плановые интервалы:</b> {planned_dict['intervals']}\n"
+    if planned_dict.get('comment'):
+        text += f"💬 <b>Комментарий тренера:</b> {planned_dict['comment']}\n"
+
+    text += "\n⏱ Введите продолжительность тренировки (в формате ЧЧ:ММ:СС или ММ:СС):\n\n"
+    text += "Примеры:\n"
+    text += "• 45:30 (45 минут 30 секунд)\n"
+    text += "• 01:25:30 или 1:25:30 (1 час 25 минут)"
+
+    from bot.keyboards import get_cancel_keyboard
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.message.answer(
+        "⏱ Укажите, сколько времени заняла тренировка:",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(AddTrainingStates.waiting_for_time)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "quick_add_training")
@@ -952,9 +1108,47 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     
     # Для интервальной тренировки - calculated_volume уже должен быть в data
     # (добавляется при обработке описания интервалов)
-    
-    # Сохраняем тренировку в БД
-    await add_training(data)
+
+    # Проверяем, это выполнение запланированной тренировки или новая тренировка
+    if 'planned_training_id' in data and data['planned_training_id']:
+        # Обновляем существующую запланированную тренировку
+        import aiosqlite
+        import os
+        DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                """
+                UPDATE trainings
+                SET time = ?, duration = ?, distance = ?, avg_pace = ?, pace_unit = ?,
+                    avg_pulse = ?, max_pulse = ?, exercises = ?, intervals = ?,
+                    calculated_volume = ?, description = ?, results = ?, comment = ?,
+                    fatigue_level = ?, is_planned = 0
+                WHERE id = ? AND user_id = ?
+                """,
+                (
+                    data.get('time'),
+                    data.get('duration'),
+                    data.get('distance'),
+                    data.get('avg_pace'),
+                    data.get('pace_unit'),
+                    data.get('avg_pulse'),
+                    data.get('max_pulse'),
+                    data.get('exercises'),
+                    data.get('intervals'),
+                    data.get('calculated_volume'),
+                    data.get('description'),
+                    data.get('results'),
+                    data.get('comment'),
+                    data.get('fatigue_level'),
+                    data['planned_training_id'],
+                    data['user_id']
+                )
+            )
+            await db.commit()
+    else:
+        # Создаем новую тренировку (обычный flow)
+        await add_training(data)
 
     # Обновляем рейтинг пользователя после добавления тренировки
     try:
@@ -1089,7 +1283,7 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
 
 @router.message(F.text == "❌ Отменить")
 @router.callback_query(F.data == "cancel")
-async def cancel_handler(message: Message | CallbackQuery, state: FSMContext):
+async def cancel_handler(message: Union[Message, CallbackQuery], state: FSMContext):
     """Отмена текущей операции с контекстно-зависимой навигацией"""
     logger.warning(f"🔴 GLOBAL cancel_handler called!")
     current_state = await state.get_state()

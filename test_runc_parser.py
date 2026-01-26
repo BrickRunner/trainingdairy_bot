@@ -17,7 +17,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-from competitions.runc_parser import fetch_competitions
+from competitions.runc_parser import fetch_competitions, get_competition_details
 
 
 async def test_runc_parser():
@@ -73,6 +73,37 @@ async def test_runc_parser():
             print(f"  {i}. {comp.get('title')} ({comp.get('sport_code')})")
     except Exception as e:
         print(f"❌ Ошибка: {e}")
+
+    # Тест 4: Получение детальной информации о соревновании
+    print("\n[Тест 4] Получение детальной информации о соревновании")
+    print("-" * 80)
+    try:
+        # Получаем первое соревнование для теста
+        competitions = await fetch_competitions(limit=1)
+        if competitions:
+            comp_url = competitions[0].get('url')
+            comp_title = competitions[0].get('title')
+            print(f"Получаем детали для: {comp_title}")
+            print(f"URL: {comp_url}")
+
+            details = await get_competition_details(comp_url)
+
+            if details:
+                print(f"✅ Детали получены:")
+                print(f"  Название: {details.get('title')}")
+                print(f"  Город: {details.get('city')}")
+                print(f"  Дата: {details.get('formatted_date')}")
+                print(f"  Дистанции ({len(details.get('distances', []))} шт):")
+                for dist in details.get('distances', []):
+                    print(f"    - {dist.get('name')} ({dist.get('distance')} км)")
+            else:
+                print("⚠️  Не удалось получить детальную информацию")
+        else:
+            print("⚠️  Нет соревнований для теста")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
 
     print("\n" + "=" * 80)
     print("Тестирование завершено!")

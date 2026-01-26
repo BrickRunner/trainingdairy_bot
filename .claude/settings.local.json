@@ -15,7 +15,15 @@
       "WebFetch(domain:speedrace.runc.run)",
       "WebFetch(domain:results.runc.run)",
       "Bash(venvScriptspython.exe -c \"import bs4; print(''BeautifulSoup4 installed'')\")",
-      "Bash(python test_runc_parser.py:*)"
+      "Bash(python test_runc_parser.py:*)",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(pip install:*)",
+      "Bash(chmod:*)",
+      "Bash(kill:*)",
+      "Bash(python:*)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

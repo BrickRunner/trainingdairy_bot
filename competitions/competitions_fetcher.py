@@ -136,7 +136,7 @@ SERVICE_CODES = {
     "Timerman": "Timerman",
     "Лига Героев": "HeroLeague",
     "Reg.place": "reg.place",
-    "RunC": "RunC",
+    "Беговое Сообщество": "RunC",
     "Все сервисы": "all",
 }
 

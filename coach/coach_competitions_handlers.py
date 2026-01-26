@@ -656,9 +656,12 @@ async def process_proposed_comp_target_and_send_internal(message: Message, state
             ) as cursor:
                 existing = await cursor.fetchone()
 
+            logger.info(f"Checking existing record: student_id={student_id}, comp_id={comp_id}, distance={comp_distance}, existing={existing}")
+
             if existing:
+                logger.info(f"Updating existing record (id={existing[0]})")
                 # Обновляем существующую запись
-                await db.execute(
+                cursor = await db.execute(
                     """
                     UPDATE competition_participants
                     SET target_time = ?, proposal_status = 'pending',
@@ -668,18 +671,22 @@ async def process_proposed_comp_target_and_send_internal(message: Message, state
                     """,
                     (target_time, coach_id, student_id, comp_id, comp_distance)
                 )
+                logger.info(f"Updated {cursor.rowcount} rows with target_time={target_time}")
             else:
                 # Вставляем новую запись
-                await db.execute(
+                logger.info(f"Inserting new record: student_id={student_id}, comp_id={comp_id}, distance={comp_distance}, target_time={target_time}, coach_id={coach_id}")
+                cursor = await db.execute(
                     """
                     INSERT INTO competition_participants
-                    (user_id, competition_id, distance, target_time,
+                    (user_id, competition_id, distance, distance_name, target_time,
                      proposed_by_coach, proposed_by_coach_id, proposal_status, reminders_enabled)
-                    VALUES (?, ?, ?, ?, 1, ?, 'pending', 0)
+                    VALUES (?, ?, ?, NULL, ?, 1, ?, 'pending', 0)
                     """,
                     (student_id, comp_id, comp_distance, target_time, coach_id)
                 )
+                logger.info(f"Inserted new record with ID={cursor.lastrowid}")
             await db.commit()
+            logger.info(f"Database commit successful")
 
             # Проверка: убеждаемся что запись создалась для ученика
             async with db.execute(

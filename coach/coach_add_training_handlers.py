@@ -130,13 +130,49 @@ async def process_calendar_date_selection(callback: CallbackQuery, state: FSMCon
 
     await callback.answer()
 
-    # Переходим к вводу продолжительности
-    await callback.message.answer(
-        f"📅 Дата: {date_str}\n\n"
-        "⏱ Введите продолжительность тренировки (в минутах):",
-        reply_markup=get_skip_keyboard()
-    )
-    await state.set_state(CoachStates.waiting_for_student_training_duration)
+    # Проверяем тип тренировки для следующего шага
+    data = await state.get_data()
+    training_type = data.get('type')
+
+    # Для кросса, плавания, велотренировки запрашиваем дистанцию
+    if training_type in ['кросс', 'плавание', 'велотренировка']:
+        # Получаем единицы измерения УЧЕНИКА
+        student_id = data.get('student_id')
+        from database.queries import get_user_settings
+        student_settings = await get_user_settings(student_id)
+        distance_unit = student_settings.get('distance_unit', 'км') if student_settings else 'км'
+        unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
+
+        await callback.message.answer(
+            f"📅 Дата: {date_str}\n\n"
+            f"Введите плановую дистанцию в {unit_prepositional} или пропустите:",
+            reply_markup=get_skip_keyboard()
+        )
+        await state.set_state(CoachStates.waiting_for_student_training_distance)
+    # Для силовой - упражнения
+    elif training_type == 'силовая':
+        await callback.message.answer(
+            f"📅 Дата: {date_str}\n\n"
+            "Введите плановые упражнения или пропустите:",
+            reply_markup=get_skip_keyboard()
+        )
+        await state.set_state(CoachStates.waiting_for_student_training_exercises)
+    # Для интервальной - интервалы
+    elif training_type == 'интервальная':
+        await callback.message.answer(
+            f"📅 Дата: {date_str}\n\n"
+            "Введите плановые интервалы (например, '10x400м') или пропустите:",
+            reply_markup=get_skip_keyboard()
+        )
+        await state.set_state(CoachStates.waiting_for_student_training_intervals)
+    else:
+        # Сразу к комментарию
+        await callback.message.answer(
+            f"📅 Дата: {date_str}\n\n"
+            "Введите комментарий или пропустите:",
+            reply_markup=get_skip_keyboard()
+        )
+        await state.set_state(CoachStates.waiting_for_student_training_comment)
 
 
 # Обработчик навигации по календарю
@@ -242,145 +278,63 @@ async def process_date_text(message: Message, state: FSMContext):
     await state.update_data(date=date.isoformat())
     date_str = DateFormatter.format_date(date, date_format)
 
-    await message.answer(
-        f"📅 Дата: {date_str}\n\n"
-        "⏱ Введите продолжительность тренировки (в минутах):",
-        reply_markup=get_skip_keyboard()
-    )
-    await state.set_state(CoachStates.waiting_for_student_training_duration)
-
-
-@router.message(CoachStates.waiting_for_student_training_duration)
-async def process_training_duration(message: Message, state: FSMContext):
-    """Обработать продолжительность тренировки"""
-    text = message.text.strip()
-
-    if text == "❌ Отменить":
-        # Получаем student_id из состояния
-        data = await state.get_data()
-        student_id = data.get('student_id')
-        coach_id = data.get('coach_id')
-
-        await state.clear()
-        await message.answer(
-            "❌ Назначение тренировки отменено",
-            reply_markup=ReplyKeyboardRemove()
-        )
-
-        # Возврат в меню ученика
-        if student_id:
-            from coach.coach_keyboards import get_student_detail_keyboard
-            from coach.coach_queries import get_coach_students
-            from utils.date_formatter import get_user_date_format, DateFormatter
-
-            students = await get_coach_students(coach_id)
-            student = next((s for s in students if s['id'] == student_id), None)
-
-            if student:
-                display_name = await get_student_display_name(coach_id, student_id)
-                coach_date_format = await get_user_date_format(coach_id)
-                connected_date = DateFormatter.format_date(student['connected_at'][:10], coach_date_format)
-
-                text = f"👤 <b>{display_name}</b>\n\n"
-                text += f"📱 Telegram: @{student['username']}\n"
-                text += f"📅 Подключён: {connected_date}\n"
-
-                await message.answer(
-                    text,
-                    reply_markup=get_student_detail_keyboard(student_id),
-                    parse_mode="HTML"
-                )
-        return
-
-    try:
-        duration = int(text)
-        if duration <= 0:
-            raise ValueError
-    except ValueError:
-        await message.answer(
-            "❌ Введите корректное число минут",
-            reply_markup=get_skip_keyboard()
-        )
-        return
-
-    await state.update_data(duration=duration)
-
-    # Проверяем тип тренировки
+    # Проверяем тип тренировки для следующего шага
     data = await state.get_data()
     training_type = data.get('type')
+    student_id = data.get('student_id')
 
-    # Для кросса, плавания, велотренировки нужна дистанция
+    # Для кросса, плавания, велотренировки запрашиваем дистанцию
     if training_type in ['кросс', 'плавание', 'велотренировка']:
-        # Получаем единицы измерения УЧЕНИКА (тренер вводит в единицах ученика)
-        data = await state.get_data()
-        student_id = data.get('student_id')
         from database.queries import get_user_settings
         student_settings = await get_user_settings(student_id)
         distance_unit = student_settings.get('distance_unit', 'км') if student_settings else 'км'
-
-        # Используем предложный падеж для "в километрах" / "в милях"
         unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
 
         await message.answer(
-            f"Введите дистанцию в {unit_prepositional} (единицы измерения ученика):",
+            f"📅 Дата: {date_str}\n\n"
+            f"Введите плановую дистанцию в {unit_prepositional} или пропустите:",
             reply_markup=get_skip_keyboard()
         )
         await state.set_state(CoachStates.waiting_for_student_training_distance)
     # Для силовой - упражнения
     elif training_type == 'силовая':
         await message.answer(
-            "Введите описание упражнений или пропустите:",
+            f"📅 Дата: {date_str}\n\n"
+            "Введите плановые упражнения или пропустите:",
             reply_markup=get_skip_keyboard()
         )
         await state.set_state(CoachStates.waiting_for_student_training_exercises)
     # Для интервальной - интервалы
     elif training_type == 'интервальная':
         await message.answer(
-            "Введите описание интервалов (например, '10x400м') или пропустите:",
+            f"📅 Дата: {date_str}\n\n"
+            "Введите плановые интервалы (например, '10x400м') или пропустите:",
             reply_markup=get_skip_keyboard()
         )
         await state.set_state(CoachStates.waiting_for_student_training_intervals)
     else:
-        # Сразу к пульсу
+        # Сразу к комментарию
         await message.answer(
-            "Введите средний пульс или пропустите:",
+            f"📅 Дата: {date_str}\n\n"
+            "Введите комментарий или пропустите:",
             reply_markup=get_skip_keyboard()
         )
-        await state.set_state(CoachStates.waiting_for_student_training_avg_pulse)
+        await state.set_state(CoachStates.waiting_for_student_training_comment)
 
 
 @router.message(CoachStates.waiting_for_student_training_distance)
 async def process_training_distance(message: Message, state: FSMContext):
-    """Обработать дистанцию тренировки"""
+    """Обработать плановую дистанцию"""
     text = message.text.strip()
 
     if text == "⏭️ Пропустить":
-        await state.update_data(distance=None, avg_pace=None)
+        await state.update_data(distance=None)
     else:
         try:
             distance = float(text.replace(',', '.'))
             if distance <= 0:
                 raise ValueError
-
-            # Вычисляем темп с учетом единиц измерения студента
-            data = await state.get_data()
-            duration = data.get('duration')
-            student_id = data.get('student_id')
-
-            if duration and distance and student_id:
-                from database.queries import get_user_settings
-                settings = await get_user_settings(student_id)
-                distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
-
-                avg_pace_minutes = duration / distance
-                pace_min = int(avg_pace_minutes)
-                pace_sec = int((avg_pace_minutes - pace_min) * 60)
-                avg_pace = f"{pace_min:02d}:{pace_sec:02d}"
-                pace_unit = 'мин/миля' if distance_unit == 'мили' else 'мин/км'
-
-                await state.update_data(distance=distance, avg_pace=avg_pace, pace_unit=pace_unit)
-            else:
-                await state.update_data(distance=distance, avg_pace=None)
+            await state.update_data(distance=distance)
         except ValueError:
             await message.answer(
                 "❌ Введите корректное число (например, 10 или 10.5)",
@@ -388,11 +342,20 @@ async def process_training_distance(message: Message, state: FSMContext):
             )
             return
 
+    # Запрашиваем желаемый темп
+    data = await state.get_data()
+    student_id = data.get('student_id')
+    from database.queries import get_user_settings
+    student_settings = await get_user_settings(student_id)
+    distance_unit = student_settings.get('distance_unit', 'км') if student_settings else 'км'
+    pace_unit = 'мин/миля' if distance_unit == 'мили' else 'мин/км'
+
     await message.answer(
-        "Введите средний пульс или пропустите:",
+        f"Введите желаемый темп ({pace_unit}) в формате ММ:СС или пропустите:\n\n"
+        f"Например: 05:30",
         reply_markup=get_skip_keyboard()
     )
-    await state.set_state(CoachStates.waiting_for_student_training_avg_pulse)
+    await state.set_state(CoachStates.waiting_for_student_training_max_pulse)  # используем это состояние для темпа
 
 
 @router.message(CoachStates.waiting_for_student_training_exercises)
@@ -405,11 +368,12 @@ async def process_training_exercises(message: Message, state: FSMContext):
     else:
         await state.update_data(exercises=text)
 
+    # Для силовой тренировки сразу к комментарию
     await message.answer(
-        "Введите средний пульс или пропустите:",
+        "Введите комментарий к тренировке или пропустите:",
         reply_markup=get_skip_keyboard()
     )
-    await state.set_state(CoachStates.waiting_for_student_training_avg_pulse)
+    await state.set_state(CoachStates.waiting_for_student_training_comment)
 
 
 @router.message(CoachStates.waiting_for_student_training_intervals)
@@ -422,59 +386,43 @@ async def process_training_intervals(message: Message, state: FSMContext):
     else:
         await state.update_data(intervals=text)
 
+    # Для интервальной тренировки сразу к комментарию (желаемые результаты в комментарии)
     await message.answer(
-        "Введите средний пульс или пропустите:",
+        "Введите комментарий (можно указать желаемые результаты) или пропустите:",
         reply_markup=get_skip_keyboard()
     )
-    await state.set_state(CoachStates.waiting_for_student_training_avg_pulse)
-
-
-@router.message(CoachStates.waiting_for_student_training_avg_pulse)
-async def process_avg_pulse(message: Message, state: FSMContext):
-    """Обработать средний пульс"""
-    text = message.text.strip()
-
-    if text == "⏭️ Пропустить":
-        await state.update_data(avg_pulse=None)
-    else:
-        try:
-            avg_pulse = int(text)
-            if avg_pulse <= 0 or avg_pulse > 250:
-                raise ValueError
-            await state.update_data(avg_pulse=avg_pulse)
-        except ValueError:
-            await message.answer(
-                "❌ Введите корректное значение пульса (40-250)",
-                reply_markup=get_skip_keyboard()
-            )
-            return
-
-    await message.answer(
-        "Введите максимальный пульс или пропустите:",
-        reply_markup=get_skip_keyboard()
-    )
-    await state.set_state(CoachStates.waiting_for_student_training_max_pulse)
+    await state.set_state(CoachStates.waiting_for_student_training_comment)
 
 
 @router.message(CoachStates.waiting_for_student_training_max_pulse)
-async def process_max_pulse(message: Message, state: FSMContext):
-    """Обработать максимальный пульс"""
+async def process_desired_pace(message: Message, state: FSMContext):
+    """Обработать желаемый темп"""
     text = message.text.strip()
 
     if text == "⏭️ Пропустить":
-        await state.update_data(max_pulse=None)
+        await state.update_data(avg_pace=None, pace_unit=None)
     else:
-        try:
-            max_pulse = int(text)
-            if max_pulse <= 0 or max_pulse > 250:
-                raise ValueError
-            await state.update_data(max_pulse=max_pulse)
-        except ValueError:
+        # Валидация формата темпа MM:SS
+        import re
+        pace_pattern = r'^(\d{1,2}):([0-5]\d)$'
+        match = re.match(pace_pattern, text)
+
+        if not match:
             await message.answer(
-                "❌ Введите корректное значение пульса (40-250)",
+                "❌ Введите темп в формате ММ:СС (например, 05:30)",
                 reply_markup=get_skip_keyboard()
             )
             return
+
+        # Получаем единицы измерения ученика
+        data = await state.get_data()
+        student_id = data.get('student_id')
+        from database.queries import get_user_settings
+        student_settings = await get_user_settings(student_id)
+        distance_unit = student_settings.get('distance_unit', 'км') if student_settings else 'км'
+        pace_unit = 'мин/миля' if distance_unit == 'мили' else 'мин/км'
+
+        await state.update_data(avg_pace=text, pace_unit=pace_unit)
 
     await message.answer(
         "Введите комментарий к тренировке или пропустите:",
@@ -485,7 +433,7 @@ async def process_max_pulse(message: Message, state: FSMContext):
 
 @router.message(CoachStates.waiting_for_student_training_comment)
 async def process_training_comment(message: Message, state: FSMContext):
-    """Обработать комментарий"""
+    """Обработать комментарий и сохранить тренировку"""
     text = message.text.strip()
 
     if text == "⏭️ Пропустить":
@@ -493,43 +441,31 @@ async def process_training_comment(message: Message, state: FSMContext):
     else:
         await state.update_data(comment=text)
 
-    await message.answer(
-        "Оцените предполагаемый уровень усилий (1-10):",
-        reply_markup=get_fatigue_keyboard()
-    )
-    await state.set_state(CoachStates.waiting_for_student_training_fatigue)
-
-
-@router.callback_query(CoachStates.waiting_for_student_training_fatigue, F.data.startswith("fatigue:"))
-async def process_training_fatigue(callback: CallbackQuery, state: FSMContext):
-    """Обработать уровень усилий и сохранить тренировку"""
-    fatigue = int(callback.data.split(":")[1])
-    await state.update_data(fatigue_level=fatigue)
-
-    # Получаем все данные
+    # Получаем все данные и сохраняем тренировку
     data = await state.get_data()
     student_id = data.get('student_id')
     coach_id = data.get('coach_id')
 
-    # Подготавливаем данные тренировки
+    # Подготавливаем данные ПЛАНОВОЙ тренировки
+    # Тренер задает только "шаблон" - ученик потом заполнит фактические данные
     training_data = {
         'type': data.get('type'),
         'date': data.get('date'),
-        'time': data.get('time'),
-        'duration': data.get('duration'),
-        'distance': data.get('distance'),
-        'avg_pace': data.get('avg_pace'),
+        'time': None,  # Не указываем время
+        'duration': None,  # Продолжительность заполнит ученик
+        'distance': data.get('distance'),  # Плановая дистанция (опционально)
+        'avg_pace': data.get('avg_pace'),  # Желаемый темп (опционально)
         'pace_unit': data.get('pace_unit'),
-        'avg_pulse': data.get('avg_pulse'),
-        'max_pulse': data.get('max_pulse'),
-        'exercises': data.get('exercises'),
-        'intervals': data.get('intervals'),
-        'calculated_volume': None,  # Вычислится автоматически
+        'avg_pulse': None,  # ЧСС заполнит ученик
+        'max_pulse': None,
+        'exercises': data.get('exercises'),  # Плановые упражнения (опционально)
+        'intervals': data.get('intervals'),  # Плановые интервалы (опционально)
+        'calculated_volume': None,
         'description': None,
         'results': None,
-        'comment': data.get('comment'),
-        'fatigue_level': fatigue,
-        'is_planned': 1 if datetime.strptime(data.get('date'), "%Y-%m-%d").date() > datetime.now().date() else 0
+        'comment': data.get('comment'),  # Комментарий тренера
+        'fatigue_level': None,  # Уровень усилий заполнит ученик
+        'is_planned': 1  # ВСЕГДА 1 - это запланированная тренировка
     }
 
     # Сохраняем тренировку
@@ -542,38 +478,59 @@ async def process_training_fatigue(callback: CallbackQuery, state: FSMContext):
         from database.queries import get_user_settings
 
         user_date_format = await get_user_date_format(student_id)
-        training_date = DateFormatter.format_date(data.get('date'), user_date_format)
+        date_str = DateFormatter.format_date(data.get('date'), user_date_format)
 
-        # Получаем единицу измерения ученика
-        settings = await get_user_settings(student_id)
-        distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
+        # Формируем описание ПЛАНОВОЙ тренировки для ученика
+        training_desc = f"📝 <b>Тип:</b> {data.get('type').capitalize()}\n"
+        training_desc += f"📅 <b>Дата:</b> {date_str}\n"
 
-        distance_text = ""
         if data.get('distance'):
-            if distance_unit == 'км':
-                distance_text = f"Дистанция: {data.get('distance')} км\n"
-            else:
-                from competitions.competitions_utils import km_to_miles
-                distance_miles = km_to_miles(float(data.get('distance')))
-                distance_text = f"Дистанция: {distance_miles:.1f} миль\n"
+            student_settings = await get_user_settings(student_id)
+            distance_unit = student_settings.get('distance_unit', 'км') if student_settings else 'км'
+            training_desc += f"📏 <b>Плановая дистанция:</b> {data.get('distance')} {distance_unit}\n"
 
-        await callback.bot.send_message(
+        if data.get('avg_pace'):
+            training_desc += f"⏱ <b>Желаемый темп:</b> {data.get('avg_pace')} {data.get('pace_unit', 'мин/км')}\n"
+
+        if data.get('exercises'):
+            training_desc += f"💪 <b>Плановые упражнения:</b> {data.get('exercises')}\n"
+
+        if data.get('intervals'):
+            training_desc += f"🔄 <b>Плановые интервалы:</b> {data.get('intervals')}\n"
+
+        if data.get('comment'):
+            training_desc += f"💬 <b>Комментарий тренера:</b> {data.get('comment')}\n"
+
+        # Получаем имя тренера
+        from database.queries import get_user_settings
+        coach_settings = await get_user_settings(coach_id)
+        coach_name = coach_settings.get('name') if coach_settings else 'Ваш тренер'
+
+        notification_text = (
+            f"📋 <b>Запланирована тренировка</b>\n\n"
+            f"<b>{coach_name}</b> запланировал для вас тренировку:\n\n"
+            f"{training_desc}\n"
+            f"⚡️ В день тренировки заполните фактические данные в разделе «Добавить тренировку»"
+        )
+
+        await message.bot.send_message(
             student_id,
-            f"👨‍🏫 <b>Новая тренировка от тренера</b>\n\n"
-            f"Тип: {data.get('type').capitalize()}\n"
-            f"Дата: {training_date}\n"
-            f"Продолжительность: {data.get('duration')} мин\n"
-            + distance_text
-            + (f"\n💬 Комментарий тренера:\n{data.get('comment')}" if data.get('comment') else ""),
+            notification_text,
             parse_mode="HTML"
         )
     except Exception as e:
-        logger.error(f"Failed to notify student: {e}")
+        logger.error(f"Failed to send notification to student {student_id}: {e}")
 
-    await callback.message.edit_text(
-        f"✅ <b>Тренировка назначена!</b>\n\n"
-        f"Ученик {display_name} получил уведомление.",
-        parse_mode="HTML"
+    # Подтверждение тренеру
+    from coach.coach_keyboards import get_student_detail_keyboard
+
+    await message.answer(
+        f"✅ <b>Тренировка запланирована!</b>\n\n"
+        f"Ученик <b>{display_name}</b> получил уведомление.\n\n"
+        f"📅 Дата: {DateFormatter.format_date(data.get('date'), await get_user_date_format(coach_id))}\n"
+        f"📝 В день тренировки ученик заполнит фактические данные.",
+        parse_mode="HTML",
+        reply_markup=get_student_detail_keyboard(student_id)
     )
+
     await state.clear()
-    await callback.answer()

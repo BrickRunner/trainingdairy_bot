@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS trainings (
     type TEXT NOT NULL,
     date DATE NOT NULL,
     time TEXT,
-    duration INTEGER NOT NULL,
+    duration INTEGER,  -- Nullable для запланированных тренировок
     distance REAL,
     avg_pace TEXT,
     pace_unit TEXT,
