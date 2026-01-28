@@ -1552,6 +1552,26 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 heart_rate=data.get('heart_rate')
             )
 
+            # Обновляем уровень пользователя после добавления результата
+            try:
+                from database.level_queries import calculate_and_update_user_level
+                level_update = await calculate_and_update_user_level(user_id)
+                if level_update['level_changed']:
+                    from ratings.user_levels import get_level_emoji
+                    new_emoji = get_level_emoji(level_update['new_level'])
+                    levels_order = ['новичок', 'любитель', 'профи', 'элитный']
+                    old_idx = levels_order.index(level_update['old_level']) if level_update['old_level'] in levels_order else 0
+                    new_idx = levels_order.index(level_update['new_level']) if level_update['new_level'] in levels_order else 0
+                    if new_idx > old_idx:
+                        await callback.bot.send_message(
+                            user_id,
+                            f"🎉 <b>Уровень повышен!</b>\n\n"
+                            f"Вы поднялись до уровня {new_emoji} <b>{level_update['new_level'].capitalize()}</b>!",
+                            parse_mode="HTML"
+                        )
+            except Exception as e:
+                logger.error(f"Error updating level after custom competition result: {e}")
+
             # Рассчитываем разряд для отображения
             try:
                 from utils.qualifications import get_qualification, time_to_seconds

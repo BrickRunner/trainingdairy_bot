@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL,
     level TEXT DEFAULT 'новичок',
+    level_updated_week TEXT,  -- Неделя последнего обновления уровня (формат: YYYY-WW)
     weight REAL,
     pulse_norm INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -37,6 +38,10 @@ CREATE TABLE IF NOT EXISTS trainings (
     fatigue_level INTEGER,
     added_by_coach_id INTEGER,  -- ID тренера, если тренировка добавлена тренером
     is_planned INTEGER DEFAULT 0,  -- 1 если это запланированная тренировка
+    swimming_location TEXT,  -- Место плавания: 'бассейн' или 'открытая вода'
+    pool_length INTEGER,  -- Длина бассейна: 25 или 50 метров
+    swimming_styles TEXT,  -- JSON массив стилей плавания
+    swimming_sets TEXT,  -- Описание отрезков для плавания
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (added_by_coach_id) REFERENCES users(id)

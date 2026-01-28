@@ -159,6 +159,21 @@ def get_stats_period_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def get_health_stats_actions_keyboard(period_param: str) -> InlineKeyboardMarkup:
+    """Клавиатура с действиями после показа статистики здоровья"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🤖 AI-анализ", callback_data=f"ai_analyze_health:{period_param}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔄 Выбрать другой период", callback_data="health:stats_and_graphs")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔙 Главное меню", callback_data="health:menu")
+    )
+    return builder.as_markup()
+
+
 def get_graphs_period_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора периода для графиков (устаревшая, используйте get_stats_period_keyboard)"""
     return get_stats_period_keyboard()

@@ -238,7 +238,13 @@ def get_trainings_list_keyboard(trainings: list, period: str, date_format: str) 
     
     # Размещаем по 3 кнопки в ряду
     builder.adjust(3)
-    
+
+    # Добавляем кнопку AI-анализа (если есть тренировки)
+    if trainings:
+        builder.row(
+            InlineKeyboardButton(text="🤖 AI-анализ", callback_data=f"ai_analyze_trainings:{period}")
+        )
+
     # Добавляем кнопки навигации в отдельных рядах
     builder.row(
         InlineKeyboardButton(text="🔄 Выбрать другой период", callback_data="back_to_periods")
@@ -246,7 +252,7 @@ def get_trainings_list_keyboard(trainings: list, period: str, date_format: str) 
     builder.row(
         InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_to_menu")
     )
-    
+
     return builder.as_markup()
 
 

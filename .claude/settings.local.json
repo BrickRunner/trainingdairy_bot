@@ -1,29 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(powershell -Command \"$content = Get-Content -Path ''coach_handlers_addition.py'' -Raw -Encoding UTF8; $content = $content -replace ''CoachCompStates'', ''CoachStates''; $content = $content -replace ''from aiogram.utils.keyboard import InlineKeyboardBuilder'', ''''; Add-Content -Path ''coach\\coach_competitions_handlers.py'' -Value ($content) -Encoding UTF8; Write-Output ''Handlers added successfully''\")",
-      "Bash(d:\\desktop\\coding\\trainingdairy_bot-3\\venv\\Scripts\\python.exe:*)",
-      "Bash(venv\\Scripts\\python.exe -m py_compile:*)",
-      "Bash(sed:*)",
-      "Bash(venv\\Scripts\\python.exe:*)",
-      "Bash(d:\\desktop\\coding\\trainingdairy_bot-3\\venv\\Scripts\\python.exe -m py_compile:*)",
       "Bash(python -m py_compile:*)",
-      "Bash(venvScriptspython.exe -m py_compile \"coach\\coach_upcoming_competitions_handlers.py\")",
-      "Bash(venv/Scripts/python.exe:*)",
-      "WebFetch(domain:runc.run)",
-      "WebFetch(domain:api.runc.run)",
-      "WebFetch(domain:speedrace.runc.run)",
-      "WebFetch(domain:results.runc.run)",
-      "Bash(venvScriptspython.exe -c \"import bs4; print(''BeautifulSoup4 installed'')\")",
-      "Bash(python test_runc_parser.py:*)",
-      "Bash(python3:*)",
-      "Bash(pip3 install:*)",
-      "Bash(source venv/bin/activate)",
-      "Bash(pip install:*)",
-      "Bash(chmod:*)",
-      "Bash(kill:*)",
       "Bash(python:*)",
-      "Bash(awk:*)"
+      "Bash(sqlite3:*)",
+      "Bash(awk:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

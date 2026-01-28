@@ -72,8 +72,8 @@ async def check_weekly_goals(user_id: int, bot: Bot, last_training_type: str = N
         elif not week_goals.get('volume'):
             remaining = weekly_volume_goal - total_distance
 
-            if 80 <= progress_percent < 100:
-                # Осталось мало - мотивируем
+            if 80 <= progress_percent < 100 and not week_goals.get('progress_80'):
+                # Осталось мало - мотивируем (только один раз)
                 await bot.send_message(
                     user_id,
                     f"🔥 <b>Почти у цели!</b>\n\n"
@@ -82,8 +82,9 @@ async def check_weekly_goals(user_id: int, bot: Bot, last_training_type: str = N
                     f"💪 Молодец! Ещё немного!",
                     parse_mode="HTML"
                 )
-            elif 50 <= progress_percent < 80:
-                # Половина пути - поддержка
+                week_goals['progress_80'] = True
+            elif 50 <= progress_percent < 80 and not week_goals.get('progress_50'):
+                # Половина пути - поддержка (только один раз)
                 await bot.send_message(
                     user_id,
                     f"💪 <b>Отличный прогресс!</b>\n\n"
@@ -93,6 +94,7 @@ async def check_weekly_goals(user_id: int, bot: Bot, last_training_type: str = N
                     f"🚀 Продолжайте в том же духе!",
                     parse_mode="HTML"
                 )
+                week_goals['progress_50'] = True
 
     # 2. Проверка цели по количеству тренировок
     weekly_count_goal = settings.get('weekly_trainings_goal')
@@ -173,12 +175,15 @@ async def check_weekly_goals(user_id: int, bot: Bot, last_training_type: str = N
 async def check_weight_goal(user_id: int, current_weight: float, bot: Bot) -> None:
     """
     Проверить достижение целевого веса
+    Уведомление отправляется только один раз при достижении цели.
 
     Args:
         user_id: ID пользователя
         current_weight: Текущий вес пользователя
         bot: Экземпляр бота для отправки сообщений
     """
+    import json
+
     settings = await get_user_settings(user_id)
     if not settings:
         return
@@ -195,6 +200,16 @@ async def check_weight_goal(user_id: int, current_weight: float, bot: Bot) -> No
     if not current_saved_weight:
         return
 
+    # Проверяем, было ли уведомление уже отправлено
+    goal_notifications_json = settings.get('goal_notifications', '{}')
+    try:
+        goal_notifications = json.loads(goal_notifications_json) if goal_notifications_json else {}
+    except:
+        goal_notifications = {}
+
+    if goal_notifications.get('weight_goal_notified'):
+        return
+
     # Проверяем достижение цели (с погрешностью 0.5 кг)
     if abs(current_weight - weight_goal) <= 0.5:
         message = (
@@ -209,3 +224,7 @@ async def check_weight_goal(user_id: int, current_weight: float, bot: Bot) -> No
             text=message,
             parse_mode="Markdown"
         )
+
+        # Отмечаем, что уведомление отправлено
+        goal_notifications['weight_goal_notified'] = True
+        await update_user_setting(user_id, 'goal_notifications', json.dumps(goal_notifications))

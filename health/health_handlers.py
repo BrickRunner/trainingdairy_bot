@@ -34,6 +34,7 @@ from health.health_graphs import generate_health_graphs, generate_sleep_quality_
 from health.sleep_analysis import SleepAnalyzer, format_sleep_analysis_message
 from utils.date_formatter import DateFormatter, get_user_date_format
 from database.queries import get_user_settings
+from ai.ai_analyzer import analyze_health_statistics, is_ai_available
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -1008,20 +1009,105 @@ async def show_stats_and_graphs(callback: CallbackQuery):
             logger.error(traceback.format_exc())
             await callback.message.answer("❌ Ошибка при генерации графиков")
 
-    # Возвращаем пользователя в главное меню здоровья
-    filled = await check_today_metrics_filled(user_id)
-    status_text = "📋 <b>Статус на сегодня:</b>\n"
-    status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
-    status_text += f"{'✅' if filled['weight'] else '❌'} Вес\n"
-    status_text += f"{'✅' if filled['sleep_duration'] else '❌'} Сон\n"
+    # Показываем меню с действиями (включая AI-анализ)
+    from health.health_keyboards import get_health_stats_actions_keyboard
 
     await callback.message.answer(
-        f"❤️ <b>Здоровье и метрики</b>\n\n"
-        f"{status_text}\n"
-        f"Выберите действие:",
-        reply_markup=get_health_menu_keyboard(),
+        "Что дальше?",
+        reply_markup=get_health_stats_actions_keyboard(period_param),
         parse_mode="HTML"
     )
+
+
+# AI-анализ здоровья
+@router.callback_query(F.data.startswith("ai_analyze_health:"))
+async def ai_analyze_health(callback: CallbackQuery):
+    """AI-анализ статистики здоровья за период"""
+    period_param = callback.data.split(":")[1]
+    user_id = callback.from_user.id
+
+    # Проверяем доступность AI
+    if not is_ai_available():
+        await callback.answer(
+            "❌ AI-анализ недоступен. Добавьте OPENROUTER_API_KEY в .env файл",
+            show_alert=True
+        )
+        return
+
+    # Показываем индикатор загрузки
+    await callback.answer("🤖 Анализирую данные...", show_alert=False)
+
+    # Отправляем сообщение о процессе
+    processing_msg = await callback.message.answer("🤖 AI анализирует показатели здоровья...")
+
+    try:
+        # Получаем данные
+        user_settings = await get_user_settings(user_id)
+        weight_unit = user_settings.get('weight_unit', 'кг') if user_settings else 'кг'
+
+        # Определяем период и получаем метрики
+        if period_param == "week":
+            metrics = await get_current_week_metrics(user_id)
+            period_name = "эту неделю"
+            days = 7
+        elif period_param == "month":
+            metrics = await get_current_month_metrics(user_id)
+            period_name = "этот месяц"
+            days = 30
+        else:
+            days = int(period_param)
+            metrics = await get_latest_health_metrics(user_id, days)
+            period_name = f"{days} дней"
+
+        # Получаем статистику
+        statistics = await get_health_statistics(user_id, days)
+
+        if not metrics:
+            await processing_msg.edit_text(
+                "❌ Нет данных за выбранный период для анализа"
+            )
+            return
+
+        # Получаем AI-анализ
+        analysis = await analyze_health_statistics(
+            statistics=statistics,
+            metrics=metrics,
+            period_name=period_name,
+            weight_unit=weight_unit
+        )
+
+        if analysis:
+            import html
+            from bot.keyboards import get_main_menu_keyboard
+
+            # Экранируем HTML-специальные символы в тексте AI
+            safe_analysis = html.escape(analysis)
+
+            msg_text = (
+                f"🤖 <b>AI-анализ здоровья за {period_name}</b>\n\n"
+                f"{safe_analysis}\n\n"
+                f"<i>Анализ создан с помощью Google Gemini</i>"
+            )
+
+            await processing_msg.edit_text(msg_text, parse_mode="HTML")
+
+            # Редирект в главное меню
+            from coach.coach_queries import is_user_coach
+            is_coach_status = await is_user_coach(user_id)
+            await processing_msg.answer(
+                "Выбери действие из меню 👇",
+                reply_markup=get_main_menu_keyboard(is_coach_status)
+            )
+        else:
+            await processing_msg.edit_text(
+                "❌ Не удалось создать AI-анализ. Попробуйте позже."
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка при AI-анализе здоровья: {e}")
+        await processing_msg.edit_text(
+            "❌ Произошла ошибка при анализе. Попробуйте позже."
+        )
 
 
 # Оставляем старые обработчики для обратной совместимости

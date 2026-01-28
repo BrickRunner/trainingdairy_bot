@@ -3,12 +3,16 @@ Trainingdiary_bot - Telegram бот для ведения дневника тр�
 Точка входа в приложение
 """
 
+# ВАЖНО: Загрузка переменных окружения ПЕРЕД всеми импортами
+# чтобы модули могли использовать os.getenv() при инициализации
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import logging
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from dotenv import load_dotenv
-import os
 
 from bot.handlers import router
 from settings.settings_handlers_full import router as settings_router
@@ -31,9 +35,6 @@ from utils.birthday_checker import schedule_birthday_check
 from ratings.rating_updater import schedule_rating_updates
 from competitions.reminder_scheduler import schedule_competition_reminders
 from utils.qualifications_scheduler import schedule_qualifications_check
-
-# Загрузка переменных окружения
-load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(

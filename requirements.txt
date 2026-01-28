@@ -47,3 +47,6 @@ colorlog==6.8.2
 # Парсинг HTML
 beautifulsoup4==4.12.3
 lxml==5.3.0
+
+# AI анализ данных
+openai==1.58.1

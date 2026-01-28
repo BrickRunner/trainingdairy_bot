@@ -45,6 +45,7 @@ from utils.goals_checker import check_weekly_goals
 from ratings.rating_updater import update_single_user_rating
 from database.level_queries import calculate_and_update_user_level
 from coach.coach_queries import is_user_coach
+from ai.ai_analyzer import analyze_training_statistics, is_ai_available
 
 router = Router()
 
@@ -1162,6 +1163,28 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
         if level_update['level_changed']:
             logger.info(f"Уровень пользователя {callback.from_user.id} изменен: "
                        f"{level_update['old_level']} -> {level_update['new_level']}")
+            # Уведомляем пользователя об изменении уровня
+            from ratings.user_levels import get_level_emoji
+            new_emoji = get_level_emoji(level_update['new_level'])
+            levels_order = ['новичок', 'любитель', 'профи', 'элитный']
+            old_idx = levels_order.index(level_update['old_level']) if level_update['old_level'] in levels_order else 0
+            new_idx = levels_order.index(level_update['new_level']) if level_update['new_level'] in levels_order else 0
+            if new_idx > old_idx:
+                await callback.bot.send_message(
+                    callback.from_user.id,
+                    f"🎉 <b>Уровень повышен!</b>\n\n"
+                    f"Вы поднялись до уровня {new_emoji} <b>{level_update['new_level'].capitalize()}</b>!\n\n"
+                    f"Продолжайте тренироваться для повышения уровня!",
+                    parse_mode="HTML"
+                )
+            elif new_idx < old_idx:
+                await callback.bot.send_message(
+                    callback.from_user.id,
+                    f"📉 <b>Уровень изменён</b>\n\n"
+                    f"Ваш уровень теперь {new_emoji} <b>{level_update['new_level'].capitalize()}</b>.\n\n"
+                    f"Добавляйте тренировки, чтобы вернуться к прежнему уровню!",
+                    parse_mode="HTML"
+                )
     except Exception as e:
         logger.error(f"Ошибка при обновлении уровня: {str(e)}")
 
@@ -1628,6 +1651,90 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     await state.update_data(trainings_message_ids=new_message_ids)
 
     await callback.answer()
+
+
+# AI-анализ тренировок
+@router.callback_query(F.data.startswith("ai_analyze_trainings:"))
+async def ai_analyze_trainings(callback: CallbackQuery):
+    """AI-анализ статистики тренировок за период"""
+    period = callback.data.split(":")[1]
+    user_id = callback.from_user.id
+
+    # Проверяем доступность AI
+    if not is_ai_available():
+        await callback.answer(
+            "❌ AI-анализ недоступен. Добавьте OPENROUTER_API_KEY в .env файл",
+            show_alert=True
+        )
+        return
+
+    # Показываем индикатор загрузки
+    await callback.answer("🤖 Анализирую данные...", show_alert=False)
+
+    # Отправляем сообщение о процессе
+    processing_msg = await callback.message.answer("🤖 AI анализирует ваши тренировки...")
+
+    try:
+        # Получаем данные
+        user_settings = await get_user_settings(user_id)
+        distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+
+        trainings = await get_trainings_by_period(user_id, period)
+        statistics = await get_training_statistics(user_id, period)
+
+        if not trainings:
+            await processing_msg.edit_text(
+                "❌ Нет тренировок за выбранный период для анализа"
+            )
+            return
+
+        # Получаем AI-анализ
+        analysis = await analyze_training_statistics(
+            statistics=statistics,
+            trainings=trainings,
+            period=period,
+            distance_unit=distance_unit
+        )
+
+        if analysis:
+            import html
+            # Формируем сообщение
+            period_names = {
+                "week": "неделю",
+                "2weeks": "2 недели",
+                "month": "месяц"
+            }
+            period_name = period_names.get(period, period)
+
+            # Экранируем HTML-специальные символы в тексте AI
+            safe_analysis = html.escape(analysis)
+
+            msg_text = (
+                f"🤖 <b>AI-анализ тренировок за {period_name}</b>\n\n"
+                f"{safe_analysis}\n\n"
+                f"<i>Анализ создан с помощью Google Gemini</i>"
+            )
+
+            await processing_msg.edit_text(msg_text, parse_mode="HTML")
+
+            # Редирект в главное меню
+            from coach.coach_queries import is_user_coach
+            is_coach_status = await is_user_coach(user_id)
+            await processing_msg.answer(
+                "Выбери действие из меню 👇",
+                reply_markup=get_main_menu_keyboard(is_coach_status)
+            )
+        else:
+            await processing_msg.edit_text(
+                "❌ Не удалось создать AI-анализ. Попробуйте позже."
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка при AI-анализе тренировок: {e}")
+        await processing_msg.edit_text(
+            "❌ Произошла ошибка при анализе. Попробуйте позже."
+        )
+
 
 # НОВЫЙ КОД: Обработчик кнопки удаления
 @router.callback_query(F.data.startswith("delete_training:"))
