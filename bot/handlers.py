@@ -1194,6 +1194,15 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка при проверке целей: {str(e)}")
 
+    # Проверяем и присваиваем новые достижения
+    try:
+        from ratings.achievements_checker import check_and_award_achievements
+        new_achievements = await check_and_award_achievements(callback.from_user.id, callback.bot)
+        if new_achievements:
+            logger.info(f"Пользователь {callback.from_user.id} получил {len(new_achievements)} новых достижений")
+    except Exception as e:
+        logger.error(f"Ошибка при проверке достижений: {str(e)}")
+
     # Формируем итоговое сообщение
     training_type = data['training_type']
     

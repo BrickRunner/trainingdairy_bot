@@ -30,7 +30,9 @@ from ratings.ratings_keyboards import (
     get_achievements_menu_keyboard,
     get_periods_keyboard,
     get_back_to_achievements_keyboard,
-    get_back_to_periods_keyboard
+    get_back_to_periods_keyboard,
+    get_achievements_categories_keyboard,
+    get_back_to_achievements_categories_keyboard
 )
 from bot.keyboards import get_main_menu_keyboard
 
@@ -57,18 +59,19 @@ def escape_markdown(text: str) -> str:
     return text
 
 
-@router.message(F.text == "🏆 Достижения")
+@router.message(F.text == "🏆 Рейтинги и достижения")
 async def show_achievements_menu(message: Message):
-    """Показать главное меню достижений"""
+    """Показать главное меню рейтингов и достижений"""
     from aiogram.types import ReplyKeyboardRemove
 
     await message.answer(
-        "🏆 **Достижения и рейтинги**\n\n"
-        "Здесь вы можете посмотреть свой рейтинг и сравнить результаты с другими пользователями.\n\n"
+        "🏆 **Рейтинги и достижения**\n\n"
+        "Здесь вы можете посмотреть свой рейтинг, достижения и сравнить результаты с другими пользователями.\n\n"
         "Рейтинг формируется на основе:\n"
         "• Типов тренировок (бег, плавание и т.д.)\n"
         "• Общего времени тренировок\n"
-        "• Результатов соревнований",
+        "• Результатов соревнований\n"
+        "• Полученных достижений",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown"
     )
@@ -81,14 +84,15 @@ async def show_achievements_menu(message: Message):
 
 @router.callback_query(F.data == "achievements:menu")
 async def show_achievements_menu_callback(callback: CallbackQuery):
-    """Показать главное меню достижений (через callback)"""
+    """Показать главное меню рейтингов и достижений (через callback)"""
     await callback.message.edit_text(
-        "🏆 **Достижения и рейтинги**\n\n"
-        "Здесь вы можете посмотреть свой рейтинг и сравнить результаты с другими пользователями.\n\n"
+        "🏆 **Рейтинги и достижения**\n\n"
+        "Здесь вы можете посмотреть свой рейтинг, достижения и сравнить результаты с другими пользователями.\n\n"
         "Рейтинг формируется на основе:\n"
         "• Типов тренировок (бег, плавание и т.д.)\n"
         "• Общего времени тренировок\n"
-        "• Результатов соревнований",
+        "• Результатов соревнований\n"
+        "• Полученных достижений",
         reply_markup=get_achievements_menu_keyboard(),
         parse_mode="Markdown"
     )
@@ -98,6 +102,8 @@ async def show_achievements_menu_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "achievements:my_rating")
 async def show_my_rating(callback: CallbackQuery):
     """Показать рейтинг и уровень пользователя"""
+    from database.rating_queries import get_user_achievements_count, get_user_achievement_points
+
     user_id = callback.from_user.id
 
     # Получаем уровень пользователя
@@ -113,6 +119,10 @@ async def show_my_rating(callback: CallbackQuery):
 
     # Получаем рейтинг
     rating = await get_user_rating(user_id)
+
+    # Получаем достижения
+    achievements_count = await get_user_achievements_count(user_id)
+    achievements_points = await get_user_achievement_points(user_id)
 
     text = f"{level_emoji} **Ваш уровень: {user_level.capitalize()}**\n\n"
 
@@ -138,8 +148,8 @@ async def show_my_rating(callback: CallbackQuery):
     else:
         text += "Добавьте тренировки, чтобы повысить уровень!\n"
 
-    # Рейтинговые очки
-    text += "\n━━━━━━━━━━━━━━━━\n📊 **Рейтинг**\n\n"
+    # Рейтинговые очки (от тренировок и соревнований)
+    text += "\n━━━━━━━━━━━━━━━━\n📊 **Рейтинг** (от тренировок и соревнований)\n\n"
 
     if not rating or rating['points'] == 0:
         text += "У вас пока нет рейтинговых очков.\n"
@@ -167,6 +177,12 @@ async def show_my_rating(callback: CallbackQuery):
         text += f"\n🌸 **За сезон ({season_name}):** {rating['season_points']:.1f} очков"
         if season_rank:
             text += f" (#{season_rank})"
+
+    # Достижения (отдельная система баллов)
+    text += "\n\n━━━━━━━━━━━━━━━━\n🎖️ **Достижения**\n\n"
+    text += f"Получено: {achievements_count}/55\n"
+    text += f"Баллы достижений: {achievements_points}\n"
+    text += f"\n_Баллы достижений не влияют на рейтинг тренировок_"
 
     await callback.message.edit_text(
         text,
@@ -268,6 +284,106 @@ async def show_period_ranking(callback: CallbackQuery):
     await callback.message.edit_text(
         text,
         reply_markup=get_back_to_periods_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "achievements:my_achievements")
+async def show_my_achievements(callback: CallbackQuery):
+    """Показать меню выбора категории достижений"""
+    from database.rating_queries import get_user_achievements_count
+
+    user_id = callback.from_user.id
+    count = await get_user_achievements_count(user_id)
+
+    await callback.message.edit_text(
+        f"🎖️ **Мои достижения**\n\n"
+        f"Получено: {count}/55\n\n"
+        f"Выберите категорию для просмотра:",
+        reply_markup=get_achievements_categories_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("achievements:category:"))
+async def show_category_achievements(callback: CallbackQuery):
+    """Показать достижения выбранной категории"""
+    from ratings.achievements_checker import get_user_achievements
+    from ratings.achievements_data import get_category_achievements_text, ACHIEVEMENT_CATEGORIES
+
+    user_id = callback.from_user.id
+    category = callback.data.split(":")[-1]
+
+    # Получаем достижения пользователя
+    user_achievements = await get_user_achievements(user_id)
+    user_achievement_ids = [ach['name'] for ach in user_achievements]
+
+    # Формируем текст с достижениями категории
+    cat_data = ACHIEVEMENT_CATEGORIES.get(category)
+    if not cat_data:
+        await callback.answer("Категория не найдена")
+        return
+
+    text = get_category_achievements_text(category, user_achievement_ids)
+
+    # Разбиваем на части если текст слишком длинный
+    if len(text) > 4000:
+        # Отправляем первую часть
+        await callback.message.edit_text(
+            text[:4000],
+            reply_markup=get_back_to_achievements_categories_keyboard(),
+            parse_mode="Markdown"
+        )
+        # Отправляем продолжение
+        if len(text) > 4000:
+            await callback.message.answer(
+                text[4000:],
+                parse_mode="Markdown"
+            )
+    else:
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_back_to_achievements_categories_keyboard(),
+            parse_mode="Markdown"
+        )
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "achievements:leaderboard")
+async def show_achievements_leaderboard(callback: CallbackQuery):
+    """Показать список лидеров по достижениям"""
+    from ratings.achievements_checker import get_achievement_leaderboard
+
+    leaders = await get_achievement_leaderboard(limit=10)
+
+    if not leaders:
+        await callback.message.edit_text(
+            "👑 **Лидеры по достижениям**\n\n"
+            "Пока нет пользователей с достижениями.",
+            reply_markup=get_back_to_achievements_keyboard(),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+        return
+
+    text = "👑 **Лидеры по достижениям**\n\n"
+    medals = ["🥇", "🥈", "🥉"]
+
+    for i, user in enumerate(leaders, 1):
+        medal = medals[i-1] if i <= 3 else f"{i}."
+        name = user.get('username') or 'Пользователь'
+        name = escape_markdown(name)
+        count = user.get('achievement_count', 0)
+        points = user.get('total_points', 0)
+
+        text += f"{medal} **{name}** — {count}/55 достижений ({points} баллов)\n"
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_back_to_achievements_keyboard(),
         parse_mode="Markdown"
     )
     await callback.answer()

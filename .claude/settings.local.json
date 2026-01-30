@@ -5,7 +5,9 @@
       "Bash(python:*)",
       "Bash(sqlite3:*)",
       "Bash(awk:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(pip install:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

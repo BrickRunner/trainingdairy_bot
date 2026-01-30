@@ -348,3 +348,49 @@ async def get_user_competitions_by_period(user_id: int, start_date: datetime = N
                 rows = await cursor.fetchall()
 
         return [dict(row) for row in rows]
+
+
+async def get_user_achievements_count(user_id: int) -> int:
+    """
+    Получить количество достижений пользователя
+
+    Args:
+        user_id: ID пользователя
+
+    Returns:
+        Количество достижений
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT COUNT(*) as cnt FROM achievements WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+
+async def get_user_achievement_points(user_id: int) -> int:
+    """
+    Получить общее количество баллов из достижений
+
+    Args:
+        user_id: ID пользователя
+
+    Returns:
+        Сумма баллов
+    """
+    from ratings.achievements_data import ACHIEVEMENTS
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT name FROM achievements WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            total = 0
+            for row in rows:
+                ach = ACHIEVEMENTS.get(row['name'])
+                if ach:
+                    total += ach.get('points', 0)
+            return total

@@ -2645,6 +2645,15 @@ async def process_heart_rate(message: Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Error updating level after competition result: {e}")
 
+        # Проверяем и присваиваем новые достижения
+        try:
+            from ratings.achievements_checker import check_and_award_achievements
+            new_achievements = await check_and_award_achievements(user_id, callback.bot)
+            if new_achievements:
+                logger.info(f"Пользователь {user_id} получил {len(new_achievements)} новых достижений")
+        except Exception as e:
+            logger.error(f"Ошибка при проверке достижений: {str(e)}")
+
     # Рассчитываем разряд для отображения
     qualification = None
     if success:

@@ -21,7 +21,7 @@ def get_main_menu_keyboard(is_coach: bool = False) -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="🏃 Соревнования"),
-        KeyboardButton(text="🏆 Достижения")
+        KeyboardButton(text="🏆 Рейтинги и достижения")
     )
 
     # Кнопка "Кабинет тренера" показывается только если is_coach=True
