@@ -978,8 +978,12 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
         text += f"🏆 Место общее: {comp['place_overall']}\n"
     if comp.get('place_age_category'):
         text += f"🏅 Место в категории: {comp['place_age_category']}\n"
-    if comp.get('qualification'):
-        text += f"🎖️ Разряд: {format_qualification(comp['qualification'])}\n"
+
+    # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
+    qual = comp.get('qualification')
+    if qual and qual not in [None, '', 'Нет разряда', 'Б/р']:
+        text += f"🎖️ Разряд: {format_qualification(qual)}\n"
+
     if comp.get('heart_rate'):
         text += f"❤️ Средний пульс: {comp['heart_rate']} уд/мин\n"
 
@@ -2021,7 +2025,7 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                     qualification = comp.get('qualification')
                     if not qualification and comp.get('distance'):
                         try:
-                            from utils.qualifications import get_qualification, time_to_seconds
+                            from utils.qualifications import get_qualification_async, time_to_seconds
                             sport_type = comp.get('sport_type', 'бег')
                             from database.queries import get_connection
                             async with get_connection() as db:
@@ -2032,11 +2036,20 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                                     row = await cursor.fetchone()
                                     gender = row[0] if row and row[0] else 'male'
                             time_sec = time_to_seconds(comp['finish_time'])
-                            qualification = get_qualification(sport_type, comp['distance'], time_sec, gender)
+
+                            # Параметры для разных видов спорта
+                            kwargs = {}
+                            if sport_type and sport_type.lower().startswith('пла'):
+                                kwargs['pool_length'] = 50
+                            elif sport_type and (sport_type.lower().startswith('вело') or 'bike' in sport_type.lower()):
+                                kwargs['discipline'] = 'индивидуальная гонка'
+
+                            qualification = await get_qualification_async(sport_type, comp['distance'], time_sec, gender, **kwargs)
                         except Exception:
                             pass
 
-                    if qualification:
+                    # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
+                    if qualification and qualification not in [None, '', 'Нет разряда', 'Б/р']:
                         result_line += f"\n   🎖️ Разряд: {format_qualification(qualification)}"
 
                     # Добавляем пульс
@@ -2116,9 +2129,10 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
                 if pace:
                     text += f"⚡ Темп: {pace}\n"
 
-            # Добавляем разряд
-            if record.get('qualification'):
-                text += f"🎖️ Разряд: {format_qualification(record['qualification'])}\n"
+            # Добавляем разряд только если он есть и это не "Нет разряда" или "Б/р"
+            qual = record.get('qualification')
+            if qual and qual not in [None, '', 'Нет разряда', 'Б/р']:
+                text += f"🎖️ Разряд: {format_qualification(qual)}\n"
 
             if record.get('competition_name'):
                 comp_name_short = record['competition_name'][:30] + "..." if len(record['competition_name']) > 30 else record['competition_name']
@@ -2243,8 +2257,10 @@ async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
     if user_comp.get('finish_time'):
         text += f"⏱️ Время: {normalize_time(user_comp['finish_time'])}\n"
 
-    if user_comp.get('qualification'):
-        text += f"🎖️ Разряд: {format_qualification(user_comp['qualification'])}\n"
+    # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
+    qual = user_comp.get('qualification')
+    if qual and qual not in [None, '', 'Нет разряда', 'Б/р']:
+        text += f"🎖️ Разряд: {format_qualification(qual)}\n"
 
     text += "\n❗️ <i>Результат будет удалён, но регистрация сохранится</i>"
 
@@ -2658,7 +2674,7 @@ async def process_heart_rate(message: Message, state: FSMContext):
     qualification = None
     if success:
         try:
-            from utils.qualifications import get_qualification, time_to_seconds
+            from utils.qualifications import get_qualification_async, time_to_seconds
             comp = await get_competition(competition_id)
             sport_type = comp.get('sport_type', 'бег')
 
@@ -2673,7 +2689,7 @@ async def process_heart_rate(message: Message, state: FSMContext):
                     gender = row[0] if row and row[0] else 'male'
 
             time_seconds = time_to_seconds(data['result_finish_time'])
-            qualification = get_qualification(sport_type, distance, time_seconds, gender)
+            qualification = await get_qualification_async(sport_type, distance, time_seconds, gender)
         except Exception as e:
             logger.error(f"Error calculating qualification for display: {e}")
 
@@ -2712,8 +2728,11 @@ async def process_heart_rate(message: Message, state: FSMContext):
             text += f"🏆 Место общее: {data['result_place_overall']}\n"
         if data.get('result_place_age'):
             text += f"🏅 Место в категории: {data['result_place_age']}\n"
-        if qualification:
+
+        # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
+        if qualification and qualification not in [None, '', 'Нет разряда', 'Б/р']:
             text += f"🎖️ Разряд: {format_qualification(qualification)}\n"
+
         if data.get('result_heart_rate'):
             text += f"❤️ Средний пульс: {data['result_heart_rate']} уд/мин\n"
 

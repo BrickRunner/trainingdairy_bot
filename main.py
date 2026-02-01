@@ -35,6 +35,7 @@ from utils.birthday_checker import schedule_birthday_check
 from ratings.rating_updater import schedule_rating_updates
 from competitions.reminder_scheduler import schedule_competition_reminders
 from utils.qualifications_scheduler import schedule_qualifications_check
+from utils.qualifications_checker import daily_standards_check
 
 # Настройка логирования
 logging.basicConfig(
@@ -79,6 +80,13 @@ async def main():
     # Инициализация базы данных
     await init_db()
     logger.info("База данных инициализирована")
+
+    # Проверка обновлений нормативов ЕВСК при старте
+    logger.info("Проверка обновлений нормативов ЕВСК при старте...")
+    try:
+        await daily_standards_check(bot)
+    except Exception as e:
+        logger.error(f"Ошибка при проверке нормативов при старте: {e}")
 
     # Запуск планировщика уведомлений
     start_notification_scheduler(bot)

@@ -408,8 +408,10 @@ async def view_student_result(callback: CallbackQuery):
         text += f"🏆 Место общее: {comp_result['place_overall']}\n"
     if comp_result.get('place_age_category'):
         text += f"🏅 Место в категории: {comp_result['place_age_category']}\n"
-    if comp_result.get('qualification'):
-        text += f"🎖️ Разряд: {format_qualification(comp_result['qualification'])}\n"
+    # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
+    qual = comp_result.get('qualification')
+    if qual and qual not in [None, '', 'Нет разряда', 'Б/р']:
+        text += f"🎖️ Разряд: {format_qualification(qual)}\n"
     if comp_result.get('heart_rate'):
         text += f"❤️ Средний пульс: {comp_result['heart_rate']} уд/мин\n"
 

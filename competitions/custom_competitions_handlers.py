@@ -520,6 +520,7 @@ async def create_competition_from_state(user_id: int, state: FSMContext, target_
             'city': comp_city,
             'country': 'Россия',
             'type': comp_type,
+            'sport_type': data.get('comp_sport_type', 'бег'),
             'distances': json.dumps([comp_distance]),
             'status': 'upcoming',
             'created_by': user_id,
@@ -1526,6 +1527,7 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         'city': data['comp_city'],
         'country': 'Россия',
         'type': data['comp_type'],
+        'sport_type': data.get('comp_sport_type', 'бег'),
         'distances': json.dumps([data['comp_distance']]),
         'status': 'finished',  # Важно: статус "finished" для прошедших соревнований
         'is_official': 0,  # Пользовательское соревнование
@@ -1573,16 +1575,19 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 logger.error(f"Error updating level after custom competition result: {e}")
 
             # Рассчитываем разряд для отображения
+            qualification = None
             try:
-                from utils.qualifications import get_qualification, time_to_seconds
-                from competitions.competitions_queries import get_competition_by_id
+                from utils.qualifications import get_qualification_async, time_to_seconds
+                from competitions.competitions_queries import get_competition
+                import aiosqlite
+                import os
 
-                comp_info = await get_competition_by_id(comp_id)
+                comp_info = await get_competition(comp_id)
                 sport_type = comp_info.get('sport_type', 'бег') if comp_info else 'бег'
 
                 # Получаем пол пользователя
-                from database.queries import get_connection
-                async with get_connection() as db:
+                DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
+                async with aiosqlite.connect(DB_PATH) as db:
                     async with db.execute(
                         "SELECT gender FROM user_settings WHERE user_id = ?",
                         (user_id,)
@@ -1590,10 +1595,39 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                         row = await cursor.fetchone()
                         gender = row[0] if row and row[0] else 'male'
 
-                time_seconds = time_to_seconds(data['finish_time'])
-                qualification = get_qualification(sport_type, data['comp_distance'], time_seconds, gender)
+                # Определяем разряд в зависимости от вида спорта
+                if sport_type in ['велоспорт', 'cycling'] and data.get('place_overall'):
+                    # Для велоспорта разряд по месту
+                    qualification = await get_qualification_async(
+                        sport_type='cycling',
+                        place=data['place_overall'],
+                        competition_rank='региональные',
+                        discipline='шоссе'
+                    )
+                elif sport_type in ['плавание', 'swimming']:
+                    # Для плавания нужен pool_length
+                    time_seconds = time_to_seconds(data['finish_time'])
+                    pool_length = data.get('pool_length', 50)  # По умолчанию 50м
+                    qualification = await get_qualification_async(
+                        sport_type='swimming',
+                        distance_km=data['comp_distance'],
+                        time_seconds=time_seconds,
+                        gender=gender,
+                        pool_length=pool_length
+                    )
+                else:
+                    # Для бега и других видов
+                    time_seconds = time_to_seconds(data['finish_time'])
+                    qualification = await get_qualification_async(
+                        sport_type=sport_type,
+                        distance_km=data['comp_distance'],
+                        time_seconds=time_seconds,
+                        gender=gender
+                    )
             except Exception as e:
                 logger.error(f"Error calculating qualification for display: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
 
         from competitions.competitions_utils import format_competition_distance
         from utils.date_formatter import get_user_date_format, DateFormatter
@@ -1616,7 +1650,8 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 text += f"🏆 Место общее: {data['place_overall']}\n"
             if data.get('place_age'):
                 text += f"🏅 Место в категории: {data['place_age']}\n"
-            if qualification:
+            # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
+            if qualification and qualification not in [None, '', 'Нет разряда', 'Б/р']:
                 from competitions.competitions_keyboards import format_qualification
                 text += f"🎖️ Разряд: {format_qualification(qualification)}\n"
             if data.get('heart_rate'):

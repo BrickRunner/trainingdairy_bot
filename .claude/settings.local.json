@@ -7,7 +7,14 @@
       "Bash(awk:*)",
       "Bash(pkill:*)",
       "Bash(pip install:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "WebSearch",
+      "WebFetch(domain:russwimming.ru)",
+      "WebFetch(domain:xn--b1a2ack.xn--p1ai)",
+      "WebFetch(domain:xn--b1afq1a.xn--p1ai)",
+      "WebFetch(domain:frs24.ru)",
+      "WebFetch(domain:velostar.ru)",
+      "WebFetch(domain:fvsr.ru)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,11 @@
 """
 Модуль для определения спортивных разрядов по результатам соревнований.
+
+НОВАЯ СИСТЕМА (с 31.01.2026):
+- Нормативы хранятся в БД (таблицы running_standards, swimming_standards)
+- Автоматическое обновление при появлении новых версий ЕВСК
+- Fallback на статические словари при ошибках БД
+
 Использует официальные нормативы ЕВСК 2022-2025 гг. (действуют с 26 ноября 2024 г.)
 
 Официальные источники:
@@ -11,6 +17,12 @@
 """
 
 from typing import Optional, Dict
+import aiosqlite
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
 def time_to_seconds(time_str: str) -> float:
@@ -496,6 +508,33 @@ SWIMMING_STANDARDS_50M = {
     }
 }
 
+# Примечание: Для велоспорта разряды присваиваются по занятым местам на соревнованиях,
+# а не по времени. Здесь приведена упрощенная структура для справки.
+# Реальное присвоение разрядов требует информации о ранге соревнования.
+CYCLING_STANDARDS_PLACES = {
+    # Структура: {ранг_соревнования: {разряд: максимальное_место}}
+    'чемпионат_россии': {
+        'МСМК': 3,  # 1-3 место на ЧР
+        'МС': 6,    # 1-6 место на ЧР
+        'КМС': 12,  # 1-12 место на ЧР
+    },
+    'первенство_россии': {
+        'МС': 3,    # 1-3 место на первенстве России
+        'КМС': 6,   # 1-6 место на первенстве России
+        'I': 12,    # 1-12 место на первенстве России
+    },
+    'кубок_россии': {
+        'МС': 6,
+        'КМС': 12,
+        'I': 20,
+    },
+    'региональные': {
+        'I': 3,     # 1-3 место на региональных соревнованиях
+        'II': 6,
+        'III': 12,
+    }
+}
+
 # Нормативы по плаванию (вольный стиль, бассейн 25м) - ЕВСК 2024
 SWIMMING_STANDARDS_25M = {
     'men': {
@@ -637,6 +676,168 @@ SWIMMING_STANDARDS_25M = {
 }
 
 
+# ========== ФУНКЦИИ ДЛЯ РАБОТЫ С БД ==========
+
+async def get_qualification_running_from_db(distance_km: float, time_seconds: float, gender: str) -> Optional[str]:
+    """
+    Определяет разряд по бегу на основе данных из БД.
+
+    Args:
+        distance_km: Дистанция в километрах
+        time_seconds: Время прохождения дистанции в секундах
+        gender: Пол ('male' или 'female')
+
+    Returns:
+        Строка с разрядом или None
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Ищем ближайшую дистанцию с допуском ±0.5 км (для марафона 42.2 vs 42.195)
+            async with db.execute(
+                """
+                SELECT rs.rank, rs.time_seconds
+                FROM running_standards rs
+                JOIN standards_versions sv ON rs.version = sv.version AND sv.sport_type = 'running'
+                WHERE rs.distance BETWEEN ? AND ? AND rs.gender = ? AND sv.is_active = 1
+                ORDER BY rs.time_seconds ASC
+                """,
+                (distance_km - 0.5, distance_km + 0.5, gender)
+            ) as cursor:
+                standards = await cursor.fetchall()
+
+            if not standards:
+                return "Нет разряда"
+
+            # Проверяем от лучшего к худшему
+            for standard in standards:
+                if time_seconds <= standard['time_seconds']:
+                    return standard['rank']
+
+            # Если результат медленнее всех нормативов
+            return 'Б/р'
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении разряда по бегу из БД: {e}")
+        return None
+
+
+async def get_qualification_swimming_from_db(distance_km: float, time_seconds: float, gender: str, pool_length: int = 50) -> Optional[str]:
+    """
+    Определяет разряд по плаванию на основе данных из БД.
+
+    Args:
+        distance_km: Дистанция в километрах
+        time_seconds: Время прохождения дистанции в секундах
+        gender: Пол ('male' или 'female')
+        pool_length: Длина бассейна (25 или 50 метров)
+
+    Returns:
+        Строка с разрядом или None
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Ищем ближайшую дистанцию с допуском ±0.01 км (для точности поиска)
+            async with db.execute(
+                """
+                SELECT ss.rank, ss.time_seconds
+                FROM swimming_standards ss
+                JOIN standards_versions sv ON ss.version = sv.version AND sv.sport_type = 'swimming'
+                WHERE ss.distance BETWEEN ? AND ?
+                  AND ss.pool_length = ?
+                  AND ss.gender = ?
+                  AND sv.is_active = 1
+                ORDER BY ss.time_seconds ASC
+                """,
+                (distance_km - 0.01, distance_km + 0.01, pool_length, gender)
+            ) as cursor:
+                standards = await cursor.fetchall()
+
+            if not standards:
+                return None
+
+            # Проверяем от лучшего к худшему
+            for standard in standards:
+                if time_seconds <= standard['time_seconds']:
+                    return standard['rank']
+
+            # Если результат медленнее всех нормативов
+            return 'Б/р'
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении разряда по плаванию из БД: {e}")
+        return None
+
+
+async def get_qualification_cycling_from_db(distance_km: float, time_seconds: float, gender: str, discipline: str = 'индивидуальная гонка') -> Optional[str]:
+    """
+    Определяет разряд по велоспорту на основе времени и дистанции (ЕВСК 2022-2025, frs24.ru).
+
+    ВАЖНО: Разряды присваиваются по времени в шоссейных гонках.
+    Две дисциплины: 'индивидуальная гонка', 'парная гонка'.
+
+    Args:
+        distance_km: Дистанция в километрах (5, 10, 15, 20, 25, 50)
+        time_seconds: Результат в секундах
+        gender: Пол ('male' или 'female')
+        discipline: Дисциплина ('индивидуальная гонка' или 'парная гонка')
+
+    Returns:
+        Строка с разрядом или None
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Ищем ближайшую дистанцию (допуск ±0.5 км)
+            async with db.execute(
+                """
+                SELECT cs.rank, cs.time_seconds
+                FROM cycling_standards cs
+                JOIN standards_versions sv ON cs.version = sv.version AND sv.sport_type = 'cycling'
+                WHERE cs.distance BETWEEN ? AND ?
+                  AND cs.gender = ?
+                  AND cs.discipline = ?
+                  AND sv.is_active = 1
+                  AND cs.time_seconds IS NOT NULL
+                ORDER BY
+                    CASE cs.rank
+                        WHEN 'МСМК' THEN 1
+                        WHEN 'МС' THEN 2
+                        WHEN 'КМС' THEN 3
+                        WHEN 'I' THEN 4
+                        WHEN 'II' THEN 5
+                        WHEN 'III' THEN 6
+                        WHEN 'I юн.' THEN 7
+                        WHEN 'II юн.' THEN 8
+                        WHEN 'III юн.' THEN 9
+                    END
+                """,
+                (distance_km - 0.5, distance_km + 0.5, gender, discipline)
+            ) as cursor:
+                standards = await cursor.fetchall()
+
+            if not standards:
+                return None
+
+            # Проверяем от высшего разряда к низшему
+            # Результат должен быть ЛУЧШЕ (меньше) или равен нормативу
+            for standard in standards:
+                if time_seconds <= standard['time_seconds']:
+                    return standard['rank']
+
+            return 'Б/р'
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении разряда по велоспорту из БД: {e}")
+        return None
+
+
+# ========== LEGACY: СТАТИЧЕСКИЕ ФУНКЦИИ (FALLBACK) ==========
+
 def get_qualification_running(distance_km: float, time_seconds: float, gender: str) -> Optional[str]:
     """
     Определяет разряд по бегу на основе дистанции и времени.
@@ -700,9 +901,68 @@ def get_qualification_swimming(distance_km: float, time_seconds: float, gender: 
     return 'Б/р'
 
 
+async def get_qualification_async(sport_type: str, distance_km: float = None, time_seconds: float = None, gender: str = None, **kwargs) -> Optional[str]:
+    """
+    Асинхронная функция для определения разряда (НОВАЯ СИСТЕМА - использует БД).
+
+    Args:
+        sport_type: Тип спорта ('running', 'swimming', 'cycling', 'бег', 'плавание', 'велоспорт')
+        distance_km: Дистанция в километрах (для бега и плавания)
+        time_seconds: Время прохождения дистанции в секундах (для бега и плавания)
+        gender: Пол ('male' или 'female') (для бега и плавания)
+        **kwargs: Дополнительные параметры:
+            - pool_length: для плавания (25 или 50)
+            - place: занятое место (для велоспорта)
+            - competition_rank: ранг соревнования (для велоспорта)
+            - discipline: дисциплина (для велоспорта)
+
+    Returns:
+        Строка с разрядом или None
+    """
+    try:
+        if sport_type.lower() in ['running', 'бег', 'легкая атлетика', 'run'] or sport_type.lower().startswith('бе'):
+            # Пытаемся получить из БД
+            result = await get_qualification_running_from_db(distance_km, time_seconds, gender)
+            if result is None:
+                # Fallback на статические словари
+                logger.warning("Используется fallback на статические нормативы по бегу")
+                result = get_qualification_running(distance_km, time_seconds, gender)
+            return result
+
+        elif sport_type.lower() in ['swimming', 'плавание', 'swim'] or sport_type.lower().startswith('пла'):
+            pool_length = kwargs.get('pool_length', 50)
+            # Получаем из БД (без fallback - плавание всегда только из БД)
+            result = await get_qualification_swimming_from_db(distance_km, time_seconds, gender, pool_length)
+            if result is None:
+                logger.info(f"Нет нормативов по плаванию в БД для дистанции {distance_km} км, бассейн {pool_length}м, пол {gender}")
+            return result
+
+        elif sport_type.lower() in ['cycling', 'велоспорт', 'bike'] or sport_type.lower().startswith('вело'):
+            # Для велоспорта разряды присваиваются по времени для индивидуальной гонки
+            discipline = kwargs.get('discipline', 'индивидуальная гонка')
+
+            # Используем расчет по времени для индивидуальной гонки
+            result = await get_qualification_cycling_from_db(distance_km, time_seconds, gender, discipline)
+            if result is None:
+                logger.info(f"Нет нормативов по велоспорту в БД для дистанции {distance_km} км, дисциплина {discipline}")
+            return result
+
+    except Exception as e:
+        logger.error(f"Ошибка при определении разряда (async): {e}")
+        # Fallback на синхронную версию (только для бега и плавания)
+        if sport_type.lower() in ['running', 'swimming', 'бег', 'плавание', 'легкая атлетика']:
+            return get_qualification(sport_type, distance_km, time_seconds, gender, **kwargs)
+        return None
+
+    return None
+
+
 def get_qualification(sport_type: str, distance_km: float, time_seconds: float, gender: str, **kwargs) -> Optional[str]:
     """
-    Универсальная функция для определения разряда.
+    Универсальная функция для определения разряда (LEGACY - использует статические словари).
+
+    ВАЖНО: Эта функция сохранена для обратной совместимости и используется как fallback.
+    Для новых вызовов рекомендуется использовать get_qualification_async().
 
     Args:
         sport_type: Тип спорта ('running', 'swimming', 'cycling', 'бег', 'плавание', 'велоспорт')

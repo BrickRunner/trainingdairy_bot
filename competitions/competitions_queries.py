@@ -37,10 +37,10 @@ async def add_competition(data: Dict[str, Any]) -> int:
         cursor = await db.execute(
             """
             INSERT INTO competitions
-            (name, date, city, country, location, distances, type, description,
+            (name, date, city, country, location, distances, type, sport_type, description,
              official_url, organizer, registration_status, status, created_by,
              is_official, source_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data['name'],
@@ -50,6 +50,7 @@ async def add_competition(data: Dict[str, Any]) -> int:
                 data.get('location'),
                 json.dumps(data.get('distances', [])) if isinstance(data.get('distances'), list) else data.get('distances'),
                 data.get('type'),
+                data.get('sport_type', 'бег'),
                 data.get('description'),
                 data.get('official_url'),
                 data.get('organizer'),
@@ -1007,12 +1008,20 @@ async def add_competition_result(
         # Рассчитываем разряд
         qualification = None
         try:
-            from utils.qualifications import get_qualification, time_to_seconds
+            from utils.qualifications import get_qualification_async, time_to_seconds
             time_seconds = time_to_seconds(normalized_time)
-            qualification = get_qualification(sport_type, distance, time_seconds, gender)
+            # Для плавания всегда используем бассейн 50м
+            # Для велоспорта используем индивидуальную гонку
+            kwargs = {}
+            if sport_type and sport_type.lower().startswith('пла'):
+                kwargs['pool_length'] = 50
+            elif sport_type and (sport_type.lower().startswith('вело') or 'bike' in sport_type.lower()):
+                kwargs['discipline'] = 'индивидуальная гонка'
+
+            qualification = await get_qualification_async(sport_type, distance, time_seconds, gender, **kwargs)
         except Exception as e:
             # Если не удалось рассчитать разряд, продолжаем без него
-            print(f"Ошибка расчета разряда: {e}")
+            logger.error(f"Ошибка расчета разряда: {e}")
 
         cursor = await db.execute(
             """
@@ -1093,12 +1102,20 @@ async def update_competition_result(
         # Рассчитываем разряд
         qualification = None
         try:
-            from utils.qualifications import get_qualification, time_to_seconds
+            from utils.qualifications import get_qualification_async, time_to_seconds
             time_seconds = time_to_seconds(normalized_time)
-            qualification = get_qualification(sport_type, distance, time_seconds, gender)
+            # Для плавания всегда используем бассейн 50м
+            # Для велоспорта используем индивидуальную гонку
+            kwargs = {}
+            if sport_type and sport_type.lower().startswith('пла'):
+                kwargs['pool_length'] = 50
+            elif sport_type and (sport_type.lower().startswith('вело') or 'bike' in sport_type.lower()):
+                kwargs['discipline'] = 'индивидуальная гонка'
+
+            qualification = await get_qualification_async(sport_type, distance, time_seconds, gender, **kwargs)
         except Exception as e:
             # Если не удалось рассчитать разряд, продолжаем без него
-            print(f"Ошибка расчета разряда: {e}")
+            logger.error(f"Ошибка расчета разряда: {e}")
 
         # Обновляем только время и разряд
         cursor = await db.execute(

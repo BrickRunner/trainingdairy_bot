@@ -317,6 +317,69 @@ CREATE TABLE IF NOT EXISTS competition_reminders (
 )
 """
 
+# Таблицы для хранения нормативов ЕВСК
+CREATE_RUNNING_STANDARDS_TABLE = """
+CREATE TABLE IF NOT EXISTS running_standards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    distance REAL NOT NULL,
+    gender TEXT NOT NULL,
+    rank TEXT NOT NULL,
+    time_seconds REAL NOT NULL,
+    version TEXT NOT NULL,
+    effective_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(distance, gender, rank, version)
+)
+"""
+
+CREATE_SWIMMING_STANDARDS_TABLE = """
+CREATE TABLE IF NOT EXISTS swimming_standards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    distance REAL NOT NULL,
+    pool_length INTEGER NOT NULL,
+    gender TEXT NOT NULL,
+    rank TEXT NOT NULL,
+    time_seconds REAL NOT NULL,
+    version TEXT NOT NULL,
+    effective_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(distance, pool_length, gender, rank, version)
+)
+"""
+
+CREATE_CYCLING_STANDARDS_TABLE = """
+CREATE TABLE IF NOT EXISTS cycling_standards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    distance REAL NOT NULL,
+    discipline TEXT NOT NULL,  -- 'шоссе' (разряды присваиваются только за шоссейные гонки)
+    gender TEXT NOT NULL,
+    rank TEXT NOT NULL,
+    time_seconds REAL,  -- Nullable, так как для велоспорта разряды присваиваются по местам, а не по времени
+    place INTEGER,  -- Место, необходимое для присвоения разряда
+    version TEXT NOT NULL,
+    effective_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(distance, discipline, gender, rank, version)
+)
+"""
+
+CREATE_STANDARDS_VERSIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS standards_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sport_type TEXT NOT NULL,
+    version TEXT NOT NULL,
+    effective_date DATE NOT NULL,
+    source_url TEXT,
+    file_hash TEXT,
+    is_active INTEGER DEFAULT 1,
+    loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(sport_type, version)
+)
+"""
+
 # Список всех таблиц для инициализации
 ALL_TABLES = [
     CREATE_USERS_TABLE,
@@ -330,5 +393,10 @@ ALL_TABLES = [
     CREATE_TRAINING_COMMENTS_TABLE,
     CREATE_HEALTH_METRICS_TABLE,
     CREATE_USER_SETTINGS_TABLE,
-    CREATE_PERSONAL_RECORDS_TABLE
+    CREATE_PERSONAL_RECORDS_TABLE,
+    # Таблицы нормативов ЕВСК
+    CREATE_RUNNING_STANDARDS_TABLE,
+    CREATE_SWIMMING_STANDARDS_TABLE,
+    CREATE_CYCLING_STANDARDS_TABLE,
+    CREATE_STANDARDS_VERSIONS_TABLE
 ]

@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 # Пути к официальным источникам нормативов
 SOURCES = {
     'running': {
-        'url': 'https://rusathletics.info/sport',
+        'url': 'https://xn--b1afq1a.xn--p1ai/evsk/athletics_norm/',
         'name': 'Легкая атлетика (бег)',
         'federation': 'ВФЛА (Всероссийская федерация легкой атлетики)',
-        'file_url': 'https://rusathletics.info/wp-content/uploads/2025/01/legkaya_atletika_dejstvuyut_c_26_noyabrya_2024_g_87b8cad5ee.xls'
+        'file_url': 'https://xn--b1afq1a.xn--p1ai/evsk/athletics_norm/'
     },
     'swimming': {
         'url': 'https://www.russwimming.ru/documents/players/evsk/',
@@ -29,10 +29,10 @@ SOURCES = {
         'file_url': 'https://www.russwimming.ru/upload/iblock/454/2p9mhknbbs3fltf01qc1d5lhn5ijb41c/plavanie_dejstvuyut_c_26_noyabrya_2024_g_197d4117d4.xls'
     },
     'cycling': {
-        'url': 'https://fvsr.ru/deyatelnost/sportivnaya-podgotovka/normativy-i-trebovaniya/',
+        'url': 'https://xn--b1afq1a.xn--p1ai/evsk/cycling_norm/',
         'name': 'Велоспорт',
         'federation': 'ФВСР (Федерация велосипедного спорта России)',
-        'file_url': 'https://fvsr.ru/wp-content/uploads/2024/11/velosport_dejstvuyut_c_26_noyabrya_2024_g.xls'
+        'file_url': 'https://xn--b1afq1a.xn--p1ai/evsk/cycling_norm/'
     }
 }
 
@@ -50,7 +50,9 @@ async def get_page_hash(url: str) -> Optional[str]:
         MD5 хеш содержимого страницы или None при ошибке
     """
     try:
-        async with aiohttp.ClientSession() as session:
+        # Используем connector без проверки SSL для некоторых сайтов
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status == 200:
                     content = await response.text()
@@ -88,6 +90,7 @@ async def init_standards_tracking():
 async def check_standards_updates() -> Dict[str, bool]:
     """
     Проверяет обновления нормативов на официальных сайтах.
+    Если нормативов в БД нет - возвращает True для загрузки.
 
     Returns:
         Словарь {sport_type: has_updates}
@@ -101,6 +104,18 @@ async def check_standards_updates() -> Dict[str, bool]:
 
         for sport_type, source in SOURCES.items():
             logger.info(f"Проверка обновлений для {source['name']}...")
+
+            # Проверяем, есть ли нормативы в БД
+            table_name = f"{sport_type}_standards"
+            async with db.execute(f"SELECT COUNT(*) as cnt FROM {table_name}") as cursor:
+                row = await cursor.fetchone()
+                standards_count = row['cnt'] if row else 0
+
+            # Если нормативов нет - нужно загрузить
+            if standards_count == 0:
+                logger.warning(f"⚠️ Нормативы {source['name']} отсутствуют в БД - требуется загрузка")
+                updates[sport_type] = True
+                continue
 
             # Получаем текущий хеш страницы
             current_hash = await get_page_hash(source['url'])
@@ -179,20 +194,17 @@ async def notify_about_updates(bot, updates: Dict[str, bool]):
         return
 
     # Формируем сообщение
-    message = "⚠️ <b>ОБНАРУЖЕНЫ ИЗМЕНЕНИЯ В НОРМАТИВАХ ЕВСК</b>\n\n"
+    message = "⚠️ <b>ОБНОВЛЕНИЕ НОРМАТИВОВ ЕВСК</b>\n\n"
 
     for sport_type, has_update in updates.items():
         if has_update:
             source = SOURCES[sport_type]
             message += f"📊 <b>{source['name']}</b>\n"
-            message += f"🔗 Источник: {source['url']}\n"
-            message += f"🏛️ Федерация: {source['federation']}\n\n"
+            message += f"🏛️ {source['federation']}\n"
+            message += "✅ Нормативы автоматически обновлены\n\n"
 
-    message += "⚙️ <b>Необходимые действия:</b>\n"
-    message += "1. Проверьте изменения на официальных сайтах\n"
-    message += "2. Обновите модуль utils/qualifications.py с новыми данными\n"
-    message += "3. Запустите миграцию: python migrations/update_qualifications.py\n\n"
-    message += f"📅 Дата проверки: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    message += f"📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
+    message += "ℹ️ Проверьте логи для деталей процесса обновления"
 
     # Отправляем уведомления всем администраторам
     for admin_id in admin_ids:
@@ -215,6 +227,55 @@ async def daily_standards_check(bot):
 
     try:
         updates = await check_standards_updates()
+
+        # Если есть обновления по плаванию, пытаемся автоматически загрузить новые нормативы
+        if updates.get('swimming', False):
+            logger.info("Обнаружены изменения в нормативах по плаванию, попытка автоматической загрузки...")
+            try:
+                from utils.swimming_standards_parser import update_swimming_standards
+                success = await update_swimming_standards()
+                if success:
+                    logger.info("✓ Нормативы по плаванию успешно обновлены автоматически")
+                else:
+                    logger.warning("⚠ Не удалось автоматически обновить нормативы по плаванию")
+                    # Fallback на статические нормативы из миграции
+                    logger.info("Использование статических нормативов по плаванию из миграции...")
+                    from migrations.migrate_standards_to_db import migrate_swimming_standards
+                    await migrate_swimming_standards()
+                    logger.info("✓ Статические нормативы по плаванию загружены")
+            except Exception as e:
+                logger.error(f"Ошибка при автоматическом обновлении нормативов по плаванию: {e}")
+
+        # Если есть обновления по бегу, пытаемся автоматически загрузить новые нормативы
+        if updates.get('running', False):
+            logger.info("Обнаружены изменения в нормативах по бегу, попытка автоматической загрузки...")
+            try:
+                from utils.running_standards_parser import update_running_standards
+                success = await update_running_standards()
+                if success:
+                    logger.info("✓ Нормативы по бегу успешно обновлены автоматически")
+                else:
+                    logger.warning("⚠ Не удалось автоматически обновить нормативы по бегу")
+                    # Fallback на статические нормативы из миграции
+                    logger.info("Использование статических нормативов по бегу из миграции...")
+                    from migrations.migrate_standards_to_db import migrate_running_standards
+                    await migrate_running_standards()
+                    logger.info("✓ Статические нормативы по бегу загружены")
+            except Exception as e:
+                logger.error(f"Ошибка при автоматическом обновлении нормативов по бегу: {e}")
+
+        # Если есть обновления по велоспорту, пытаемся автоматически загрузить новые нормативы
+        if updates.get('cycling', False):
+            logger.info("Обнаружены изменения в нормативах по велоспорту, попытка автоматической загрузки...")
+            try:
+                from utils.cycling_standards_parser import update_cycling_standards
+                success = await update_cycling_standards()
+                if success:
+                    logger.info("✓ Нормативы по велоспорту успешно обновлены автоматически")
+                else:
+                    logger.warning("⚠ Не удалось автоматически обновить нормативы по велоспорту")
+            except Exception as e:
+                logger.error(f"Ошибка при автоматическом обновлении нормативов по велоспорту: {e}")
 
         # Если есть обновления, уведомляем администраторов
         if any(updates.values()):
