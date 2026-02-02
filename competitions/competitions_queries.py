@@ -1018,10 +1018,25 @@ async def add_competition_result(
             elif sport_type and (sport_type.lower().startswith('вело') or 'bike' in sport_type.lower()):
                 kwargs['discipline'] = 'индивидуальная гонка'
 
+            # Отладочное логирование
+            logger.info(
+                f"[add_competition_result] Расчет разряда: sport_type={sport_type}, distance={distance}, "
+                f"time_seconds={time_seconds}, gender={gender}, kwargs={kwargs}"
+            )
+
             qualification = await get_qualification_async(sport_type, distance, time_seconds, gender, **kwargs)
+
+            # Логируем результат
+            logger.info(f"[add_competition_result] Результат расчета разряда: {qualification}")
         except Exception as e:
             # Если не удалось рассчитать разряд, продолжаем без него
-            logger.error(f"Ошибка расчета разряда: {e}")
+            logger.error(f"[add_competition_result] Ошибка расчета разряда: {e}", exc_info=True)
+
+        # Логируем перед сохранением
+        logger.info(
+            f"[add_competition_result] Сохранение в БД: user_id={user_id}, competition_id={competition_id}, "
+            f"distance={distance}, qualification={qualification}"
+        )
 
         cursor = await db.execute(
             """
@@ -1044,6 +1059,9 @@ async def add_competition_result(
                 user_id, competition_id, distance
             )
         )
+
+        # Логируем результат сохранения
+        logger.info(f"[add_competition_result] Обновлено строк: {cursor.rowcount}")
         await db.commit()
 
         # Проверяем и обновляем личный рекорд
@@ -1112,10 +1130,19 @@ async def update_competition_result(
             elif sport_type and (sport_type.lower().startswith('вело') or 'bike' in sport_type.lower()):
                 kwargs['discipline'] = 'индивидуальная гонка'
 
+            # Отладочное логирование
+            logger.info(
+                f"[update_competition_result] Расчет разряда: sport_type={sport_type}, distance={distance}, "
+                f"time_seconds={time_seconds}, gender={gender}, kwargs={kwargs}"
+            )
+
             qualification = await get_qualification_async(sport_type, distance, time_seconds, gender, **kwargs)
+
+            # Логируем результат
+            logger.info(f"[update_competition_result] Результат расчета разряда: {qualification}")
         except Exception as e:
             # Если не удалось рассчитать разряд, продолжаем без него
-            logger.error(f"Ошибка расчета разряда: {e}")
+            logger.error(f"[update_competition_result] Ошибка расчета разряда: {e}", exc_info=True)
 
         # Обновляем только время и разряд
         cursor = await db.execute(

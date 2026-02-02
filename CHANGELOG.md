@@ -1,5 +1,144 @@
 # Журнал изменений (Changelog)
 
+## [2026-02-02] - Исправлено сохранение разрядов для велоспорта и плавания
+
+### Исправлено
+
+#### 1. Критическая ошибка: sport_type не сохранялся при создании пользовательских соревнований
+**Файлы:**
+- `competitions/custom_competitions_handlers.py:395` (создание будущего соревнования)
+- `competitions/custom_competitions_handlers.py:1170` (добавление прошедшего соревнования)
+
+**Проблема:**
+При создании пользовательского соревнования через бота вид спорта всегда сохранялся как "бег", даже если пользователь выбрал "велоспорт" или "плавание".
+
+**Причина:**
+В FSM состоянии сохранялся `comp_type`, но при создании соревнования ожидался `comp_sport_type`:
+```python
+# Сохранялось:
+await state.update_data(comp_type=comp_type)  # Строка 395
+
+# Но использовалось:
+'sport_type': data.get('comp_sport_type', 'бег')  # Строка 523
+```
+
+**Исправление:**
+```python
+# Было:
+await state.update_data(comp_type=comp_type)
+
+# Стало:
+await state.update_data(comp_type=comp_type, comp_sport_type=comp_type)
+```
+
+**Результат:**
+Теперь при создании пользовательского соревнования правильно сохраняется вид спорта (бег, велоспорт, плавание).
+
+#### 2. Разряд не отображался после добавления результата
+**Файл:** `competitions/competitions_handlers.py:2673-2700`
+
+**Проблема:**
+После добавления результата по велоспорту или плаванию разряд не отображался в сообщении об успешном добавлении.
+
+**Причина:**
+При пересчете разряда для отображения не передавались специфичные параметры (discipline для велоспорта, pool_length для плавания):
+```python
+# Было:
+qualification = await get_qualification_async(sport_type, distance, time_seconds, gender)
+```
+
+**Исправление:**
+```python
+# Стало:
+kwargs = {}
+if sport_type and sport_type.lower().startswith('пла'):
+    kwargs['pool_length'] = 50
+elif sport_type and (sport_type.lower().startswith('вело') or 'bike' in sport_type.lower()):
+    kwargs['discipline'] = 'индивидуальная гонка'
+
+qualification = await get_qualification_async(sport_type, distance, time_seconds, gender, **kwargs)
+```
+
+**Результат:**
+Разряд теперь корректно рассчитывается и отображается для всех видов спорта.
+
+#### 3. Единицы измерения (км/мили) не отображались в разделе "Мои результаты"
+**Файл:** `competitions/competitions_handlers.py:1992-2008`
+
+**Проблема:**
+В разделе "Мои результаты" дистанции отображались без единиц измерения (например, "50.0" вместо "50.0 км").
+
+**Причина:**
+В БД поле `distance_name` сохранялось как простое число (например, "50.0") без единиц измерения.
+При отображении код проверял наличие `distance_name` и использовал его напрямую, не добавляя единицы:
+```python
+# Было:
+if distance_name:
+    dist_str = safe_convert_distance_name(distance_name, distance_unit)
+else:
+    dist_str = await format_dist_with_units(comp['distance'], user_id)
+```
+
+Функция `safe_convert_distance_name` возвращала число без изменений, если оно не содержало единиц измерения.
+
+**Исправление:**
+Добавлена проверка, является ли `distance_name` простым числом:
+```python
+# Стало:
+# Проверяем, является ли distance_name просто числом
+is_simple_number = False
+if distance_name:
+    try:
+        float(distance_name.replace(',', '.'))
+        is_simple_number = True
+    except (ValueError, AttributeError):
+        is_simple_number = False
+
+if distance_name and not is_simple_number:
+    # distance_name содержит текст (например, "500м плавание + 3км бег")
+    dist_str = safe_convert_distance_name(distance_name, distance_unit)
+else:
+    # distance_name отсутствует или это просто число
+    dist_str = await format_dist_with_units(comp['distance'], user_id)
+```
+
+**Результат:**
+Теперь дистанции всегда отображаются с единицами измерения согласно настройкам пользователя (км или мили).
+
+#### 4. Единицы измерения в других разделах (уже работали корректно)
+**Файлы:**
+- `competitions/competitions_handlers.py:1991-1997, 2699-2701`
+- `competitions/competitions_utils.py:28-94`
+
+**Проверка:**
+Код для отображения единиц измерения УЖЕ работает корректно:
+1. Функция `format_competition_distance` автоматически конвертирует км ↔ мили
+2. Для дистанций < 1 км/мили показываются метры/ярды
+3. Функция используется во всех местах отображения результатов
+
+**Результат:**
+Единицы измерения отображаются корректно согласно настройкам пользователя.
+
+### Добавлено
+
+#### Отладочное логирование для диагностики проблем с разрядами
+**Файлы:** `competitions/competitions_queries.py:1021-1064, 1124-1136`
+
+Добавлено подробное логирование в функции:
+- `add_competition_result` - логирование расчета и сохранения разряда
+- `update_competition_result` - логирование обновления разряда
+
+Логируется:
+1. Параметры перед расчетом (sport_type, distance, time_seconds, gender, kwargs)
+2. Результат расчета разряда
+3. Параметры перед сохранением в БД
+4. Количество обновленных строк
+
+**Результат:**
+Теперь можно отследить весь путь расчета и сохранения разряда для диагностики проблем.
+
+---
+
 ## [2026-02-01] - Исправление системы расчета и отображения разрядов
 
 ### Исправлено

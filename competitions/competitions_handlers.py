@@ -1989,11 +1989,22 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
             distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
             for i, comp in enumerate(finished_comps, 1):
-                # Используем distance_name если есть, иначе форматируем числовое значение
+                # Используем distance_name если оно содержит буквы (не просто число), иначе форматируем числовое значение
                 distance_name = comp.get('distance_name')
+                # Проверяем, является ли distance_name просто числом (например, "50.0")
+                is_simple_number = False
                 if distance_name:
+                    try:
+                        float(distance_name.replace(',', '.'))
+                        is_simple_number = True
+                    except (ValueError, AttributeError):
+                        is_simple_number = False
+
+                if distance_name and not is_simple_number:
+                    # distance_name содержит текст (например, "500м плавание + 3км бег")
                     dist_str = safe_convert_distance_name(distance_name, distance_unit)
                 else:
+                    # distance_name отсутствует или это просто число
                     dist_str = await format_dist_with_units(comp['distance'], user_id)
 
                 # Форматируем дату согласно настройкам пользователя
@@ -2689,7 +2700,15 @@ async def process_heart_rate(message: Message, state: FSMContext):
                     gender = row[0] if row and row[0] else 'male'
 
             time_seconds = time_to_seconds(data['result_finish_time'])
-            qualification = await get_qualification_async(sport_type, distance, time_seconds, gender)
+
+            # Параметры для разных видов спорта
+            kwargs = {}
+            if sport_type and sport_type.lower().startswith('пла'):
+                kwargs['pool_length'] = 50
+            elif sport_type and (sport_type.lower().startswith('вело') or 'bike' in sport_type.lower()):
+                kwargs['discipline'] = 'индивидуальная гонка'
+
+            qualification = await get_qualification_async(sport_type, distance, time_seconds, gender, **kwargs)
         except Exception as e:
             logger.error(f"Error calculating qualification for display: {e}")
 

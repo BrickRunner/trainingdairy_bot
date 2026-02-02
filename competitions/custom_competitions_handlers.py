@@ -391,8 +391,8 @@ async def process_comp_type(message: Message, state: FSMContext):
         await message.answer("❌ Неверный вид спорта. Выберите из предложенных вариантов.")
         return
 
-    # Сохраняем тип
-    await state.update_data(comp_type=comp_type)
+    # Сохраняем тип спорта (comp_sport_type используется при создании соревнования)
+    await state.update_data(comp_type=comp_type, comp_sport_type=comp_type)
 
     user_id = message.from_user.id
     distance_unit = await get_distance_unit_name(user_id)
@@ -1166,7 +1166,8 @@ async def process_past_comp_type(message: Message, state: FSMContext):
         await message.answer("❌ Неверный вид спорта. Выберите из предложенных вариантов.")
         return
 
-    await state.update_data(comp_type=comp_type)
+    # Сохраняем тип спорта (comp_sport_type используется при создании соревнования)
+    await state.update_data(comp_type=comp_type, comp_sport_type=comp_type)
 
     user_id = message.from_user.id
     distance_unit = await get_distance_unit_name(user_id)
