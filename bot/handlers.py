@@ -2176,27 +2176,12 @@ async def show_help(message: Message):
 @router.message(F.text == "🤖 Training Assistant")
 async def show_training_assistant(message: Message):
     """Показать меню Training Assistant"""
-    text = (
-        "🤖 <b>TRAINING ASSISTANT</b>\n\n"
-        "Ваш персональный помощник для планирования тренировок и подготовки к соревнованиям!\n\n"
-        "🚧 <i>Раздел находится в разработке</i>\n\n"
-        "Скоро здесь появятся:\n"
-        "• 📅 Автоматическое планирование тренировок\n"
-        "• 🎯 Персонализированные тренировочные планы\n"
-        "• 📊 Анализ прогресса с рекомендациями\n"
-        "• 🏃 Планы подготовки к марафонам\n"
-        "• 💡 Советы по восстановлению и питанию\n"
-        "• 🤖 Интеграция с AI для индивидуальных рекомендаций"
-    )
-
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_menu")
-    )
+    from training_assistant.ta_keyboards import get_main_menu_keyboard as get_ta_menu
 
     await message.answer(
-        text,
-        reply_markup=builder.as_markup(),
+        "🤖 <b>Training Assistant - Ваш AI тренер</b>\n\n"
+        "Выберите, чем я могу помочь:",
+        reply_markup=get_ta_menu(),
         parse_mode="HTML"
     )
 

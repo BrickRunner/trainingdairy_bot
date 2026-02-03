@@ -380,6 +380,180 @@ CREATE TABLE IF NOT EXISTS standards_versions (
 )
 """
 
+# ==================== TRAINING ASSISTANT TABLES ====================
+
+CREATE_TRAINING_PLANS_TABLE = """
+CREATE TABLE IF NOT EXISTS training_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+
+    -- Параметры плана
+    plan_type TEXT NOT NULL,              -- 'week', 'month'
+    sport_type TEXT NOT NULL,             -- 'run', 'swim', 'bike', 'triathlon'
+    target_distance REAL,                 -- Целевая дистанция (если есть)
+    target_competition_id INTEGER,        -- ID соревнования (если планируем под него)
+    current_fitness_level TEXT,           -- 'beginner', 'intermediate', 'advanced'
+    available_days TEXT NOT NULL,         -- JSON массив доступных дней ["Пн", "Ср", "Пт"]
+    goal_description TEXT,                -- Описание цели (результат, просто финиш и т.д.)
+
+    -- AI сгенерированный план
+    plan_content TEXT NOT NULL,           -- JSON структура с планом
+    ai_explanation TEXT,                  -- Объяснение от AI почему такой план
+
+    -- Статус и метаданные
+    status TEXT DEFAULT 'active',         -- 'active', 'completed', 'abandoned'
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (target_competition_id) REFERENCES competitions(id)
+)
+"""
+
+CREATE_TRAINING_CORRECTIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS training_corrections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    training_id INTEGER NOT NULL,
+    plan_id INTEGER,                      -- Связь с планом (если есть)
+
+    -- Обратная связь от пользователя
+    user_feedback TEXT NOT NULL,          -- 'too_hard', 'too_easy', 'high_pulse', 'didnt_finish', etc.
+    user_comment TEXT,                    -- Комментарий пользователя
+
+    -- AI коррекция
+    ai_analysis TEXT NOT NULL,            -- Анализ от AI
+    ai_recommendation TEXT NOT NULL,      -- Рекомендация для следующих тренировок
+    correction_applied TEXT,              -- JSON с примененными изменениями
+
+    -- Метаданные
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (training_id) REFERENCES trainings(id),
+    FOREIGN KEY (plan_id) REFERENCES training_plans(id)
+)
+"""
+
+CREATE_RACE_PREPARATIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS race_preparations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    competition_id INTEGER NOT NULL,
+
+    -- Параметры подготовки
+    days_before INTEGER NOT NULL,         -- 7, 5, 3, 1
+    race_distance REAL NOT NULL,
+    target_time TEXT,
+
+    -- AI рекомендации
+    recommendations TEXT NOT NULL,        -- JSON структура с рекомендациями
+    ai_explanation TEXT,
+
+    -- Метаданные
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (competition_id) REFERENCES competitions(id),
+    UNIQUE(user_id, competition_id, days_before)
+)
+"""
+
+CREATE_RACE_TACTICS_TABLE = """
+CREATE TABLE IF NOT EXISTS race_tactics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    competition_id INTEGER NOT NULL,
+
+    -- Параметры забега
+    distance REAL NOT NULL,
+    target_time TEXT NOT NULL,
+    race_type TEXT,                       -- 'flat', 'hilly', 'trail', etc.
+
+    -- AI тактика
+    tactics_plan TEXT NOT NULL,           -- JSON со сплитами и рекомендациями
+    pacing_strategy TEXT NOT NULL,        -- Стратегия темпа
+    key_points TEXT,                      -- Ключевые моменты по дистанции
+
+    -- Метаданные
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (competition_id) REFERENCES competitions(id)
+)
+"""
+
+CREATE_AI_CONVERSATIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+
+    -- Контекст разговора
+    conversation_type TEXT NOT NULL,      -- 'psychologist', 'general', 'plan', 'correction'
+    context_data TEXT,                    -- JSON с контекстом (план, тренировка и т.д.)
+
+    -- Сообщения
+    user_message TEXT NOT NULL,
+    ai_response TEXT NOT NULL,
+
+    -- Метаданные
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)
+"""
+
+CREATE_RESULT_PREDICTIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS result_predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+
+    -- Параметры прогноза
+    distance REAL NOT NULL,
+    based_on_trainings_period TEXT NOT NULL,  -- Период анализа ('last_month', 'last_2_weeks')
+
+    -- Прогноз
+    predicted_time_realistic TEXT NOT NULL,   -- Реалистичный прогноз
+    predicted_time_optimistic TEXT NOT NULL,  -- Оптимистичный
+    predicted_time_conservative TEXT NOT NULL,-- Осторожный
+
+    confidence_level REAL,                    -- Уровень уверенности (0-100%)
+    ai_explanation TEXT NOT NULL,             -- Объяснение прогноза
+    key_factors TEXT,                         -- JSON с ключевыми факторами
+
+    -- Метаданные
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)
+"""
+
+CREATE_TA_USER_SETTINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS ta_user_settings (
+    user_id INTEGER PRIMARY KEY,
+
+    -- Предпочтения пользователя
+    preferred_ai_style TEXT DEFAULT 'friendly',  -- 'friendly', 'professional', 'motivational'
+    coaching_experience TEXT DEFAULT 'none',     -- 'none', 'self', 'with_coach'
+    injury_history TEXT,                         -- JSON с историей травм
+
+    -- Статистика использования
+    total_plans_generated INTEGER DEFAULT 0,
+    total_corrections_made INTEGER DEFAULT 0,
+    total_ai_chats INTEGER DEFAULT 0,
+
+    -- Метаданные
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)
+"""
+
 # Список всех таблиц для инициализации
 ALL_TABLES = [
     CREATE_USERS_TABLE,
@@ -398,5 +572,13 @@ ALL_TABLES = [
     CREATE_RUNNING_STANDARDS_TABLE,
     CREATE_SWIMMING_STANDARDS_TABLE,
     CREATE_CYCLING_STANDARDS_TABLE,
-    CREATE_STANDARDS_VERSIONS_TABLE
+    CREATE_STANDARDS_VERSIONS_TABLE,
+    # Таблицы Training Assistant
+    CREATE_TRAINING_PLANS_TABLE,
+    CREATE_TRAINING_CORRECTIONS_TABLE,
+    CREATE_RACE_PREPARATIONS_TABLE,
+    CREATE_RACE_TACTICS_TABLE,
+    CREATE_AI_CONVERSATIONS_TABLE,
+    CREATE_RESULT_PREDICTIONS_TABLE,
+    CREATE_TA_USER_SETTINGS_TABLE
 ]

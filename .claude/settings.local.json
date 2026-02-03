@@ -14,7 +14,8 @@
       "WebFetch(domain:xn--b1afq1a.xn--p1ai)",
       "WebFetch(domain:frs24.ru)",
       "WebFetch(domain:velostar.ru)",
-      "WebFetch(domain:fvsr.ru)"
+      "WebFetch(domain:fvsr.ru)",
+      "WebFetch(domain:openrouter.ai)"
     ],
     "deny": [],
     "ask": []

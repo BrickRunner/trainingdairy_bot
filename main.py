@@ -29,6 +29,7 @@ from coach.coach_handlers import router as coach_router
 from coach.coach_add_training_handlers import router as coach_add_training_router
 from coach.coach_competitions_handlers import router as coach_competitions_router
 from coach.coach_upcoming_competitions_handlers import router as coach_upcoming_competitions_router
+from training_assistant.ta_handlers import router as training_assistant_router
 from database.queries import init_db
 from notifications.notification_scheduler import start_notification_scheduler
 from utils.birthday_checker import schedule_birthday_check
@@ -75,6 +76,7 @@ async def main():
     dp.include_router(health_calendar_export_router)  # Роутер календарей экспорта здоровья
     dp.include_router(health_router)
     dp.include_router(ratings_router)
+    dp.include_router(training_assistant_router)  # Роутер Training Assistant
     dp.include_router(router)  # Основной роутер (общие команды)
 
     # Инициализация базы данных
