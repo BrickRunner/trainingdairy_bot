@@ -26,6 +26,7 @@ class RacePreparationStates(StatesGroup):
 
     selecting_competition = State()         # Выбор соревнования
     selecting_days_before = State()         # За сколько дней (7/5/3/1)
+    waiting_for_target_time = State()       # Ожидание ввода целевого времени
 
 
 class RaceTacticsStates(StatesGroup):

@@ -2,11 +2,11 @@
 Сервис тактики забега
 """
 
-import json
 import logging
 from typing import Dict, Any, Optional
 from ai.ai_analyzer import ai_client, _call_with_retry
 from training_assistant.prompts.templates import SYSTEM_PROMPT_COACH, PROMPT_RACE_TACTICS
+from training_assistant.services.utils import get_user_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,9 @@ async def generate_race_tactics(
         return None
 
     try:
+        # Получаем настройки пользователя
+        user_prefs = await get_user_preferences(user_id)
+
         # Рассчитываем целевой темп
         target_pace = _calculate_target_pace(target_time, distance)
 
@@ -55,8 +58,10 @@ async def generate_race_tactics(
         }
         race_type_name = race_type_names.get(race_type, race_type)
 
-        # Форматируем промпт
+        # Форматируем промпт с настройками пользователя
         prompt = PROMPT_RACE_TACTICS.format(
+            distance_unit=user_prefs['distance_unit'],
+            date_format=user_prefs['date_format'],
             distance=distance,
             target_time=target_time,
             target_pace=target_pace,
@@ -82,20 +87,8 @@ async def generate_race_tactics(
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"Race tactics generated for user {user_id}, {distance} km")
 
-        # Парсим JSON
-        try:
-            if "```json" in ai_response:
-                json_start = ai_response.find("```json") + 7
-                json_end = ai_response.find("```", json_start)
-                json_str = ai_response[json_start:json_end].strip()
-            else:
-                json_str = ai_response
-
-            tactics_data = json.loads(json_str)
-            return tactics_data
-
-        except json.JSONDecodeError:
-            return {"tactics": ai_response, "raw_response": ai_response}
+        # AI теперь возвращает форматированный текст, а не JSON
+        return {"raw_response": ai_response}
 
     except Exception as e:
         logger.error(f"Error generating race tactics: {e}")

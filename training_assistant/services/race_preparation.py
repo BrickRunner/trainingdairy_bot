@@ -2,11 +2,11 @@
 Сервис подготовки к соревнованиям
 """
 
-import json
 import logging
 from typing import Dict, Any, Optional
 from ai.ai_analyzer import ai_client, _call_with_retry
 from training_assistant.prompts.templates import SYSTEM_PROMPT_COACH, PROMPT_RACE_PREPARATION
+from training_assistant.services.utils import get_user_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,13 @@ async def get_race_preparation_advice(
         return None
 
     try:
-        # Форматируем промпт
+        # Получаем настройки пользователя
+        user_prefs = await get_user_preferences(user_id)
+
+        # Форматируем промпт с настройками пользователя
         prompt = PROMPT_RACE_PREPARATION.format(
+            distance_unit=user_prefs['distance_unit'],
+            date_format=user_prefs['date_format'],
             competition_name=competition_name,
             competition_date=competition_date,
             distance=distance,
@@ -71,20 +76,8 @@ async def get_race_preparation_advice(
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"Race preparation advice generated for user {user_id}, {days_before} days before")
 
-        # Парсим JSON
-        try:
-            if "```json" in ai_response:
-                json_start = ai_response.find("```json") + 7
-                json_end = ai_response.find("```", json_start)
-                json_str = ai_response[json_start:json_end].strip()
-            else:
-                json_str = ai_response
-
-            advice_data = json.loads(json_str)
-            return advice_data
-
-        except json.JSONDecodeError:
-            return {"advice": ai_response, "raw_response": ai_response}
+        # AI теперь возвращает форматированный текст, а не JSON
+        return {"raw_response": ai_response}
 
     except Exception as e:
         logger.error(f"Error generating race preparation advice: {e}")

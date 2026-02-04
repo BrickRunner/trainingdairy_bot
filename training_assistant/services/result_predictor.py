@@ -11,6 +11,7 @@ from training_assistant.prompts.templates import (
     PROMPT_RESULT_PREDICTION,
     format_trainings_for_prompt
 )
+from training_assistant.services.utils import get_user_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,9 @@ async def predict_race_result(
         return None
 
     try:
+        # Получаем настройки пользователя
+        user_prefs = await get_user_preferences(user_id)
+
         # Анализируем тренировки
         training_analysis = _analyze_training_data(training_data)
 
@@ -52,8 +56,10 @@ async def predict_race_result(
         }
         period_name = period_names.get(analysis_period, analysis_period)
 
-        # Форматируем промпт
+        # Форматируем промпт с настройками пользователя
         prompt = PROMPT_RESULT_PREDICTION.format(
+            distance_unit=user_prefs['distance_unit'],
+            date_format=user_prefs['date_format'],
             target_distance=target_distance,
             analysis_period=period_name,
             training_data=format_trainings_for_prompt(training_data),

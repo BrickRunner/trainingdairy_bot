@@ -13,7 +13,6 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Главное меню Training Assistant"""
     keyboard = [
         [InlineKeyboardButton(text="📅 План тренировок", callback_data="ta:plan")],
-        [InlineKeyboardButton(text="🔄 Корректировка тренировки", callback_data="ta:correction")],
         [InlineKeyboardButton(text="🏆 Подготовка к соревнованию", callback_data="ta:race_prep")],
         [InlineKeyboardButton(text="🎯 Тактика забега", callback_data="ta:tactics")],
         [InlineKeyboardButton(text="🧠 Спортивный психолог", callback_data="ta:psychologist")],
@@ -138,10 +137,67 @@ def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
+def get_cancel_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка отмены при вводе текста"""
+    keyboard = [
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="ta:menu")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
 def get_continue_chat_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура для продолжения диалога с психологом"""
     keyboard = [
         [InlineKeyboardButton(text="✅ Достаточно, спасибо", callback_data="ta:chat:end")],
         [InlineKeyboardButton(text="« Назад в меню", callback_data="ta:menu")]
     ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+async def get_user_competitions_keyboard(competitions: list, context: str, user_id: int = None) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для выбора соревнования из списка пользователя
+
+    Args:
+        competitions: Список соревнований пользователя
+        context: Контекст использования ('race_prep' или 'tactics')
+        user_id: ID пользователя для получения настроек форматирования даты (опционально)
+    """
+    keyboard = []
+
+    # Получаем формат даты пользователя
+    date_format = 'ДД.ММ.ГГГГ'  # По умолчанию
+    if user_id:
+        try:
+            from utils.date_formatter import get_user_date_format
+            date_format = await get_user_date_format(user_id)
+        except:
+            pass
+
+    for comp in competitions[:10]:  # Максимум 10 соревнований
+        # Проверяем оба варианта полей для совместимости
+        comp_id = comp.get('id') or comp.get('competition_id')
+        title = comp.get('name') or comp.get('title', 'Без названия')
+        date = comp.get('date') or comp.get('begin_date', '')
+
+        # Форматируем дату согласно настройкам пользователя
+        if date:
+            try:
+                from utils.date_formatter import DateFormatter
+                date_str = DateFormatter.format_date(date, date_format)
+                button_text = f"{title[:30]} • {date_str}"
+            except:
+                button_text = title[:40]
+        else:
+            button_text = title[:40]
+
+        keyboard.append([
+            InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"ta:{context}:comp:{comp_id}"
+            )
+        ])
+
+    keyboard.append([InlineKeyboardButton(text="« Отмена", callback_data="ta:menu")])
+
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
