@@ -81,18 +81,79 @@ async def cancel_add_training(callback: CallbackQuery, state: FSMContext):
     await callback.answer("❌ Назначение тренировки отменено")
 
 
+# Общий обработчик текстовой кнопки "Отменить" для всех состояний ввода данных
+@router.message(
+    F.text == "❌ Отменить",
+    F.or_(
+        CoachStates.waiting_for_student_training_distance,
+        CoachStates.waiting_for_student_training_exercises,
+        CoachStates.waiting_for_student_training_intervals,
+        CoachStates.waiting_for_student_training_max_pulse,
+        CoachStates.waiting_for_student_training_comment
+    )
+)
+async def cancel_add_training_text(message: Message, state: FSMContext):
+    """Отменить добавление тренировки (текстовая кнопка)"""
+    from coach.coach_keyboards import get_student_detail_keyboard
+    from coach.coach_queries import get_coach_students
+    from utils.date_formatter import get_user_date_format, DateFormatter
+    from bot.keyboards import get_main_menu_keyboard
+    from coach.coach_queries import is_user_coach
+
+    data = await state.get_data()
+    student_id = data.get('student_id')
+    coach_id = data.get('coach_id')
+
+    await state.clear()
+
+    # Возврат в меню ученика
+    if student_id:
+        students = await get_coach_students(coach_id)
+        student = next((s for s in students if s['id'] == student_id), None)
+
+        if student:
+            display_name = await get_student_display_name(coach_id, student_id)
+            coach_date_format = await get_user_date_format(coach_id)
+            connected_date = DateFormatter.format_date(student['connected_at'][:10], coach_date_format)
+
+            text = f"👤 <b>{display_name}</b>\n\n"
+            text += f"📱 Telegram: @{student['username']}\n"
+            text += f"📅 Подключён: {connected_date}\n"
+
+            await message.answer(
+                text,
+                reply_markup=get_student_detail_keyboard(student_id),
+                parse_mode="HTML"
+            )
+
+            # Показываем главное меню
+            is_coach = await is_user_coach(coach_id)
+            await message.answer(
+                "Главное меню:",
+                reply_markup=get_main_menu_keyboard(is_coach)
+            )
+
+    await message.answer("❌ Назначение тренировки отменено")
+
+
 @router.callback_query(CoachStates.waiting_for_student_training_type, F.data.startswith("training_type:"))
 async def process_training_type(callback: CallbackQuery, state: FSMContext):
     """Обработать выбор типа тренировки"""
     training_type = callback.data.split(":")[1]
     await state.update_data(type=training_type)
 
-    # Показываем календарь для выбора даты (без ограничения - тренер может назначить тренировку на будущее)
-    calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "coach_cal")
+    # Показываем календарь для выбора даты (только сегодня и будущее)
+    # Примечание: календарь не ограничивает выбор прошлого на уровне UI,
+    # но проверка выполняется при выборе даты
+    calendar = CalendarKeyboard.create_calendar(
+        1,
+        datetime.now(),
+        "coach_cal"
+    )
     await callback.message.answer(
         f"📅 <b>На какую дату назначить тренировку?</b>\n\n"
         f"Тип: {training_type.capitalize()}\n\n"
-        "Выберите дату из календаря:",
+        "Выберите дату из календаря (только сегодня или будущее):",
         reply_markup=calendar,
         parse_mode="HTML"
     )
@@ -119,7 +180,13 @@ async def process_calendar_date_selection(callback: CallbackQuery, state: FSMCon
         await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
         return
 
-    # Сохраняем дату (тренер может назначать на любую дату)
+    # Проверка: тренер может назначать только на сегодня или будущее
+    today = datetime.now().date()
+    if selected_date.date() < today:
+        await callback.answer("❌ Нельзя назначить тренировку на прошлую дату", show_alert=True)
+        return
+
+    # Сохраняем дату
     await state.update_data(date=selected_date.date().isoformat())
 
     # Получаем формат даты пользователя (тренера)
@@ -189,7 +256,6 @@ async def process_calendar_navigation(callback: CallbackQuery, state: FSMContext
     new_keyboard = CalendarKeyboard.handle_navigation(
         callback_data_normalized,
         prefix="cal"
-        # max_date не указываем - тренер может назначать тренировки на будущее
     )
 
     if new_keyboard:
@@ -247,15 +313,20 @@ async def process_date_text(message: Message, state: FSMContext):
     utc_now = datetime.utcnow()
     moscow_now = utc_now + timedelta(hours=3)
     today = moscow_now.date()
-    yesterday = today - timedelta(days=1)
     tomorrow = today + timedelta(days=1)
 
     if message.text == "📅 Сегодня":
         date = today
-    elif message.text == "📅 Вчера":
-        date = yesterday
     elif message.text == "📅 Завтра":
         date = tomorrow
+    elif message.text == "📅 Вчера":
+        # Тренер не может назначать тренировки на прошлое
+        await message.answer(
+            "❌ Нельзя назначить тренировку на прошлую дату.\n"
+            "Выберите сегодня или будущую дату.",
+            reply_markup=get_date_keyboard(for_coach=True)
+        )
+        return
     elif message.text == "📝 Ввести дату":
         format_desc = DateFormatter.get_format_description(date_format)
         await message.answer(
@@ -270,6 +341,15 @@ async def process_date_text(message: Message, state: FSMContext):
             format_desc = DateFormatter.get_format_description(date_format)
             await message.answer(
                 f"❌ Неверный формат даты. Используйте {format_desc}",
+                reply_markup=get_date_keyboard(for_coach=True)
+            )
+            return
+
+        # Проверка: дата не должна быть в прошлом
+        if date < today:
+            await message.answer(
+                "❌ Нельзя назначить тренировку на прошлую дату.\n"
+                "Выберите сегодня или будущую дату.",
                 reply_markup=get_date_keyboard(for_coach=True)
             )
             return
@@ -480,13 +560,18 @@ async def process_training_comment(message: Message, state: FSMContext):
         user_date_format = await get_user_date_format(student_id)
         date_str = DateFormatter.format_date(data.get('date'), user_date_format)
 
+        # Получаем настройки ученика и тренера
+        student_settings = await get_user_settings(student_id)
+        coach_settings = await get_user_settings(coach_id)
+
+        distance_unit = student_settings.get('distance_unit', 'км') if student_settings else 'км'
+        coach_name = coach_settings.get('name') if coach_settings else 'Ваш тренер'
+
         # Формируем описание ПЛАНОВОЙ тренировки для ученика
         training_desc = f"📝 <b>Тип:</b> {data.get('type').capitalize()}\n"
         training_desc += f"📅 <b>Дата:</b> {date_str}\n"
 
         if data.get('distance'):
-            student_settings = await get_user_settings(student_id)
-            distance_unit = student_settings.get('distance_unit', 'км') if student_settings else 'км'
             training_desc += f"📏 <b>Плановая дистанция:</b> {data.get('distance')} {distance_unit}\n"
 
         if data.get('avg_pace'):
@@ -501,11 +586,6 @@ async def process_training_comment(message: Message, state: FSMContext):
         if data.get('comment'):
             training_desc += f"💬 <b>Комментарий тренера:</b> {data.get('comment')}\n"
 
-        # Получаем имя тренера
-        from database.queries import get_user_settings
-        coach_settings = await get_user_settings(coach_id)
-        coach_name = coach_settings.get('name') if coach_settings else 'Ваш тренер'
-
         notification_text = (
             f"📋 <b>Запланирована тренировка</b>\n\n"
             f"<b>{coach_name}</b> запланировал для вас тренировку:\n\n"
@@ -517,6 +597,17 @@ async def process_training_comment(message: Message, state: FSMContext):
             student_id,
             notification_text,
             parse_mode="HTML"
+        )
+
+        # Редирект ученика в главное меню
+        from coach.coach_queries import is_user_coach
+        from bot.keyboards import get_main_menu_keyboard
+
+        student_is_coach = await is_user_coach(student_id)
+        await message.bot.send_message(
+            student_id,
+            "Главное меню:",
+            reply_markup=get_main_menu_keyboard(student_is_coach)
         )
     except Exception as e:
         logger.error(f"Failed to send notification to student {student_id}: {e}")

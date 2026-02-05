@@ -3,6 +3,7 @@ Handlers для Training Assistant
 """
 
 import logging
+import re
 from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, BufferedInputFile, ReplyKeyboardRemove
@@ -25,6 +26,58 @@ from database.queries import get_trainings_by_custom_period
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def clean_html_response(text: str) -> str:
+    """
+    Очищает HTML ответ от неподдерживаемых Telegram тегов
+    """
+    if not text:
+        return text
+
+    # Заменяем <br>, <br/>, <br /> на перевод строки
+    text = re.sub(r'<br\s*/?\s*>', '\n', text, flags=re.IGNORECASE)
+
+    # Заменяем </p><p> на двойной перевод строки
+    text = re.sub(r'</p>\s*<p>', '\n\n', text, flags=re.IGNORECASE)
+
+    # Удаляем оставшиеся <p> и </p>
+    text = re.sub(r'</?p>', '', text, flags=re.IGNORECASE)
+
+    return text
+
+
+def validate_time_format(time_str: str) -> tuple[bool, str]:
+    """
+    Проверяет формат времени (HH:MM:SS или MM:SS)
+
+    Returns:
+        tuple: (is_valid, normalized_time)
+    """
+    if not time_str:
+        return False, ""
+
+    time_str = time_str.strip()
+
+    # Паттерн для HH:MM:SS или MM:SS
+    pattern_hhmmss = r'^(\d{1,2}):([0-5]\d):([0-5]\d)$'
+    pattern_mmss = r'^([0-5]?\d):([0-5]\d)$'
+
+    # Проверяем HH:MM:SS
+    match = re.match(pattern_hhmmss, time_str)
+    if match:
+        hours, minutes, seconds = match.groups()
+        # Нормализуем формат
+        return True, f"{int(hours)}:{minutes}:{seconds}"
+
+    # Проверяем MM:SS
+    match = re.match(pattern_mmss, time_str)
+    if match:
+        minutes, seconds = match.groups()
+        # Нормализуем формат
+        return True, f"{int(minutes)}:{seconds}"
+
+    return False, ""
 
 
 async def _get_user_competitions(user_id: int) -> list:
@@ -595,6 +648,8 @@ async def process_race_prep_days(callback: CallbackQuery, state: FSMContext):
             if 'raw_response' in advice or 'advice' in advice:
                 # AI вернул текст, а не JSON
                 advice_text = advice.get('raw_response') or advice.get('advice', '')
+                # Очищаем от неподдерживаемых HTML тегов
+                advice_text = clean_html_response(advice_text)
                 response += advice_text + "\n\n"
             else:
                 # AI вернул структурированный JSON
@@ -637,7 +692,7 @@ async def process_race_prep_days(callback: CallbackQuery, state: FSMContext):
 @router.message(RacePreparationStates.waiting_for_target_time)
 async def process_race_prep_target_time(message: Message, state: FSMContext):
     """Обработка целевого времени для подготовки к соревнованию"""
-    target_time = message.text.strip()
+    target_time_input = message.text.strip()
     user_id = message.from_user.id
     data = await state.get_data()
     selected_comp = data.get('selected_competition')
@@ -646,6 +701,20 @@ async def process_race_prep_target_time(message: Message, state: FSMContext):
     if not selected_comp or not days_before:
         await message.answer("Ошибка: данные не найдены", reply_markup=get_back_to_menu_keyboard())
         await state.clear()
+        return
+
+    # Валидация формата времени
+    is_valid, target_time = validate_time_format(target_time_input)
+    if not is_valid:
+        await message.answer(
+            "❌ <b>Неверный формат времени!</b>\n\n"
+            "Пожалуйста, введите время в одном из форматов:\n"
+            "• <b>Ч:ММ:СС</b> (например: <i>1:45:00</i> = 1 час 45 минут)\n"
+            "• <b>ММ:СС</b> (например: <i>45:30</i> = 45 минут 30 секунд)\n\n"
+            "Попробуйте еще раз:",
+            parse_mode="HTML",
+            reply_markup=get_cancel_keyboard()
+        )
         return
 
     processing_msg = await message.answer("⏳ Готовлю рекомендации...")
@@ -692,6 +761,8 @@ async def process_race_prep_target_time(message: Message, state: FSMContext):
             # AI возвращает текст
             if 'raw_response' in advice or 'advice' in advice:
                 advice_text = advice.get('raw_response') or advice.get('advice', '')
+                # Очищаем от неподдерживаемых HTML тегов
+                advice_text = clean_html_response(advice_text)
                 response += advice_text + "\n\n"
             else:
                 if 'do_list' in advice:
@@ -822,6 +893,8 @@ async def select_competition_for_tactics(callback: CallbackQuery, state: FSMCont
                 if 'raw_response' in tactics or 'tactics' in tactics:
                     # AI вернул текст, а не JSON
                     tactics_text = tactics.get('raw_response') or tactics.get('tactics', '')
+                    # Очищаем от неподдерживаемых HTML тегов
+                    tactics_text = clean_html_response(tactics_text)
                     response += tactics_text + "\n\n"
                 else:
                     # AI вернул структурированный JSON
@@ -874,13 +947,27 @@ async def select_competition_for_tactics(callback: CallbackQuery, state: FSMCont
 @router.message(RaceTacticsStates.waiting_for_target_time)
 async def process_tactics_time(message: Message, state: FSMContext):
     """Генерация тактики забега"""
-    target_time = message.text.strip()
+    target_time_input = message.text.strip()
     user_id = message.from_user.id
     data = await state.get_data()
     selected_comp = data.get('selected_competition')
 
     if not selected_comp:
         await message.answer("Ошибка: соревнование не выбрано", reply_markup=get_back_to_menu_keyboard())
+        return
+
+    # Валидация формата времени
+    is_valid, target_time = validate_time_format(target_time_input)
+    if not is_valid:
+        await message.answer(
+            "❌ <b>Неверный формат времени!</b>\n\n"
+            "Пожалуйста, введите время в одном из форматов:\n"
+            "• <b>Ч:ММ:СС</b> (например: <i>1:45:00</i> = 1 час 45 минут)\n"
+            "• <b>ММ:СС</b> (например: <i>45:30</i> = 45 минут 30 секунд)\n\n"
+            "Попробуйте еще раз:",
+            parse_mode="HTML",
+            reply_markup=get_cancel_keyboard()
+        )
         return
 
     processing_msg = await message.answer("⏳ Разрабатываю тактику забега...")
@@ -920,6 +1007,8 @@ async def process_tactics_time(message: Message, state: FSMContext):
             if 'raw_response' in tactics or 'tactics' in tactics:
                 # AI вернул текст, а не JSON
                 tactics_text = tactics.get('raw_response') or tactics.get('tactics', '')
+                # Очищаем от неподдерживаемых HTML тегов
+                tactics_text = clean_html_response(tactics_text)
                 response += tactics_text + "\n\n"
             else:
                 # AI вернул структурированный JSON

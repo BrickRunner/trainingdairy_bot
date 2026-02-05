@@ -225,21 +225,13 @@ def get_training_detail_keyboard(training_id: int, student_id: int, period: str 
             )
         )
 
-    # Если period указан, возвращаемся к списку с этим периодом, иначе к меню выбора периода
-    if period:
-        builder.row(
-            InlineKeyboardButton(
-                text="« К списку",
-                callback_data=f"coach:trainings_period:{student_id}:{period}"
-            )
+    # Кнопка возврата в меню ученика
+    builder.row(
+        InlineKeyboardButton(
+            text="« Назад в меню",
+            callback_data=f"coach:student:{student_id}"
         )
-    else:
-        builder.row(
-            InlineKeyboardButton(
-                text="« К выбору периода",
-                callback_data=f"coach:student_trainings:{student_id}"
-            )
-        )
+    )
 
     return builder.as_markup()
 

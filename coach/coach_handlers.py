@@ -1148,9 +1148,6 @@ async def show_training_detail(callback: CallbackQuery):
 
     text += "\n━━━━━━━━━━━━━━━━━\n"
 
-    if training.get('added_by_coach_id'):
-        text += f"\n👨‍🏫 Добавлено тренером: {training.get('coach_username', 'вами')}\n"
-
     # Комментарий ученика (его личный комментарий к тренировке)
     if training.get('comment'):
         text += f"\n💬 <b>Комментарий ученика:</b>\n<i>{training['comment']}</i>\n"
@@ -1362,9 +1359,6 @@ async def process_comment(message: Message, state: FSMContext):
         text += f"\n💪 <b>Уровень усилий:</b> {training['fatigue_level']}/10\n"
 
     text += "\n━━━━━━━━━━━━━━━━━\n"
-
-    if training.get('added_by_coach_id'):
-        text += f"\n👨‍🏫 Добавлено тренером: {training.get('coach_username', 'вами')}\n"
 
     # Комментарий ученика (его личный комментарий к тренировке)
     if training.get('comment'):

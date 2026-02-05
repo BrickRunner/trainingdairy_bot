@@ -244,7 +244,7 @@ async def start_add_training(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем, есть ли запланированные тренировки на сегодня
+    # Проверяем, есть ли незавершенные запланированные тренировки (сегодня или раньше)
     from datetime import datetime
     today = datetime.now().date().isoformat()
 
@@ -256,10 +256,10 @@ async def start_add_training(message: Message, state: FSMContext):
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """
-            SELECT id, type, distance, avg_pace, pace_unit, exercises, intervals, comment
+            SELECT id, type, date, distance, avg_pace, pace_unit, exercises, intervals, comment
             FROM trainings
-            WHERE user_id = ? AND date = ? AND is_planned = 1 AND duration IS NULL
-            ORDER BY id DESC
+            WHERE user_id = ? AND date <= ? AND is_planned = 1 AND duration IS NULL
+            ORDER BY date ASC, id ASC
             """,
             (user_id, today)
         ) as cursor:
@@ -269,15 +269,23 @@ async def start_add_training(message: Message, state: FSMContext):
         # Есть запланированные тренировки - показываем их
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         from aiogram.types import InlineKeyboardButton
+        from utils.date_formatter import get_user_date_format, DateFormatter
 
-        text = "📋 <b>Запланированные тренировки на сегодня</b>\n\n"
+        # Получаем формат даты пользователя
+        user_date_format = await get_user_date_format(user_id)
+
+        text = "📋 <b>Запланированные тренировки</b>\n\n"
         text += "Выберите тренировку для выполнения или добавьте новую:\n\n"
 
         builder = InlineKeyboardBuilder()
 
         for i, training in enumerate(planned_trainings, 1):
             training_dict = dict(training)
-            desc = f"📝 {training_dict['type'].capitalize()}"
+
+            # Форматируем дату
+            training_date_str = DateFormatter.format_date(training_dict['date'], user_date_format)
+
+            desc = f"📅 {training_date_str} • 📝 {training_dict['type'].capitalize()}"
 
             if training_dict.get('distance'):
                 desc += f" • {training_dict['distance']} км"
@@ -292,7 +300,7 @@ async def start_add_training(message: Message, state: FSMContext):
 
             builder.row(
                 InlineKeyboardButton(
-                    text=f"✅ Выполнить: {training_dict['type'].capitalize()}",
+                    text=f"✅ Выполнить: {training_dict['type'].capitalize()} ({training_date_str})",
                     callback_data=f"complete_planned:{training_dict['id']}"
                 )
             )
@@ -365,6 +373,14 @@ async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
 
     planned_dict = dict(planned)
 
+    # Получаем настройки пользователя для правильного форматирования
+    user_settings = await get_user_settings(user_id)
+    distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
+    user_date_format = await get_user_date_format(user_id)
+
+    # Форматируем дату
+    date_str = DateFormatter.format_date(planned_dict['date'], user_date_format)
+
     # Сохраняем данные в состояние
     await state.update_data(
         planned_training_id=training_id,
@@ -374,18 +390,23 @@ async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
         planned_pace=planned_dict.get('avg_pace'),
         planned_exercises=planned_dict.get('exercises'),
         planned_intervals=planned_dict.get('intervals'),
-        coach_comment=planned_dict.get('comment')
+        coach_comment=planned_dict.get('comment'),
+        user_id=user_id  # Сохраняем для дальнейшего использования
     )
 
     # Показываем план и запрашиваем время начала
     text = f"✅ <b>Выполнение тренировки</b>\n\n"
     text += f"📝 <b>Тип:</b> {planned_dict['type'].capitalize()}\n"
-    text += f"📅 <b>Дата:</b> {planned_dict['date']}\n\n"
+    text += f"📅 <b>Дата:</b> {date_str}\n\n"
 
     if planned_dict.get('distance'):
-        text += f"📏 <b>Плановая дистанция:</b> {planned_dict['distance']} км\n"
+        text += f"📏 <b>Плановая дистанция:</b> {format_distance(planned_dict['distance'], distance_unit)}\n"
     if planned_dict.get('avg_pace'):
-        text += f"⏱ <b>Желаемый темп:</b> {planned_dict['avg_pace']} {planned_dict.get('pace_unit', 'мин/км')}\n"
+        pace_unit = planned_dict.get('pace_unit', 'мин/км')
+        # Если единицы пользователя в милях, нужно пересчитать темп
+        if distance_unit == 'миль':
+            pace_unit = 'мин/миля'
+        text += f"⏱ <b>Желаемый темп:</b> {planned_dict['avg_pace']} {pace_unit}\n"
     if planned_dict.get('exercises'):
         text += f"💪 <b>Плановые упражнения:</b> {planned_dict['exercises']}\n"
     if planned_dict.get('intervals'):
@@ -393,17 +414,13 @@ async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
     if planned_dict.get('comment'):
         text += f"💬 <b>Комментарий тренера:</b> {planned_dict['comment']}\n"
 
-    text += "\n⏱ Введите продолжительность тренировки (в формате ЧЧ:ММ:СС или ММ:СС):\n\n"
+    text += "\n⏱ <b>Введите продолжительность тренировки</b> (в формате ЧЧ:ММ:СС или ММ:СС):\n\n"
     text += "Примеры:\n"
-    text += "• 45:30 (45 минут 30 секунд)\n"
-    text += "• 01:25:30 или 1:25:30 (1 час 25 минут)"
+    text += "• <code>45:30</code> (45 минут 30 секунд)\n"
+    text += "• <code>01:25:30</code> или <code>1:25:30</code> (1 час 25 минут)"
 
-    from bot.keyboards import get_cancel_keyboard
+    # edit_text не поддерживает ReplyKeyboardMarkup, поэтому без клавиатуры
     await callback.message.edit_text(text, parse_mode="HTML")
-    await callback.message.answer(
-        "⏱ Укажите, сколько времени заняла тренировка:",
-        reply_markup=get_cancel_keyboard()
-    )
     await state.set_state(AddTrainingStates.waiting_for_time)
     await callback.answer()
 
@@ -1117,6 +1134,18 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
         import os
         DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
+        # Получаем ID тренера перед обновлением
+        coach_id = None
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT added_by_coach_id FROM trainings WHERE id = ?",
+                (data['planned_training_id'],)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    coach_id = row[0]
+
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(
                 """
@@ -1147,6 +1176,87 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
                 )
             )
             await db.commit()
+
+        # Отправляем отчет тренеру
+        if coach_id:
+            try:
+                from coach.coach_training_queries import get_student_display_name
+
+                # Получаем информацию об ученике
+                student_name = await get_student_display_name(coach_id, data['user_id'])
+
+                # Получаем настройки тренера для форматирования
+                coach_date_format = await get_user_date_format(coach_id)
+                coach_settings = await get_user_settings(coach_id)
+                distance_unit = coach_settings.get('distance_unit', 'км') if coach_settings else 'км'
+
+                # Форматируем дату
+                date_str = DateFormatter.format_date(data.get('date'), coach_date_format)
+
+                # Определяем эмодзи для типа
+                type_emoji = {
+                    'кросс': '🏃',
+                    'плавание': '🏊',
+                    'велотренировка': '🚴',
+                    'силовая': '💪',
+                    'интервальная': '⚡'
+                }
+                emoji = type_emoji.get(data['training_type'], '📝')
+
+                # Формируем отчет
+                report = f"✅ <b>Тренировка выполнена!</b>\n\n"
+                report += f"Ученик: <b>{student_name}</b>\n\n"
+                report += f"{emoji} <b>Тип:</b> {data['training_type'].capitalize()}\n"
+                report += f"📅 <b>Дата:</b> {date_str}\n"
+
+                if data.get('time'):
+                    report += f"⏱ <b>Время:</b> {data['time']}\n"
+
+                if data.get('distance'):
+                    report += f"📏 <b>Дистанция:</b> {format_distance(data['distance'], distance_unit)}\n"
+
+                if data.get('avg_pace'):
+                    report += f"⚡ <b>Средний темп:</b> {data['avg_pace']} {data.get('pace_unit', '')}\n"
+
+                if data.get('avg_pulse'):
+                    report += f"❤️ <b>Средний пульс:</b> {data['avg_pulse']} уд/мин\n"
+
+                if data.get('fatigue_level'):
+                    report += f"💪 <b>Уровень усилий:</b> {data['fatigue_level']}/10\n"
+
+                if data.get('comment'):
+                    report += f"\n💬 <b>Комментарий ученика:</b>\n<i>{data['comment']}</i>\n"
+
+                # Создаем кнопку для просмотра деталей тренировки
+                from aiogram.utils.keyboard import InlineKeyboardBuilder
+                from aiogram.types import InlineKeyboardButton
+
+                builder = InlineKeyboardBuilder()
+                builder.row(
+                    InlineKeyboardButton(
+                        text="📊 Подробная информация",
+                        callback_data=f"coach:training_detail:{data['planned_training_id']}:{data['user_id']}"
+                    )
+                )
+
+                await callback.bot.send_message(
+                    coach_id,
+                    report,
+                    reply_markup=builder.as_markup(),
+                    parse_mode="HTML"
+                )
+
+                # Редирект тренера в главное меню
+                coach_is_coach = await is_user_coach(coach_id)
+                await callback.bot.send_message(
+                    coach_id,
+                    "Главное меню:",
+                    reply_markup=get_main_menu_keyboard(coach_is_coach)
+                )
+
+                logger.info(f"Training report sent to coach {coach_id} for student {data['user_id']}")
+            except Exception as e:
+                logger.error(f"Failed to send training report to coach: {e}")
     else:
         # Создаем новую тренировку (обычный flow)
         await add_training(data)
@@ -2171,7 +2281,14 @@ async def show_graphs(message: Message):
 @router.message(F.text == "ℹ️ Помощь")
 async def show_help(message: Message):
     """Показать помощь"""
-    await cmd_help(message)
+    from help.help_keyboards import get_help_main_menu
+    from help.help_texts import HELP_MAIN
+
+    await message.answer(
+        HELP_MAIN,
+        reply_markup=get_help_main_menu(),
+        parse_mode="HTML"
+    )
 
 @router.message(F.text == "🤖 Training Assistant")
 async def show_training_assistant(message: Message):

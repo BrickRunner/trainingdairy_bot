@@ -116,11 +116,11 @@ async def add_training(data: Dict[str, Any]) -> None:
 async def get_user_trainings(user_id: int, limit: int = 10) -> list:
     """
     Получить тренировки пользователя
-    
+
     Args:
         user_id: Telegram ID пользователя
         limit: Максимальное количество тренировок
-        
+
     Returns:
         Список словарей с данными тренировок
     """
@@ -130,6 +130,7 @@ async def get_user_trainings(user_id: int, limit: int = 10) -> list:
             """
             SELECT * FROM trainings
             WHERE user_id = ?
+            AND (is_planned = 0 OR duration IS NOT NULL)
             ORDER BY date ASC, created_at ASC
             LIMIT ?
             """,
@@ -142,16 +143,20 @@ async def get_user_trainings(user_id: int, limit: int = 10) -> list:
 async def get_training_count(user_id: int) -> int:
     """
     Получить количество тренировок пользователя
-    
+
     Args:
         user_id: Telegram ID пользователя
-        
+
     Returns:
         Количество тренировок
     """
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
-            "SELECT COUNT(*) FROM trainings WHERE user_id = ?",
+            """
+            SELECT COUNT(*) FROM trainings
+            WHERE user_id = ?
+            AND (is_planned = 0 OR duration IS NOT NULL)
+            """,
             (user_id,)
         ) as cursor:
             row = await cursor.fetchone()
@@ -264,6 +269,7 @@ async def get_trainings_by_period(user_id: int, period: str) -> list:
             WHERE user_id = ?
             AND date >= ?
             AND date <= ?
+            AND (is_planned = 0 OR duration IS NOT NULL)
             ORDER BY date ASC
             """,
             (user_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
@@ -318,7 +324,7 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Получаем все тренировки за период
+        # Получаем все тренировки за период (исключаем незавершенные запланированные)
         async with db.execute(
             """
             SELECT type, distance, calculated_volume, duration, fatigue_level
@@ -326,6 +332,7 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
             WHERE user_id = ?
             AND date >= ?
             AND date <= ?
+            AND (is_planned = 0 OR duration IS NOT NULL)
             """,
             (user_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         ) as cursor:
@@ -408,10 +415,11 @@ async def get_trainings_by_custom_period(user_id: int, start_date: str, end_date
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """
-            SELECT * FROM trainings 
-            WHERE user_id = ? 
+            SELECT * FROM trainings
+            WHERE user_id = ?
             AND date >= ?
             AND date <= ?
+            AND (is_planned = 0 OR duration IS NOT NULL)
             ORDER BY date ASC
             """,
             (user_id, start_date, end_date)

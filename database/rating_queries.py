@@ -285,7 +285,11 @@ async def get_user_trainings_by_period(user_id: int, start_date: datetime = None
         if start_date is None:
             # Все тренировки
             async with db.execute(
-                "SELECT type, duration FROM trainings WHERE user_id = ?",
+                """
+                SELECT type, duration FROM trainings
+                WHERE user_id = ?
+                AND (is_planned = 0 OR duration IS NOT NULL)
+                """,
                 (user_id,)
             ) as cursor:
                 rows = await cursor.fetchall()
@@ -296,6 +300,7 @@ async def get_user_trainings_by_period(user_id: int, start_date: datetime = None
                 SELECT type, duration
                 FROM trainings
                 WHERE user_id = ? AND date >= ? AND date <= ?
+                AND (is_planned = 0 OR duration IS NOT NULL)
                 """,
                 (user_id, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
             ) as cursor:
