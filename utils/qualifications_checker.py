@@ -238,11 +238,6 @@ async def daily_standards_check(bot):
                     logger.info("✓ Нормативы по плаванию успешно обновлены автоматически")
                 else:
                     logger.warning("⚠ Не удалось автоматически обновить нормативы по плаванию")
-                    # Fallback на статические нормативы из миграции
-                    logger.info("Использование статических нормативов по плаванию из миграции...")
-                    from migrations.migrate_standards_to_db import migrate_swimming_standards
-                    await migrate_swimming_standards()
-                    logger.info("✓ Статические нормативы по плаванию загружены")
             except Exception as e:
                 logger.error(f"Ошибка при автоматическом обновлении нормативов по плаванию: {e}")
 
@@ -256,11 +251,6 @@ async def daily_standards_check(bot):
                     logger.info("✓ Нормативы по бегу успешно обновлены автоматически")
                 else:
                     logger.warning("⚠ Не удалось автоматически обновить нормативы по бегу")
-                    # Fallback на статические нормативы из миграции
-                    logger.info("Использование статических нормативов по бегу из миграции...")
-                    from migrations.migrate_standards_to_db import migrate_running_standards
-                    await migrate_running_standards()
-                    logger.info("✓ Статические нормативы по бегу загружены")
             except Exception as e:
                 logger.error(f"Ошибка при автоматическом обновлении нормативов по бегу: {e}")
 

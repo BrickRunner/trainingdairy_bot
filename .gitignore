@@ -50,6 +50,10 @@ database.sqlite
 *.db-shm
 *.db-wal
 
+# Backup'ы базы данных
+backups/
+*.backup
+
 # Логи
 *.log
 logs/

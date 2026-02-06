@@ -1,5 +1,0 @@
-ERROR: no such table: competition_participants
-Traceback (most recent call last):
-  File "/mnt/d/desktop/coding/trainingdairy_bot-1/migrate_add_distance_name.py", line 47, in migrate
-    cursor.execute("""
-sqlite3.OperationalError: no such table: competition_participants

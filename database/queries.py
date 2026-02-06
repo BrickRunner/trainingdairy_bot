@@ -15,11 +15,32 @@ DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
 async def init_db():
-    """Инициализация базы данных (создание таблиц)"""
+    """
+    Инициализация базы данных (создание таблиц)
+
+    Включает WAL mode для защиты от повреждения при крэшах
+    """
     async with aiosqlite.connect(DB_PATH) as db:
+        # SECURITY: Включаем WAL (Write-Ahead Logging) mode
+        # Преимущества:
+        # 1. Защита от corruption при крэше/отключении питания
+        # 2. Лучшая производительность (concurrent reads)
+        # 3. Автоматическое восстановление после сбоев
+        await db.execute("PRAGMA journal_mode=WAL")
+
+        # SECURITY: Устанавливаем synchronous=NORMAL
+        # Баланс между безопасностью и производительностью
+        # NORMAL = fsync только на критических моментах (checkpoint)
+        await db.execute("PRAGMA synchronous=NORMAL")
+
+        # Создаем таблицы
         for table_sql in ALL_TABLES:
             await db.execute(table_sql)
         await db.commit()
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Database initialized with WAL mode at {DB_PATH}")
 
 
 async def add_user(user_id: int, username: str) -> None:
@@ -519,19 +540,74 @@ async def get_user_settings(user_id: int) -> Optional[Dict[str, Any]]:
 async def update_user_setting(user_id: int, field: str, value: Any) -> None:
     """
     Обновить конкретное поле в настройках пользователя
-    
+
     Args:
         user_id: Telegram ID пользователя
-        field: Название поля для обновления
+        field: Название поля для обновления (только из whitelist!)
         value: Новое значение
+
+    Raises:
+        ValueError: Если field не в списке разрешенных полей
     """
+    # SECURITY: Whitelist разрешенных полей для защиты от SQL Injection
+    ALLOWED_FIELDS = {
+        # Персональные данные
+        'name', 'birth_date', 'gender', 'weight', 'height',
+
+        # Основные типы тренировок
+        'main_training_types',
+
+        # Пульсовые зоны
+        'max_pulse',
+        'zone1_min', 'zone1_max',
+        'zone2_min', 'zone2_max',
+        'zone3_min', 'zone3_max',
+        'zone4_min', 'zone4_max',
+        'zone5_min', 'zone5_max',
+
+        # Целевые показатели
+        'weekly_volume_goal', 'weekly_trainings_goal', 'weight_goal',
+        'training_type_goals',
+
+        # Единицы измерения
+        'distance_unit', 'weight_unit', 'date_format', 'timezone',
+
+        # Уведомления
+        'daily_pulse_weight_time',
+        'weekly_report_day', 'weekly_report_time',
+        'last_goal_notification_week', 'goal_notifications',
+
+        # Напоминания о тренировках
+        'training_reminders_enabled',
+        'training_reminder_days',
+        'training_reminder_time',
+
+        # Режим тренера
+        'is_coach', 'coach_link_code'
+    }
+
+    # Проверка что поле в whitelist
+    if field not in ALLOWED_FIELDS:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"SECURITY: Attempted to update invalid field '{field}' for user {user_id}")
+        raise ValueError(f"Invalid field: {field}. Field must be in allowed list.")
+
     # Сначала инициализируем настройки если их нет
     await init_user_settings(user_id)
-    
+
+    # Теперь безопасно использовать f-string т.к. field прошел whitelist проверку
     async with aiosqlite.connect(DB_PATH) as db:
-        query = f"UPDATE user_settings SET {field} = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-        await db.execute(query, (value, user_id))
-        await db.commit()
+        try:
+            query = f"UPDATE user_settings SET {field} = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
+            await db.execute(query, (value, user_id))
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to update user setting {field} for user {user_id}: {e}")
+            raise
 
 
 async def calculate_pulse_zones(max_pulse: int) -> Dict[str, tuple]:

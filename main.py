@@ -38,6 +38,7 @@ from ratings.rating_updater import schedule_rating_updates
 from competitions.reminder_scheduler import schedule_competition_reminders
 from utils.qualifications_scheduler import schedule_qualifications_check
 from utils.qualifications_checker import daily_standards_check
+from utils.database_backup import schedule_backups
 
 # Настройка логирования
 logging.basicConfig(
@@ -84,6 +85,10 @@ async def main():
     # Инициализация базы данных
     await init_db()
     logger.info("База данных инициализирована")
+
+    # SECURITY: Запуск планировщика backup'ов базы данных
+    asyncio.create_task(schedule_backups())
+    logger.info("Планировщик backup'ов базы данных запущен")
 
     # Проверка обновлений нормативов ЕВСК при старте
     logger.info("Проверка обновлений нормативов ЕВСК при старте...")

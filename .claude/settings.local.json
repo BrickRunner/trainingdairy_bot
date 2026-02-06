@@ -19,7 +19,9 @@
       "Bash(find:*)",
       "Bash(for dir in bot database competitions coach health training_assistant ratings notifications utils)",
       "Bash(done)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(del /Q test_*.py)",
+      "Bash(netstat:*)"
     ],
     "deny": [],
     "ask": []
