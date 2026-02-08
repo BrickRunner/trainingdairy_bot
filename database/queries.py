@@ -10,7 +10,6 @@ from typing import Optional, Dict, Any
 
 from database.models import ALL_TABLES
 
-# Путь к базе данных
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
@@ -21,19 +20,10 @@ async def init_db():
     Включает WAL mode для защиты от повреждения при крэшах
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        # SECURITY: Включаем WAL (Write-Ahead Logging) mode
-        # Преимущества:
-        # 1. Защита от corruption при крэше/отключении питания
-        # 2. Лучшая производительность (concurrent reads)
-        # 3. Автоматическое восстановление после сбоев
         await db.execute("PRAGMA journal_mode=WAL")
 
-        # SECURITY: Устанавливаем synchronous=NORMAL
-        # Баланс между безопасностью и производительностью
-        # NORMAL = fsync только на критических моментах (checkpoint)
         await db.execute("PRAGMA synchronous=NORMAL")
 
-        # Создаем таблицы
         for table_sql in ALL_TABLES:
             await db.execute(table_sql)
         await db.commit()
@@ -94,7 +84,6 @@ async def add_training(data: Dict[str, Any]) -> None:
               Опциональные: distance, avg_pace, pace_unit, avg_pulse, max_pulse, exercises, intervals, calculated_volume, description, results, comment, fatigue_level
               Для плавания: swimming_location, pool_length, swimming_styles (JSON), swimming_sets
     """
-    # Преобразуем список стилей в JSON, если он есть
     swimming_styles_json = None
     if data.get('selected_swimming_styles'):
         import json
@@ -260,25 +249,19 @@ async def get_trainings_by_period(user_id: int, period: str) -> list:
     from datetime import datetime, timedelta
     import calendar
 
-    # Определяем начальную и конечную даты в зависимости от периода
     today = datetime.now().date()
 
     if period == 'week':
-        # Текущая календарная неделя: от понедельника до воскресенья
-        start_date = today - timedelta(days=today.weekday())  # Понедельник
-        end_date = start_date + timedelta(days=6)  # Воскресенье
+        start_date = today - timedelta(days=today.weekday())  
+        end_date = start_date + timedelta(days=6)  
     elif period == '2weeks':
-        # Последние 14 дней до сегодня
         start_date = today - timedelta(days=13)
         end_date = today
     elif period == 'month':
-        # Текущий календарный месяц: с 1 до последнего числа
         start_date = today.replace(day=1)
-        # Последний день месяца
         last_day = calendar.monthrange(today.year, today.month)[1]
         end_date = today.replace(day=last_day)
     else:
-        # По умолчанию - текущая неделя
         start_date = today - timedelta(days=today.weekday())
         end_date = start_date + timedelta(days=6)
 
@@ -320,32 +303,25 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
     from datetime import datetime, timedelta
     import calendar
 
-    # Определяем начальную и конечную даты в зависимости от периода
     today = datetime.now().date()
 
     if period == 'week':
-        # Текущая календарная неделя: от понедельника до воскресенья
-        start_date = today - timedelta(days=today.weekday())  # Понедельник
-        end_date = start_date + timedelta(days=6)  # Воскресенье
+        start_date = today - timedelta(days=today.weekday())  
+        end_date = start_date + timedelta(days=6)  
     elif period == '2weeks':
-        # Последние 14 дней до сегодня
         start_date = today - timedelta(days=13)
         end_date = today
     elif period == 'month':
-        # Текущий календарный месяц: с 1 до последнего числа
         start_date = today.replace(day=1)
-        # Последний день месяца
         last_day = calendar.monthrange(today.year, today.month)[1]
         end_date = today.replace(day=last_day)
     else:
-        # По умолчанию - текущая неделя
         start_date = today - timedelta(days=today.weekday())
         end_date = start_date + timedelta(days=6)
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Получаем все тренировки за период (исключаем незавершенные запланированные)
         async with db.execute(
             """
             SELECT type, distance, calculated_volume, duration, fatigue_level
@@ -369,42 +345,36 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
                 'avg_fatigue': 0
             }
         
-        # Подсчёт статистики
         total_count = len(trainings)
         total_distance = 0.0
         types_count = {}
-        types_distance = {}  # Дистанция по типам
-        types_duration = {}  # Длительность по типам (для силовых)
+        types_distance = {}  
+        types_duration = {}  
         fatigue_sum = 0
         fatigue_count = 0
 
         for training in trainings:
-            # Подсчёт по типам
             t_type = training['type']
 
-            # Пропускаем тренировки без типа
             if t_type:
                 types_count[t_type] = types_count.get(t_type, 0) + 1
 
-            # Подсчёт дистанции
             distance = training['distance']
             calculated_volume = training['calculated_volume']
             duration = training['duration']
 
-            if calculated_volume:  # Для интервальных тренировок
+            if calculated_volume:  
                 total_distance += calculated_volume
                 if t_type:
                     types_distance[t_type] = types_distance.get(t_type, 0) + calculated_volume
-            elif distance:  # Для остальных
+            elif distance:  
                 total_distance += distance
                 if t_type:
                     types_distance[t_type] = types_distance.get(t_type, 0) + distance
 
-            # Подсчёт длительности (для силовых тренировок)
             if duration and t_type:
                 types_duration[t_type] = types_duration.get(t_type, 0) + duration
 
-            # Подсчёт усилий
             if training['fatigue_level']:
                 fatigue_sum += training['fatigue_level']
                 fatigue_count += 1
@@ -416,7 +386,7 @@ async def get_training_statistics(user_id: int, period: str) -> Dict[str, Any]:
             'total_distance': round(total_distance, 2),
             'types_count': types_count,
             'types_distance': types_distance,
-            'types_duration': types_duration,  # Пока пустой, т.к. нет поля duration в таблице
+            'types_duration': types_duration,  
             'avg_fatigue': avg_fatigue
         }
 
@@ -470,17 +440,14 @@ async def get_statistics_by_custom_period(user_id: int, start_date: str, end_dat
     fatigue_count = 0
     
     for training in trainings:
-        # Подсчёт дистанции
         if training.get('distance'):
             total_distance += float(training['distance'])
         elif training.get('calculated_volume'):
             total_distance += float(training['calculated_volume'])
         
-        # Подсчёт типов
         t_type = training['type']
         types_count[t_type] = types_count.get(t_type, 0) + 1
         
-        # Подсчёт усилий
         if training.get('fatigue_level'):
             fatigue_sum += training['fatigue_level']
             fatigue_count += 1
@@ -495,7 +462,6 @@ async def get_statistics_by_custom_period(user_id: int, start_date: str, end_dat
     }
 
 
-# ========== ФУНКЦИИ ДЛЯ РАБОТЫ С НАСТРОЙКАМИ ==========
 
 async def init_user_settings(user_id: int) -> None:
     """
@@ -549,15 +515,11 @@ async def update_user_setting(user_id: int, field: str, value: Any) -> None:
     Raises:
         ValueError: Если field не в списке разрешенных полей
     """
-    # SECURITY: Whitelist разрешенных полей для защиты от SQL Injection
     ALLOWED_FIELDS = {
-        # Персональные данные
         'name', 'birth_date', 'gender', 'weight', 'height',
 
-        # Основные типы тренировок
         'main_training_types',
 
-        # Пульсовые зоны
         'max_pulse',
         'zone1_min', 'zone1_max',
         'zone2_min', 'zone2_max',
@@ -565,38 +527,30 @@ async def update_user_setting(user_id: int, field: str, value: Any) -> None:
         'zone4_min', 'zone4_max',
         'zone5_min', 'zone5_max',
 
-        # Целевые показатели
         'weekly_volume_goal', 'weekly_trainings_goal', 'weight_goal',
         'training_type_goals',
 
-        # Единицы измерения
         'distance_unit', 'weight_unit', 'date_format', 'timezone',
 
-        # Уведомления
         'daily_pulse_weight_time',
         'weekly_report_day', 'weekly_report_time',
         'last_goal_notification_week', 'goal_notifications',
 
-        # Напоминания о тренировках
         'training_reminders_enabled',
         'training_reminder_days',
         'training_reminder_time',
 
-        # Режим тренера
         'is_coach', 'coach_link_code'
     }
 
-    # Проверка что поле в whitelist
     if field not in ALLOWED_FIELDS:
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"SECURITY: Attempted to update invalid field '{field}' for user {user_id}")
         raise ValueError(f"Invalid field: {field}. Field must be in allowed list.")
 
-    # Сначала инициализируем настройки если их нет
     await init_user_settings(user_id)
 
-    # Теперь безопасно использовать f-string т.к. field прошел whitelist проверку
     async with aiosqlite.connect(DB_PATH) as db:
         try:
             query = f"UPDATE user_settings SET {field} = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
@@ -637,13 +591,9 @@ async def set_pulse_zones_auto(user_id: int, age: int) -> None:
         user_id: Telegram ID пользователя
         age: Возраст пользователя
     """
-    # Получаем пол пользователя для более точной формулы
     settings = await get_user_settings(user_id)
     gender = settings.get('gender') if settings else None
 
-    # Формула Карвонена с учётом пола:
-    # Мужчины: 220 - возраст
-    # Женщины: 226 - возраст
     if gender == 'female':
         max_pulse = 226 - age
     else:
@@ -740,15 +690,11 @@ async def get_pulse_zone_for_value(user_id: int, pulse: int) -> Optional[str]:
         ('zone5', settings['zone5_min'], settings['zone5_max']),
     ]
 
-    # Используем zone_min <= pulse < zone_max для всех зон кроме последней
-    # Для последней зоны используем zone_min <= pulse <= zone_max
     for i, (zone_name, zone_min, zone_max) in enumerate(zones):
         if i == len(zones) - 1:
-            # Последняя зона - включаем верхнюю границу
             if zone_min <= pulse <= zone_max:
                 return zone_name
         else:
-            # Остальные зоны - не включаем верхнюю границу
             if zone_min <= pulse < zone_max:
                 return zone_name
 
@@ -831,7 +777,6 @@ async def set_training_type_goal(user_id: int, training_type: str, goal: float =
     goals = await get_training_type_goals(user_id)
 
     if goal is None:
-        # Удаляем цель если goal=None
         if training_type in goals:
             del goals[training_type]
     else:
@@ -906,7 +851,6 @@ async def recalculate_all_weights(user_id: int, old_unit: str, new_unit: str) ->
     updated_fields = []
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Получаем текущие значения веса из user_settings
         async with db.execute(
             "SELECT weight, weight_goal FROM user_settings WHERE user_id = ?",
             (user_id,)
@@ -917,20 +861,18 @@ async def recalculate_all_weights(user_id: int, old_unit: str, new_unit: str) ->
                 current_weight = row[0]
                 weight_goal = row[1]
 
-                # Пересчитываем текущий вес если он есть
                 if current_weight is not None:
                     new_weight = await convert_weight(current_weight, old_unit, new_unit)
-                    new_weight = round(new_weight, 1)  # Округление до 1 знака
+                    new_weight = round(new_weight, 1)  
                     await db.execute(
                         "UPDATE user_settings SET weight = ? WHERE user_id = ?",
                         (new_weight, user_id)
                     )
                     updated_fields.append(f"Текущий вес: {current_weight:.1f} {old_unit} → {new_weight:.1f} {new_unit}")
 
-                # Пересчитываем целевой вес если он есть
                 if weight_goal is not None:
                     new_goal = await convert_weight(weight_goal, old_unit, new_unit)
-                    new_goal = round(new_goal, 1)  # Округление до 1 знака
+                    new_goal = round(new_goal, 1)  
                     await db.execute(
                         "UPDATE user_settings SET weight_goal = ? WHERE user_id = ?",
                         (new_goal, user_id)
@@ -991,7 +933,6 @@ async def get_all_users_with_birthdays():
 
             users = []
             for row in rows:
-                # Конвертируем строку даты в объект date
                 birth_date_str = row['birth_date']
                 if birth_date_str:
                     try:
@@ -1006,7 +947,6 @@ async def get_all_users_with_birthdays():
             return users
 
 
-# ========== ФУНКЦИИ ДЛЯ РАБОТЫ С УЧАСТНИКАМИ СОРЕВНОВАНИЙ ==========
 
 async def add_competition_participant(
     user_id: int,
@@ -1031,10 +971,8 @@ async def add_competition_participant(
     logger = logging.getLogger(__name__)
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Сначала проверим, есть ли уже такое соревнование в БД
         source_url = comp_data.get('url', '')
 
-        # Fallback: если url пустой, используем competition_id или id из comp_data
         if not source_url:
             source_url = competition_id or str(comp_data.get('id', ''))
             logger.warning(f"comp_data has empty 'url' field! Using fallback source_url: '{source_url}'")
@@ -1051,15 +989,13 @@ async def add_competition_participant(
         row = await cursor.fetchone()
 
         if row:
-            # Соревнование уже существует
             comp_db_id = row[0]
             existing_date = row[1]
             logger.info(f"Competition already exists with id={comp_db_id}, existing date='{existing_date}'")
 
-            # Если дата пустая или отсутствует, обновляем её
             comp_date = comp_data.get('begin_date', '')
             if comp_date:
-                comp_date = comp_date.split('T')[0]  # Только дата
+                comp_date = comp_date.split('T')[0]  
                 logger.info(f"comp_data['begin_date']: {comp_data.get('begin_date', 'MISSING')}, parsed date: {comp_date}")
 
                 if not existing_date or existing_date.strip() == '':
@@ -1072,11 +1008,10 @@ async def add_competition_participant(
             else:
                 logger.error(f"comp_data has no 'begin_date' field! Keys: {list(comp_data.keys())}")
         else:
-            # Добавляем новое соревнование
             distances_json = json.dumps(comp_data.get('distances', []))
             comp_date = comp_data.get('begin_date', '')
             if comp_date:
-                comp_date = comp_date.split('T')[0]  # Только дата
+                comp_date = comp_date.split('T')[0]  
             else:
                 logger.error(f"New competition has no begin_date! comp_data keys: {list(comp_data.keys())}")
                 comp_date = ''
@@ -1097,18 +1032,17 @@ async def add_competition_participant(
                     distances_json,
                     comp_data.get('sport_code', 'run'),
                     comp_data.get('sport_code', 'run'),
-                    '',  # description
+                    '',  
                     comp_data.get('url', ''),
                     comp_data.get('organizer', ''),
                     'upcoming',
-                    1,  # is_official
-                    source_url  # Используем source_url с fallback
+                    1,  
+                    source_url  
                 )
             )
             comp_db_id = insert_cursor.lastrowid
             logger.info(f"Added new competition with id={comp_db_id}, source_url='{source_url}', date={comp_date}")
 
-        # Проверим, не добавлен ли уже пользователь как участник на ЭТОЙ дистанции
         cursor = await db.execute(
             """
             SELECT id FROM competition_participants
@@ -1121,7 +1055,6 @@ async def add_competition_participant(
         exists = await cursor.fetchone()
 
         if not exists:
-            # Добавляем участника
             await db.execute(
                 """
                 INSERT INTO competition_participants (
@@ -1195,7 +1128,6 @@ async def get_user_registered_distances(user_id: int, competition_id: str, all_d
         if not rows:
             return []
 
-        # Создаем список зарегистрированных дистанций
         registered_distances = []
         for row in rows:
             registered_distance_km = row[0]
@@ -1205,19 +1137,15 @@ async def get_user_registered_distances(user_id: int, competition_id: str, all_d
                 'name': registered_distance_name
             })
 
-        # Находим индексы соответствующих дистанций в списке all_distances
         registered_indices = []
         for i, dist in enumerate(all_distances):
-            # Обрабатываем дистанцию - может быть числом или объектом с distance/name
             if isinstance(dist, dict):
                 dist_km = dist.get('distance', 0)
                 dist_name = dist.get('name', '')
             else:
-                # Если дистанция - просто число
                 dist_km = float(dist) if dist else 0
                 dist_name = str(dist)
 
-            # Проверяем совпадение по дистанции и имени
             for reg_dist in registered_distances:
                 if (dist_km == reg_dist['distance'] and dist_name == reg_dist['name']):
                     registered_indices.append(i)

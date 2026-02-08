@@ -127,20 +127,16 @@ async def get_student_trainings_by_period(
     today = datetime.now().date()
 
     if period == 'week':
-        # Текущая календарная неделя: от понедельника до воскресенья
-        start_date = today - timedelta(days=today.weekday())  # Понедельник
-        end_date = start_date + timedelta(days=6)  # Воскресенье
+        start_date = today - timedelta(days=today.weekday())  
+        end_date = start_date + timedelta(days=6)  
     elif period == '2weeks':
-        # Последние 14 дней до сегодня
         start_date = today - timedelta(days=13)
         end_date = today
     elif period == 'month':
-        # Текущий календарный месяц: с 1 до последнего числа
         start_date = today.replace(day=1)
-        # Последний день месяца
         last_day = calendar.monthrange(today.year, today.month)[1]
         end_date = today.replace(day=last_day)
-    else:  # all
+    else:  
         start_date = None
         end_date = None
 
@@ -193,7 +189,6 @@ async def get_training_with_comments(training_id: int) -> Optional[Dict[str, Any
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Получаем тренировку
         async with db.execute(
             """
             SELECT t.*, u.username as coach_username
@@ -208,7 +203,6 @@ async def get_training_with_comments(training_id: int) -> Optional[Dict[str, Any
                 return None
             training = dict(row)
 
-        # Получаем комментарии
         async with db.execute(
             """
             SELECT
@@ -370,7 +364,6 @@ async def get_student_display_name(
 
             nickname, name, username = row
 
-            # Приоритет: псевдоним > имя > username
             if nickname:
                 return nickname
             elif name:

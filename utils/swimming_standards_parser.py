@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
-# URL источников нормативов
 SWIMMING_SOURCES = {
     'current': {
         'url': 'https://www.russwimming.ru/upload/iblock/454/2p9mhknbbs3fltf01qc1d5lhn5ijb41c/plavanie_dejstvuyut_c_26_noyabrya_2024_g_197d4117d4.xls',
@@ -33,7 +32,6 @@ async def init_standards_database():
     Инициализирует таблицы для хранения нормативов ЕВСК в базе данных.
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        # Таблица нормативов по плаванию
         await db.execute("""
             CREATE TABLE IF NOT EXISTS swimming_standards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

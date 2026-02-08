@@ -34,7 +34,6 @@ async def get_user_preferences(user_id: int) -> Dict[str, str]:
     except Exception as e:
         logger.debug(f"Could not load user preferences: {e}")
 
-    # По умолчанию метрическая система
     return {
         'distance_unit': 'км',
         'weight_unit': 'кг',

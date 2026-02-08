@@ -36,7 +36,6 @@ def calculate_pace(distance_km: float, time_str: str) -> Optional[str]:
         else:
             return None
 
-        # Темп в секундах на км
         pace_seconds = total_seconds / distance_km
         pace_minutes = int(pace_seconds // 60)
         pace_secs = int(pace_seconds % 60)
@@ -61,20 +60,16 @@ def _normalize_sport_type(sport_type: str) -> str:
 
     sport_lower = sport_type.lower().strip()
 
-    # Бег и все его варианты
     if any(keyword in sport_lower for keyword in ['run', 'бег', 'running', 'single-sports']):
         return 'бег'
-    # Плавание
     elif any(keyword in sport_lower for keyword in ['swim', 'плав']):
         return 'плавание'
-    # Велоспорт
     elif any(keyword in sport_lower for keyword in ['bike', 'cycle', 'велос']):
         return 'велоспорт'
-    # Триатлон
     elif 'триатлон' in sport_lower or 'triathlon' in sport_lower:
         return 'триатлон'
     else:
-        return 'бег'  # По умолчанию бег
+        return 'бег'  
 
 
 def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -106,7 +101,6 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
             'best_places_category': []
         }
 
-    # Базовая статистика
     stats = {
         'total_competitions': len(participants),
         'finished': 0,
@@ -116,7 +110,7 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
         'by_type': defaultdict(int),
         'by_distance': defaultdict(int),
         'total_distance': 0.0,
-        'personal_records': {},  # {distance: {'time': ..., 'competition': ..., 'date': ...}}
+        'personal_records': {},  
         'average_pace_by_distance': {},
         'cities': set(),
         'countries': set(),
@@ -126,11 +120,11 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
         'goal_achievement': {'achieved': 0, 'not_achieved': 0, 'no_goal': 0}
     }
 
-    # Для расчёта средних темпов
-    pace_data = defaultdict(list)  # {distance: [pace_seconds, ...]}
+    # Собираем темпы по дистанциям для вычисления среднего
+    pace_data = defaultdict(list)
 
     for p in participants:
-        # Статусы
+        # Подсчитываем статусы участия (финишировал, не вышел на старт и т.д.)
         status = p.get('status', 'registered')
         if status == 'finished':
             stats['finished'] += 1
@@ -141,32 +135,32 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
         elif status == 'registered':
             stats['registered'] += 1
 
-        # Виды спорта - нормализуем для унификации
+        # Группируем по виду спорта (бег, плавание, велоспорт)
         sport_type = _normalize_sport_type(p.get('sport_type', 'бег'))
         stats['by_type'][sport_type] += 1
 
-        # Дистанции и километраж - считаем ТОЛЬКО для финишировавших
+        # Считаем дистанции только для финишировавших
         distance = p.get('distance')
         if distance and status == 'finished':
             stats['by_distance'][distance] += 1
             stats['total_distance'] += distance
 
-        # География
+        # Собираем уникальные города и страны
         if p.get('city'):
             stats['cities'].add(p['city'])
         if p.get('country'):
             stats['countries'].add(p['country'])
 
-        # Организаторы
         if p.get('organizer'):
             stats['organizers'].add(p['organizer'])
 
-        # Только для финишировавших
+        # Обрабатываем только финиши с результатом
         if status == 'finished' and distance and p.get('finish_time'):
             finish_time = p['finish_time']
 
-            # Личные рекорды
+            # Отслеживаем личные рекорды (PR) по каждой дистанции
             if distance not in stats['personal_records']:
+                # Первый результат на этой дистанции - автоматически рекорд
                 stats['personal_records'][distance] = {
                     'time': finish_time,
                     'competition': p.get('name', 'Без названия'),
@@ -175,7 +169,7 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
                     'qualification': p.get('qualification')
                 }
             else:
-                # Сравниваем времена
+                # Сравниваем с текущим рекордом и обновляем если быстрее
                 current_pr = stats['personal_records'][distance]['time']
                 if _compare_times(finish_time, current_pr) < 0:
                     stats['personal_records'][distance] = {
@@ -186,12 +180,12 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
                         'qualification': p.get('qualification')
                     }
 
-            # Собираем данные для среднего темпа
+            # Собираем темпы для расчета среднего темпа по дистанции
             pace_seconds = _time_to_seconds(finish_time)
             if pace_seconds:
                 pace_data[distance].append(pace_seconds / distance)
 
-            # Достижение целей
+            # Проверяем выполнение целевого времени
             target_time = p.get('target_time')
             if target_time:
                 if _compare_times(finish_time, target_time) <= 0:
@@ -201,7 +195,6 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
             else:
                 stats['goal_achievement']['no_goal'] += 1
 
-            # Лучшие места
             place_overall = p.get('place_overall')
             if place_overall:
                 stats['best_places_overall'].append({
@@ -221,7 +214,6 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
                     'category': p.get('age_category', '')
                 })
 
-    # Рассчитываем средние темпы
     for distance, paces in pace_data.items():
         if paces:
             avg_pace_seconds = sum(paces) / len(paces)
@@ -229,15 +221,12 @@ def calculate_competitions_statistics(participants: List[Dict[str, Any]]) -> Dic
             pace_secs = int(avg_pace_seconds % 60)
             stats['average_pace_by_distance'][distance] = f"{pace_minutes:02d}:{pace_secs:02d}"
 
-    # Сортируем лучшие места
     stats['best_places_overall'].sort(key=lambda x: x['place'])
     stats['best_places_category'].sort(key=lambda x: x['place'])
 
-    # Ограничиваем топ-5
     stats['best_places_overall'] = stats['best_places_overall'][:5]
     stats['best_places_category'] = stats['best_places_category'][:5]
 
-    # Конвертируем defaultdict в обычный dict для сериализации
     stats['by_type'] = dict(stats['by_type'])
     stats['by_distance'] = dict(stats['by_distance'])
 
@@ -301,7 +290,6 @@ def format_statistics_message(stats: Dict[str, Any], distance_unit: str = 'км'
 
     msg = "📊 <b>Статистика соревнований</b>\n\n"
 
-    # Общая статистика
     msg += f"🏃 <b>Всего соревнований:</b> {stats['total_competitions']}\n"
     msg += f"✅ Финишировано: {stats['finished']}\n"
     if stats['registered'] > 0:
@@ -311,21 +299,17 @@ def format_statistics_message(stats: Dict[str, Any], distance_unit: str = 'км'
     if stats['dnf'] > 0:
         msg += f"⚠️ DNF: {stats['dnf']}\n"
 
-    # Суммарный километраж с правильным падежом (именительный падеж)
     total_distance_formatted = format_distance(stats['total_distance'], distance_unit, case='nominative')
     msg += f"\n📏 <b>Суммарный километраж:</b> {total_distance_formatted}\n"
 
-    # По типам
     if stats['by_type']:
         msg += "\n<b>По типам:</b>\n"
         for comp_type, count in sorted(stats['by_type'].items(), key=lambda x: x[1], reverse=True):
             msg += f"  • {comp_type}: {count}\n"
 
-    # Лучшие места
     if stats['best_places_overall']:
         msg += "\n🥇 <b>Топ-5 мест (общий зачёт):</b>\n"
         for item in stats['best_places_overall'][:5]:
-            # Форматируем дистанцию с правильными единицами (в скобках - родительный падеж)
             if distance_unit == 'мили':
                 distance_value = km_to_miles(item['distance'])
                 distance_text = f"{distance_value:.1f} миль"
@@ -333,7 +317,6 @@ def format_statistics_message(stats: Dict[str, Any], distance_unit: str = 'км'
                 distance_text = f"{item['distance']} км"
             msg += f"  • {item['place']} место - {item['competition']} ({distance_text})\n"
 
-    # Достижение целей
     if stats['finished'] > 0:
         total_with_goal = stats['goal_achievement']['achieved'] + stats['goal_achievement']['not_achieved']
         if total_with_goal > 0:

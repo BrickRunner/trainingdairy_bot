@@ -23,28 +23,27 @@ async def check_and_award_achievements(user_id: int, bot=None) -> List[str]:
     Returns:
         Список ID новых достижений
     """
-    # Получаем уже полученные достижения
+    # Получаем уже полученные достижения, чтобы не выдавать дубли
     current_achievements = await get_user_achievements(user_id)
     current_ids = {ach['name'] for ach in current_achievements}
 
-    # Получаем статистику пользователя
+    # Собираем актуальную статистику пользователя
     stats = await get_user_stats(user_id)
 
-    # Проверяем каждое достижение
     new_achievements = []
 
+    # Проверяем все возможные достижения
     for ach_id, ach_data in ACHIEVEMENTS.items():
         if ach_id in current_ids:
             continue  # Уже получено
 
-        # Проверяем условие получения
+        # Проверяем условие получения достижения
         if await check_achievement_condition(user_id, ach_id, stats):
-            # Присваиваем достижение
             await award_achievement(user_id, ach_id)
             new_achievements.append(ach_id)
             logger.info(f"User {user_id} earned achievement: {ach_id}")
 
-            # Отправляем уведомление
+            # Отправляем уведомление если передан бот
             if bot:
                 await send_achievement_notification(bot, user_id, ach_id)
 
@@ -63,7 +62,6 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
     Returns:
         True если условие выполнено
     """
-    # Соревнования
     if achievement_id == 'first_competition':
         return stats['total_competitions'] >= 1
 
@@ -89,13 +87,13 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
         return stats['cycling_competitions'] >= 5
 
     elif achievement_id == 'mid_distance':
-        return stats['mid_distance_races'] >= 10  # 5-10 км
+        return stats['mid_distance_races'] >= 10  
 
     elif achievement_id == 'versatile':
         return stats['different_sports'] >= 3
 
     elif achievement_id == 'distance_collector':
-        return stats['has_all_distances']  # 5, 10, 21.1, 42.2
+        return stats['has_all_distances']  
 
     elif achievement_id == 'enthusiast':
         return stats['total_competitions'] >= 5
@@ -124,7 +122,6 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
     elif achievement_id == 'streak_12_months':
         return stats['competition_streak_months'] >= 12
 
-    # Результаты
     elif achievement_id == 'first_podium':
         return stats['podium_count'] >= 1
 
@@ -132,10 +129,10 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
         return stats['podium_count'] >= 5
 
     elif achievement_id == 'pr_improvement':
-        return stats['has_big_pr_improvement']  # 5+ минут
+        return stats['has_big_pr_improvement']  
 
     elif achievement_id == 'progress_streak':
-        return stats['has_progress_streak']  # 3 улучшения подряд
+        return stats['has_progress_streak']  
 
     elif achievement_id == 'record_holder':
         return stats['pr_distances_count'] >= 5
@@ -143,7 +140,6 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
     elif achievement_id == 'goal_achiever':
         return stats['target_time_achieved'] >= 5
 
-    # Активность
     elif achievement_id == 'first_result':
         return stats['total_results'] >= 1
 
@@ -180,7 +176,6 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
     elif achievement_id == 'detailer':
         return stats['detailed_results'] >= 10
 
-    # География
     elif achievement_id == 'traveler':
         return stats['different_cities'] >= 5
 
@@ -199,7 +194,6 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
     elif achievement_id == 'moscow_spb':
         return stats['moscow_spb_count'] >= 10
 
-    # Специальные
     elif achievement_id == 'bot_1_year':
         return stats['bot_usage_days'] >= 365
 
@@ -231,7 +225,7 @@ async def check_achievement_condition(user_id: int, achievement_id: str, stats: 
         return stats['charity_races'] >= 3
 
     elif achievement_id == 'early_bird':
-        return stats['early_trainings'] >= 10  # до 7:00
+        return stats['early_trainings'] >= 10  
 
     return False
 
@@ -244,7 +238,6 @@ async def get_user_stats(user_id: int) -> dict:
         Словарь со статистикой
     """
     stats = {
-        # Соревнования
         'total_competitions': 0,
         'has_10k': False,
         'has_half_marathon': False,
@@ -259,14 +252,12 @@ async def get_user_stats(user_id: int) -> dict:
         'competitions_this_year': 0,
         'competition_streak_months': 0,
 
-        # Результаты
         'podium_count': 0,
         'has_big_pr_improvement': False,
         'has_progress_streak': False,
         'pr_distances_count': 0,
         'target_time_achieved': 0,
 
-        # Активность
         'total_results': 0,
         'total_trainings': 0,
         'trainings_this_month': 0,
@@ -276,12 +267,10 @@ async def get_user_stats(user_id: int) -> dict:
         'upcoming_registrations': 0,
         'detailed_results': 0,
 
-        # География
         'different_cities': 0,
         'different_regions': 0,
         'moscow_spb_count': 0,
 
-        # Специальные
         'bot_usage_days': 0,
         'russia_running_count': 0,
         'hero_league_count': 0,
@@ -297,7 +286,6 @@ async def get_user_stats(user_id: int) -> dict:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Общее количество соревнований
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM competition_participants WHERE user_id = ?",
             (user_id,)
@@ -305,7 +293,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['total_competitions'] = row['cnt'] if row else 0
 
-        # Проверка дистанций
         async with db.execute(
             """
             SELECT DISTINCT cp.distance, c.sport_type, c.organizer, c.type, cp.place_overall, c.city
@@ -340,7 +327,6 @@ async def get_user_stats(user_id: int) -> dict:
                 if distance:
                     distances.add(distance)
 
-                    # Проверка дистанций
                     if distance == 10.0:
                         stats['has_10k'] = True
                     elif distance == 21.1:
@@ -350,7 +336,6 @@ async def get_user_stats(user_id: int) -> dict:
                     elif distance > 42.195:
                         stats['has_ultra'] = True
 
-                    # Средние дистанции (5-10 км)
                     if 5.0 <= distance <= 10.0:
                         mid_distance += 1
 
@@ -363,7 +348,6 @@ async def get_user_stats(user_id: int) -> dict:
                     elif sport == 'триатлон':
                         triathlon_count += 1
 
-                # Организаторы
                 if 'russia running' in organizer.lower():
                     russia_running += 1
                 elif 'hero' in organizer.lower() or 'лига героев' in organizer.lower():
@@ -371,15 +355,12 @@ async def get_user_stats(user_id: int) -> dict:
                 elif 'parkrun' in organizer.lower() or 'паркран' in organizer.lower():
                     parkrun += 1
 
-                # Тип
                 if 'трейл' in comp_type.lower():
                     trail += 1
 
-                # Подиумы (топ-3)
                 if place and place <= 3:
                     podium += 1
 
-                # География
                 if city:
                     cities.add(city)
                     if city.lower() in ['москва', 'санкт-петербург']:
@@ -398,7 +379,6 @@ async def get_user_stats(user_id: int) -> dict:
             stats['different_cities'] = len(cities)
             stats['moscow_spb_count'] = moscow_spb
 
-            # Проверка всех популярных дистанций
             stats['has_all_distances'] = all([
                 5.0 in distances,
                 10.0 in distances,
@@ -406,7 +386,6 @@ async def get_user_stats(user_id: int) -> dict:
                 42.195 in distances
             ])
 
-        # Соревнования за этот год
         current_year = datetime.now().year
         async with db.execute(
             """
@@ -420,10 +399,8 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['competitions_this_year'] = row['cnt'] if row else 0
 
-        # Streak соревнований (месяцы подряд)
         stats['competition_streak_months'] = await calculate_competition_streak(user_id, db)
 
-        # Количество результатов
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM competition_participants WHERE user_id = ? AND finish_time IS NOT NULL",
             (user_id,)
@@ -431,7 +408,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['total_results'] = row['cnt'] if row else 0
 
-        # Подробные результаты (с временем, местом и категорией)
         async with db.execute(
             """
             SELECT COUNT(*) as cnt
@@ -443,7 +419,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['detailed_results'] = row['cnt'] if row else 0
 
-        # Личные рекорды
         async with db.execute(
             "SELECT COUNT(DISTINCT distance) as cnt FROM personal_records WHERE user_id = ?",
             (user_id,)
@@ -451,7 +426,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['pr_distances_count'] = row['cnt'] if row else 0
 
-        # Выполнение целевого времени
         async with db.execute(
             """
             SELECT COUNT(*) as cnt
@@ -464,7 +438,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['target_time_achieved'] = row['cnt'] if row else 0
 
-        # Тренировки
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM trainings WHERE user_id = ?",
             (user_id,)
@@ -472,7 +445,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['total_trainings'] = row['cnt'] if row else 0
 
-        # Тренировки за месяц
         month_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM trainings WHERE user_id = ? AND date >= ?",
@@ -481,7 +453,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['trainings_this_month'] = row['cnt'] if row else 0
 
-        # Километраж за месяц
         async with db.execute(
             "SELECT SUM(distance) as total FROM trainings WHERE user_id = ? AND date >= ?",
             (user_id, month_ago)
@@ -489,10 +460,8 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['monthly_km'] = row['total'] if row and row['total'] else 0
 
-        # Streak тренировок (дни подряд)
         stats['training_streak_days'] = await calculate_training_streak(user_id, db)
 
-        # Утренние тренировки (до 7:00)
         async with db.execute(
             """
             SELECT COUNT(*) as cnt
@@ -504,7 +473,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['early_trainings'] = row['cnt'] if row else 0
 
-        # Регистрации через бота (всего)
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM competition_participants WHERE user_id = ?",
             (user_id,)
@@ -512,17 +480,13 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['bot_registrations'] = row['cnt'] if row else 0
 
-        # Специальные типы (для упрощения ставим 0, т.к. нет данных в БД)
-        stats['night_races'] = 0  # Нужно добавить поле в БД
-        stats['relay_count'] = 0  # Нужно добавить поле в БД
-        stats['virtual_races'] = 0  # Нужно добавить поле в БД
-        stats['charity_races'] = 0  # Нужно добавить поле в БД
+        stats['night_races'] = 0  
+        stats['relay_count'] = 0  
+        stats['virtual_races'] = 0  
+        stats['charity_races'] = 0  
 
-        # Регионы (примерная логика - нужна отдельная таблица для точности)
-        # Для упрощения используем уникальные города как прокси
         stats['different_regions'] = min(stats['different_cities'] // 2, stats['different_cities'])
 
-        # Регистрации через бота (предстоящие)
         today = datetime.now().strftime('%Y-%m-%d')
         async with db.execute(
             """
@@ -536,7 +500,6 @@ async def get_user_stats(user_id: int) -> dict:
             row = await cursor.fetchone()
             stats['upcoming_registrations'] = row['cnt'] if row else 0
 
-        # Время использования бота
         async with db.execute(
             "SELECT created_at FROM users WHERE id = ?",
             (user_id,)
@@ -546,10 +509,8 @@ async def get_user_stats(user_id: int) -> dict:
                 created = datetime.fromisoformat(row['created_at'])
                 stats['bot_usage_days'] = (datetime.now() - created).days
 
-    # Проверка больших улучшений ЛР (5+ минут)
     stats['has_big_pr_improvement'] = await check_big_pr_improvement(user_id)
 
-    # Проверка серии прогресса
     stats['has_progress_streak'] = await check_progress_streak(user_id)
 
     return stats
@@ -557,6 +518,7 @@ async def get_user_stats(user_id: int) -> dict:
 
 async def calculate_competition_streak(user_id: int, db) -> int:
     """Вычислить количество месяцев подряд с соревнованиями"""
+    # Получаем все месяцы, в которых были соревнования
     async with db.execute(
         """
         SELECT DISTINCT strftime('%Y-%m', c.date) as month
@@ -572,18 +534,18 @@ async def calculate_competition_streak(user_id: int, db) -> int:
     if not months:
         return 0
 
-    # Проверяем непрерывность
+    # Считаем серию последовательных месяцев с конца (самые свежие)
     streak = 1
     for i in range(len(months) - 1):
         current = datetime.strptime(months[i], '%Y-%m')
         next_month = datetime.strptime(months[i + 1], '%Y-%m')
 
-        # Проверяем, что следующий месяц идет сразу после текущего
+        # Проверяем что месяцы идут подряд (учитывая переход года)
         if (current.year == next_month.year and current.month == next_month.month + 1) or \
            (current.year == next_month.year + 1 and current.month == 1 and next_month.month == 12):
             streak += 1
         else:
-            break
+            break  # Серия прервана
 
     return streak
 
@@ -605,7 +567,6 @@ async def calculate_training_streak(user_id: int, db) -> int:
     if not dates:
         return 0
 
-    # Проверяем непрерывность
     streak = 1
     for i in range(len(dates) - 1):
         if (dates[i] - dates[i + 1]).days == 1:
@@ -620,6 +581,7 @@ async def check_big_pr_improvement(user_id: int) -> bool:
     """Проверить наличие улучшения ЛР на 5+ минут"""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
+        # Получаем все результаты по дистанциям в хронологическом порядке
         async with db.execute(
             """
             SELECT distance, finish_time
@@ -630,6 +592,7 @@ async def check_big_pr_improvement(user_id: int) -> bool:
             """,
             (user_id,)
         ) as cursor:
+            # Группируем результаты по дистанциям
             times_by_distance = {}
             async for row in cursor:
                 distance = row['distance']
@@ -640,7 +603,7 @@ async def check_big_pr_improvement(user_id: int) -> bool:
 
                 times_by_distance[distance].append(time_str)
 
-            # Проверяем улучшения
+            # Ищем улучшение на 5+ минут (300 секунд)
             for distance, times in times_by_distance.items():
                 for i in range(len(times) - 1):
                     old_time = parse_time(times[i])
@@ -658,6 +621,7 @@ async def check_progress_streak(user_id: int) -> bool:
     """Проверить наличие серии улучшений ЛР (3 раза подряд)"""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
+        # Получаем результаты по дистанциям
         async with db.execute(
             """
             SELECT distance, finish_time
@@ -678,19 +642,21 @@ async def check_progress_streak(user_id: int) -> bool:
 
                 times_by_distance[distance].append(time_str)
 
-            # Проверяем серии улучшений
+            # Ищем серию из 3 последовательных улучшений
             for distance, times in times_by_distance.items():
                 if len(times) < 3:
-                    continue
+                    continue  # Нужно минимум 3 результата
 
+                # Проверяем каждую тройку подряд идущих результатов
                 for i in range(len(times) - 2):
                     time1 = parse_time(times[i])
                     time2 = parse_time(times[i + 1])
                     time3 = parse_time(times[i + 2])
 
+                    # Каждый следующий результат должен быть лучше предыдущего
                     if time1 and time2 and time3:
                         if time2 < time1 and time3 < time2:
-                            return True
+                            return True  # Нашли серию улучшений
 
     return False
 
@@ -785,10 +751,8 @@ async def get_achievement_leaderboard(limit: int = 10) -> List[dict]:
             """,
             (str(list(ACHIEVEMENTS.keys())), str({k: v for k, v in ACHIEVEMENTS.items()}), limit)
         ) as cursor:
-            # Упрощенный запрос без JSON функций
             pass
 
-        # Используем более простой подход
         async with db.execute(
             """
             SELECT
@@ -819,7 +783,6 @@ async def get_achievement_leaderboard(limit: int = 10) -> List[dict]:
                     'total_points': total_points
                 })
 
-            # Пересортируем с учетом очков
             leaders.sort(key=lambda x: (x['achievement_count'], x['total_points']), reverse=True)
 
             return leaders

@@ -27,7 +27,6 @@ async def check_and_send_birthday_greetings(bot: Bot):
 
         logger.info(f"Checking birthdays for {current_day:02d}.{current_month:02d}")
 
-        # Получаем всех пользователей с днями рождения
         users_with_birthdays = await get_all_users_with_birthdays()
 
         if not users_with_birthdays:
@@ -40,21 +39,17 @@ async def check_and_send_birthday_greetings(bot: Bot):
             user_id = user['user_id']
             birth_date = user['birth_date']
 
-            # Проверяем, совпадает ли день и месяц рождения с сегодняшним днём
             if birth_date.day == current_day and birth_date.month == current_month:
                 try:
-                    # Получаем персональное поздравление для пользователя
                     greeting = get_birthday_greeting_for_user(user_id)
 
-                    # Вычисляем возраст
+                    # Вычисляем возраст с учетом того, был ли уже день рождения в этом году
                     age = today.year - birth_date.year
                     if (today.month, today.day) < (birth_date.month, birth_date.day):
                         age -= 1
 
-                    # Формируем полное сообщение с возрастом
                     full_message = f"{greeting}\n\n🎂 Тебе исполнилось {age} лет!"
 
-                    # Отправляем поздравление
                     await bot.send_message(
                         chat_id=user_id,
                         text=full_message
@@ -87,29 +82,24 @@ async def schedule_birthday_check(bot: Bot):
     while True:
         try:
             now = datetime.now()
-            target_time = time(9, 0)  # 9:10 утра
+            target_time = time(9, 0)
 
-            # Вычисляем время до следующей проверки
             from datetime import timedelta
             target_datetime = datetime.combine(now.date(), target_time)
 
-            # Если текущее время уже прошло 9:10, планируем на следующий день
+            # Если уже прошло время проверки сегодня, запланируем на завтра
             if now.time() >= target_time:
                 target_datetime = datetime.combine(now.date() + timedelta(days=1), target_time)
 
-            # Вычисляем задержку в секундах
             delay = (target_datetime - now).total_seconds()
 
             logger.info(f"Next birthday check scheduled at {target_datetime.strftime('%Y-%m-%d %H:%M:%S')} (in {delay:.0f} seconds)")
 
-            # Ждём до запланированного времени
             await asyncio.sleep(delay)
 
-            # Выполняем проверку дней рождения
             logger.info("Running scheduled birthday check")
             await check_and_send_birthday_greetings(bot)
 
         except Exception as e:
             logger.error(f"Error in schedule_birthday_check: {e}")
-            # В случае ошибки ждём 1 час перед повторной попыткой
             await asyncio.sleep(3600)

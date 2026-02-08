@@ -8,44 +8,44 @@ from aiogram.fsm.state import State, StatesGroup
 class TrainingPlanStates(StatesGroup):
     """Состояния для создания тренировочного плана"""
 
-    waiting_for_sport_type = State()        # Выбор вида спорта
-    waiting_for_plan_duration = State()     # Длительность плана (неделя/месяц)
-    waiting_for_available_days = State()    # Доступные дни для тренировок (множественный выбор)
+    waiting_for_sport_type = State()        
+    waiting_for_plan_duration = State()     
+    waiting_for_available_days = State()    
 
 
 class CorrectionStates(StatesGroup):
     """Состояния для коррекции тренировки"""
 
-    selecting_training = State()            # Выбор тренировки для коррекции
-    waiting_for_feedback = State()          # Обратная связь (легко/тяжело/пульс)
-    waiting_for_comment = State()           # Дополнительный комментарий
+    selecting_training = State()            
+    waiting_for_feedback = State()          
+    waiting_for_comment = State()           
 
 
 class RacePreparationStates(StatesGroup):
     """Состояния для подготовки к соревнованию"""
 
-    selecting_competition = State()         # Выбор соревнования
-    selecting_days_before = State()         # За сколько дней (7/5/3/1)
-    waiting_for_target_time = State()       # Ожидание ввода целевого времени
+    selecting_competition = State()         
+    selecting_days_before = State()         
+    waiting_for_target_time = State()       
 
 
 class RaceTacticsStates(StatesGroup):
     """Состояния для тактики забега"""
 
-    selecting_competition = State()         # Выбор соревнования
-    waiting_for_target_time = State()       # Целевое время
-    waiting_for_race_type = State()         # Тип трассы
+    selecting_competition = State()         
+    waiting_for_target_time = State()       
+    waiting_for_race_type = State()         
 
 
 class PsychologistStates(StatesGroup):
     """Состояния для психологической поддержки"""
 
-    waiting_for_problem = State()           # Описание проблемы/переживания
-    in_conversation = State()               # Продолжение диалога
+    waiting_for_problem = State()           
+    in_conversation = State()               
 
 
 class ResultPredictionStates(StatesGroup):
     """Состояния для прогноза результата"""
 
-    waiting_for_distance = State()          # Дистанция для прогноза
-    waiting_for_analysis_period = State()   # Период анализа (месяц/2 недели)
+    waiting_for_distance = State()          
+    waiting_for_analysis_period = State()   

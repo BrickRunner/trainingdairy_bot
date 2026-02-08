@@ -52,7 +52,6 @@ def escape_markdown(text: str) -> str:
     """
     if not text:
         return text
-    # Экранируем специальные символы Markdown
     special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
@@ -106,34 +105,27 @@ async def show_my_rating(callback: CallbackQuery):
 
     user_id = callback.from_user.id
 
-    # Получаем уровень пользователя
     user_level = await get_user_level(user_id) or 'новичок'
     level_emoji = get_level_emoji(user_level)
     level_data = get_level_info(user_level)
 
-    # Получаем статистику тренировок
     stats = await get_user_training_stats_for_level(user_id)
 
-    # Получаем информацию о следующем уровне
     next_level = get_next_level_info(user_level, stats['avg_per_week'])
 
-    # Получаем рейтинг
     rating = await get_user_rating(user_id)
 
-    # Получаем достижения
     achievements_count = await get_user_achievements_count(user_id)
     achievements_points = await get_user_achievement_points(user_id)
 
     text = f"{level_emoji} **Ваш уровень: {user_level.capitalize()}**\n\n"
 
-    # Добавляем статистику по тренировкам
     if stats['total_trainings'] > 0:
         text += (
             f"📅 **Эта неделя:** {stats['current_week_trainings']} тренировок\n"
             f"💪 Всего тренировок: {stats['total_trainings']}\n"
         )
 
-        # Информация о следующем уровне
         if next_level['has_next']:
             trainings_needed = int(next_level['trainings_needed'])
             if trainings_needed > 0:
@@ -148,13 +140,11 @@ async def show_my_rating(callback: CallbackQuery):
     else:
         text += "Добавьте тренировки, чтобы повысить уровень!\n"
 
-    # Рейтинговые очки (от тренировок и соревнований)
     text += "\n━━━━━━━━━━━━━━━━\n📊 **Рейтинг** (от тренировок и соревнований)\n\n"
 
     if not rating or rating['points'] == 0:
         text += "У вас пока нет рейтинговых очков.\n"
     else:
-        # Получаем места в разных рейтингах
         global_rank = await get_user_rank(user_id, 'global')
         week_rank = await get_user_rank(user_id, 'week')
         month_rank = await get_user_rank(user_id, 'month')
@@ -178,7 +168,6 @@ async def show_my_rating(callback: CallbackQuery):
         if season_rank:
             text += f" (#{season_rank})"
 
-    # Достижения (отдельная система баллов)
     text += "\n\n━━━━━━━━━━━━━━━━\n🎖️ **Достижения**\n\n"
     text += f"Получено: {achievements_count}/55\n"
     text += f"Баллы достижений: {achievements_points}\n"
@@ -214,7 +203,7 @@ async def show_top10(callback: CallbackQuery):
     for i, user in enumerate(rankings, 1):
         medal = medals[i-1] if i <= 3 else f"{i}."
         name = user.get('name') or user.get('username') or 'Пользователь'
-        name = escape_markdown(name)  # Экранируем имя
+        name = escape_markdown(name)  
         points = user.get('points', 0)
         trainings = user.get('total_trainings', 0)
 
@@ -245,7 +234,6 @@ async def show_period_ranking(callback: CallbackQuery):
     """Показать рейтинг за выбранный период"""
     period = callback.data.split(":")[-1]
 
-    # Получаем рейтинг в зависимости от периода
     if period == "week":
         rankings = await get_weekly_rankings(limit=10)
         title = "📅 Рейтинг за неделю"
@@ -256,7 +244,7 @@ async def show_period_ranking(callback: CallbackQuery):
         rankings = await get_seasonal_rankings(limit=10)
         season_name = get_season_name()
         title = f"🌸 Рейтинг за сезон ({season_name})"
-    else:  # global
+    else:  
         rankings = await get_global_rankings(limit=10)
         title = "🌍 Глобальный рейтинг"
 
@@ -276,7 +264,7 @@ async def show_period_ranking(callback: CallbackQuery):
     for i, user in enumerate(rankings, 1):
         medal = medals[i-1] if i <= 3 else f"{i}."
         name = user.get('name') or user.get('username') or 'Пользователь'
-        name = escape_markdown(name)  # Экранируем имя
+        name = escape_markdown(name)  
         points = user.get('points', 0)
 
         text += f"{medal} **{name}** — {points:.1f} очков\n"
@@ -316,11 +304,9 @@ async def show_category_achievements(callback: CallbackQuery):
     user_id = callback.from_user.id
     category = callback.data.split(":")[-1]
 
-    # Получаем достижения пользователя
     user_achievements = await get_user_achievements(user_id)
     user_achievement_ids = [ach['name'] for ach in user_achievements]
 
-    # Формируем текст с достижениями категории
     cat_data = ACHIEVEMENT_CATEGORIES.get(category)
     if not cat_data:
         await callback.answer("Категория не найдена")
@@ -328,15 +314,12 @@ async def show_category_achievements(callback: CallbackQuery):
 
     text = get_category_achievements_text(category, user_achievement_ids)
 
-    # Разбиваем на части если текст слишком длинный
     if len(text) > 4000:
-        # Отправляем первую часть
         await callback.message.edit_text(
             text[:4000],
             reply_markup=get_back_to_achievements_categories_keyboard(),
             parse_mode="Markdown"
         )
-        # Отправляем продолжение
         if len(text) > 4000:
             await callback.message.answer(
                 text[4000:],

@@ -21,7 +21,6 @@ def format_qualification(qualification: Optional[str]) -> str:
     if not qualification:
         return "-"
 
-    # Заменяем старые обозначения на новые
     qual_lower = qualification.lower().strip()
 
     if qual_lower == "бр":
@@ -29,7 +28,6 @@ def format_qualification(qualification: Optional[str]) -> str:
     elif qual_lower == "нет разряда":
         return "Нет разряда"
 
-    # Возвращаем как есть для остальных разрядов
     return qualification
 
 
@@ -117,7 +115,7 @@ def get_competition_card_keyboard(
     builder.row(
         InlineKeyboardButton(
             text="🌐 Официальный сайт",
-            url=f"comp_url_{competition_id}"  # Будет заменён на реальный URL
+            url=f"comp_url_{competition_id}"  
         )
     )
 
@@ -129,7 +127,6 @@ def get_competition_card_keyboard(
     return builder.as_markup()
 
 
-# УСТАРЕВШАЯ ФУНКЦИЯ - удалена, используйте async версию ниже
 
 
 def get_my_competitions_menu() -> InlineKeyboardMarkup:
@@ -262,18 +259,15 @@ def get_pagination_keyboard(
 
     buttons = []
 
-    # Кнопка "Предыдущая"
     if page > 1:
         buttons.append(
             InlineKeyboardButton(text="◀️", callback_data=f"{callback_prefix}:{page-1}")
         )
 
-    # Показываем текущую страницу
     buttons.append(
         InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop")
     )
 
-    # Кнопка "Следующая"
     if page < total_pages:
         buttons.append(
             InlineKeyboardButton(text="▶️", callback_data=f"{callback_prefix}:{page+1}")
@@ -317,7 +311,6 @@ def format_competition_distance(distance: float) -> str:
     Returns:
         Отформатированная строка
     """
-    # Для дистанций менее 1 км показываем в метрах
     if distance < 1.0:
         distance_meters = int(distance * 1000)
         return f"{distance_meters} м"
@@ -345,7 +338,6 @@ async def get_distance_selection_keyboard(competition_id: int, distances: List[f
     builder = InlineKeyboardBuilder()
 
     for distance in sorted(distances, reverse=True):
-        # Используем async функцию с учетом настроек пользователя
         text = await format_dist_with_units(distance, user_id)
         builder.row(
             InlineKeyboardButton(
@@ -376,6 +368,7 @@ def format_time_until_competition(competition_date: str) -> str:
         today = date.today()
         delta = (comp_date - today).days
 
+        # Разные форматы вывода в зависимости от того, сколько дней осталось
         if delta < 0:
             return "Завершено"
         elif delta == 0:
@@ -383,16 +376,19 @@ def format_time_until_competition(competition_date: str) -> str:
         elif delta == 1:
             return "Через 1 день"
         elif delta < 7:
-            # Правильное склонение: 2 дня, 3 дня, 4 дня, 5 дней, 6 дней
+            # Правильное склонение слова "день": 2-4 дня, 5-6 дней
             day_word = "дня" if 2 <= delta <= 4 else "дней"
             return f"Через {delta} {day_word}"
         elif delta < 30:
+            # Показываем в неделях
             weeks = delta // 7
             return f"Через {weeks} нед."
         elif delta < 365:
+            # Показываем в месяцах
             months = delta // 30
             return f"Через {months} мес."
         else:
+            # Показываем в годах
             years = delta // 365
             return f"Через {years} г."
     except:
@@ -416,7 +412,7 @@ def get_month_selection_keyboard() -> InlineKeyboardMarkup:
             callback_data=f"comp:month:{month_num}"
         )
 
-    builder.adjust(3)  # 3 кнопки в ряд
+    builder.adjust(3)  
 
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="comp:search")
@@ -433,7 +429,6 @@ def get_statistics_menu(period: str = None) -> InlineKeyboardMarkup:
     """
     builder = InlineKeyboardBuilder()
 
-    # Кнопки выбора периода (только 3 варианта)
     builder.row(
         InlineKeyboardButton(
             text="✅ Месяц" if period == 'month' else "📅 Месяц",

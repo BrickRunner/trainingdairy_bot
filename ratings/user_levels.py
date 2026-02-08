@@ -6,15 +6,13 @@ from typing import Dict, Tuple
 from datetime import datetime, timedelta
 
 
-# Определение уровней на основе количества тренировок за текущую неделю
 LEVELS = {
     'новичок': {'min': 0, 'max': 2, 'emoji': '🌱'},
     'любитель': {'min': 3, 'max': 4, 'emoji': '💪'},
     'профи': {'min': 5, 'max': 5, 'emoji': '🏃'},
-    'элитный': {'min': 6, 'max': 100, 'emoji': '⭐'}  # 6-7+ тренировок за неделю
+    'элитный': {'min': 6, 'max': 100, 'emoji': '⭐'}  
 }
 
-# Количество недель для сохранения уровня без тренировок
 LEVEL_RETENTION_WEEKS = 3
 
 
@@ -32,7 +30,6 @@ def get_level_by_avg_trainings(trainings_this_week: float) -> str:
         if level_data['min'] <= trainings_this_week <= level_data['max']:
             return level_name
 
-    # По умолчанию - новичок
     return 'новичок'
 
 
@@ -105,14 +102,11 @@ def should_downgrade_level(last_training_date: datetime, current_level: str) -> 
         Кортеж (нужно_понизить, новый_уровень)
     """
     if current_level == 'новичок':
-        # Новичка нельзя понизить ниже
         return False, current_level
 
-    # Проверяем, прошло ли больше LEVEL_RETENTION_WEEKS недель с последней тренировки
     weeks_since_last = (datetime.now() - last_training_date).days / 7
 
     if weeks_since_last > LEVEL_RETENTION_WEEKS:
-        # Понижаем на один уровень
         levels_list = ['новичок', 'любитель', 'профи', 'элитный']
         current_index = levels_list.index(current_level)
 
@@ -142,7 +136,6 @@ def get_next_level_info(current_level: str, current_avg: float) -> Dict[str, any
         current_index = 0
 
     if current_index >= len(levels_list) - 1:
-        # Максимальный уровень достигнут
         return {
             'has_next': False,
             'next_level': None,

@@ -21,7 +21,6 @@ def parse_time_to_seconds(time_str: str) -> float:
     """
     time_str = str(time_str).strip()
 
-    # Формат ч:мм:сс (например 1:06:05)
     if time_str.count(':') == 2:
         parts = time_str.split(':')
         hours = int(parts[0])
@@ -29,14 +28,12 @@ def parse_time_to_seconds(time_str: str) -> float:
         seconds = int(parts[2])
         return hours * 3600 + minutes * 60 + seconds
 
-    # Формат мм:сс (например 32:03)
     if ':' in time_str:
         parts = time_str.split(':')
         minutes = int(parts[0])
         seconds = int(parts[1])
         return minutes * 60 + seconds
 
-    # Только секунды
     return float(time_str)
 
 
@@ -49,9 +46,8 @@ def get_frs24_cycling_standards() -> List[Dict]:
     """
     standards = []
 
-    # МУЖЧИНЫ - Индивидуальная гонка на время
     male_individual = {
-        50: {  # км
+        50: {  
             'МС': '1:06:05', 'КМС': '1:09:30', 'I': '1:15:39',
             'II': '1:21:30', 'III': '1:31:00'
         },
@@ -75,7 +71,6 @@ def get_frs24_cycling_standards() -> List[Dict]:
         }
     }
 
-    # МУЖЧИНЫ - Парная гонка
     male_team = {
         50: {
             'МС': '1:02:55', 'КМС': '1:06:50', 'I': '1:12:30',
@@ -88,7 +83,6 @@ def get_frs24_cycling_standards() -> List[Dict]:
         }
     }
 
-    # ЖЕНЩИНЫ - Индивидуальная гонка на время
     female_individual = {
         25: {
             'МС': '36:30', 'КМС': '38:50', 'I': '41:55',
@@ -115,7 +109,6 @@ def get_frs24_cycling_standards() -> List[Dict]:
         }
     }
 
-    # ЖЕНЩИНЫ - Парная гонка
     female_team = {
         50: {
             'МС': '1:11:50', 'КМС': '1:16:20', 'I': '1:22:15',
@@ -127,7 +120,6 @@ def get_frs24_cycling_standards() -> List[Dict]:
         }
     }
 
-    # Конвертируем в список
     datasets = [
         (male_individual, 'male', 'индивидуальная гонка'),
         (male_team, 'male', 'парная гонка'),
@@ -150,11 +142,9 @@ def get_frs24_cycling_standards() -> List[Dict]:
 
 
 if __name__ == "__main__":
-    # Тест
     standards = get_frs24_cycling_standards()
     print(f"Всего нормативов: {len(standards)}")
 
-    # Примеры
     print("\nПримеры (мужчины, индивидуальная гонка, 25 км):")
     for s in standards:
         if (s['distance'] == 25 and s['discipline'] == 'индивидуальная гонка' and
@@ -171,7 +161,6 @@ if __name__ == "__main__":
             seconds = int(s['time_seconds'] % 60)
             print(f"  {s['rank']}: {minutes}:{seconds:02d}")
 
-    # Статистика
     print("\n\nСтатистика:")
     disciplines = set(s['discipline'] for s in standards)
     print(f"Дисциплины: {', '.join(disciplines)}")

@@ -2,13 +2,13 @@
 Модели базы данных (схемы таблиц)
 """
 
-# SQL-схемы для создания таблиц
+# ==================== ОСНОВНЫЕ ТАБЛИЦЫ ====================
 
 CREATE_USERS_TABLE = """
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY,  -- Telegram ID пользователя
     username TEXT NOT NULL,
-    level TEXT DEFAULT 'новичок',
+    level TEXT DEFAULT 'новичок',  -- Уровень активности (новичок, любитель, профи, элитный)
     level_updated_week TEXT,  -- Неделя последнего обновления уровня (формат: YYYY-WW)
     weight REAL,
     pulse_norm INTEGER,
@@ -20,28 +20,41 @@ CREATE_TRAININGS_TABLE = """
 CREATE TABLE IF NOT EXISTS trainings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    type TEXT NOT NULL,
+    type TEXT NOT NULL,  -- Тип тренировки (кросс, плавание, велосипед, силовая и т.д.)
     date DATE NOT NULL,
-    time TEXT,
-    duration INTEGER,  -- Nullable для запланированных тренировок
+    time TEXT,  -- Время начала тренировки
+    duration INTEGER,  -- Длительность в минутах (nullable для запланированных)
+
+    -- Данные о дистанции и темпе
     distance REAL,
-    avg_pace TEXT,
-    pace_unit TEXT,
+    avg_pace TEXT,  -- Средний темп (мин/км или мин/миля)
+    pace_unit TEXT,  -- Единица темпа
+
+    -- Пульсовые данные
     avg_pulse INTEGER,
     max_pulse INTEGER,
-    exercises TEXT,
-    intervals TEXT,
-    calculated_volume REAL,
+
+    -- Специфичные поля для разных типов тренировок
+    exercises TEXT,  -- Упражнения для силовых тренировок
+    intervals TEXT,  -- Описание интервалов
+    calculated_volume REAL,  -- Расчетный объем (для плавания, велосипеда)
+
+    -- Дополнительная информация
     description TEXT,
     results TEXT,
     comment TEXT,
-    fatigue_level INTEGER,
+    fatigue_level INTEGER,  -- Уровень усталости (1-5)
+
+    -- Связь с тренером
     added_by_coach_id INTEGER,  -- ID тренера, если тренировка добавлена тренером
     is_planned INTEGER DEFAULT 0,  -- 1 если это запланированная тренировка
-    swimming_location TEXT,  -- Место плавания: 'бассейн' или 'открытая вода'
+
+    -- Специфичные поля для плавания
+    swimming_location TEXT,  -- Место: 'бассейн' или 'открытая вода'
     pool_length INTEGER,  -- Длина бассейна: 25 или 50 метров
     swimming_styles TEXT,  -- JSON массив стилей плавания
-    swimming_sets TEXT,  -- Описание отрезков для плавания
+    swimming_sets TEXT,  -- Описание отрезков
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (added_by_coach_id) REFERENCES users(id)
@@ -52,31 +65,31 @@ CREATE_COMPETITIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS competitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    -- Основная информация
+    -- Основная информация о соревновании
     name TEXT NOT NULL,
     date DATE NOT NULL,
     city TEXT,
     country TEXT DEFAULT 'Россия',
-    location TEXT,
+    location TEXT,  -- Место проведения
 
     -- Детали соревнования
-    distances TEXT,  -- JSON массив: ["42.195", "21.1", "10", "5"]
-    type TEXT,  -- 'марафон', 'полумарафон', 'трейл', 'забег', 'ультра'
-    sport_type TEXT DEFAULT 'бег',  -- 'бег', 'велоспорт', 'плавание', 'триатлон'
+    distances TEXT,  -- JSON массив дистанций: ["42.195", "21.1", "10", "5"]
+    type TEXT,  -- Тип: марафон, полумарафон, трейл, забег, ультра
+    sport_type TEXT DEFAULT 'бег',  -- Вид спорта: бег, велоспорт, плавание, триатлон
     description TEXT,
-    official_url TEXT,
+    official_url TEXT,  -- Ссылка на официальный сайт
 
-    -- Организатор
-    organizer TEXT,  -- 'Беговое сообщество', 'Russia Running', 'Лига героев' и т.д.
+    -- Организатор соревнования
+    organizer TEXT,  -- Беговое сообщество, Russia Running, Лига героев и т.д.
 
-    -- Статусы
-    registration_status TEXT DEFAULT 'unknown',  -- 'open', 'closed', 'upcoming', 'unknown'
-    status TEXT DEFAULT 'upcoming',  -- 'upcoming', 'ongoing', 'finished', 'cancelled'
+    -- Статусы регистрации и проведения
+    registration_status TEXT DEFAULT 'unknown',  -- open, closed, upcoming, unknown
+    status TEXT DEFAULT 'upcoming',  -- upcoming, ongoing, finished, cancelled
 
-    -- Метаданные
-    created_by INTEGER,  -- user_id создателя (если это пользовательское)
-    is_official BOOLEAN DEFAULT 0,  -- официальное или созданное пользователем
-    source_url TEXT,  -- URL источника данных
+    -- Метаданные и источник
+    created_by INTEGER,  -- user_id создателя (для пользовательских соревнований)
+    is_official BOOLEAN DEFAULT 0,  -- 0=пользовательское, 1=официальное
+    source_url TEXT,  -- URL источника данных (для идентификации)
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -92,39 +105,40 @@ CREATE TABLE IF NOT EXISTS competition_participants (
     competition_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
 
-    -- Выбор дистанции и цели
-    distance REAL,  -- выбранная дистанция (42.195, 21.1, 10, 5 и т.д.)
-    distance_name TEXT,  -- название дистанции (для комплексных дистанций типа акватлон)
-    target_time TEXT,  -- целевое время (HH:MM:SS)
+    -- Выбранная дистанция и целевое время
+    distance REAL,  -- Дистанция в км (42.195, 21.1, 10, 5)
+    distance_name TEXT,  -- Название (для комплексных: акватлон, дуатлон)
+    target_time TEXT,  -- Целевое время в формате HH:MM:SS
 
-    -- Результат после забега
-    finish_time TEXT,  -- финишное время (HH:MM:SS)
-    place_overall INTEGER,  -- место в общем зачёте
-    place_age_category INTEGER,  -- место в возрастной категории
-    age_category TEXT,  -- возрастная категория (например M30-39)
-    heart_rate INTEGER,  -- средний пульс во время забега
-    qualification TEXT,  -- выполненный разряд (КМС, МС, МСМК и т.д.)
-    result_comment TEXT,  -- впечатления
-    result_photo TEXT,  -- путь к фото финишера
+    -- Результаты после финиша
+    finish_time TEXT,  -- Фактическое время финиша HH:MM:SS
+    place_overall INTEGER,  -- Место в общем зачете
+    place_age_category INTEGER,  -- Место в возрастной категории
+    age_category TEXT,  -- Возрастная категория (M30-39, F25-29)
+    heart_rate INTEGER,  -- Средний пульс на дистанции
+    qualification TEXT,  -- Выполненный разряд (КМС, МС, МСМК)
+    result_comment TEXT,  -- Комментарий о впечатлениях
+    result_photo TEXT,  -- Путь к фото финишера
 
-    -- Статусы
-    status TEXT DEFAULT 'registered',  -- 'registered', 'dns' (не стартовал), 'dnf' (не финишировал), 'finished'
+    -- Статус участия
+    status TEXT DEFAULT 'registered',  -- registered, dns (не вышел), dnf (не финишировал), finished
 
-    -- Предложение от тренера
-    proposed_by_coach INTEGER DEFAULT 0,  -- 1 если предложено тренером
-    proposed_by_coach_id INTEGER,  -- ID тренера, предложившего соревнование
-    proposal_status TEXT,  -- 'pending', 'accepted', 'rejected'
+    -- Связь с тренером (если тренер предложил соревнование)
+    proposed_by_coach INTEGER DEFAULT 0,  -- 1=предложено тренером
+    proposed_by_coach_id INTEGER,  -- ID тренера
+    proposal_status TEXT,  -- pending (ожидает), accepted (принято), rejected (отклонено)
 
-    -- Напоминания
-    reminders_enabled INTEGER DEFAULT 1,  -- Включены ли напоминания
+    -- Настройки уведомлений
+    reminders_enabled INTEGER DEFAULT 1,  -- 1=напоминания включены
 
-    -- Даты
+    -- Временные метки
     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     result_added_at TIMESTAMP,
 
     FOREIGN KEY (competition_id) REFERENCES competitions(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (proposed_by_coach_id) REFERENCES users(id),
+    -- Один пользователь может участвовать на нескольких дистанциях одного соревнования
     UNIQUE(competition_id, user_id, distance, distance_name)
 )
 """
@@ -133,8 +147,8 @@ CREATE_ACHIEVEMENTS_TABLE = """
 CREATE TABLE IF NOT EXISTS achievements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    date_awarded DATE DEFAULT CURRENT_DATE,
+    name TEXT NOT NULL,  -- Название достижения (ключ из achievements_data.py)
+    date_awarded DATE DEFAULT CURRENT_DATE,  -- Дата получения
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 """
@@ -143,12 +157,15 @@ CREATE_RATINGS_TABLE = """
 CREATE TABLE IF NOT EXISTS ratings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER UNIQUE NOT NULL,
-    sport_type TEXT DEFAULT 'общий',
-    points REAL DEFAULT 0,
-    global_rank INTEGER,
-    week_points REAL DEFAULT 0,
-    month_points REAL DEFAULT 0,
-    season_points REAL DEFAULT 0,
+    sport_type TEXT DEFAULT 'общий',  -- Тип спорта для рейтинга
+
+    -- Очки за разные периоды
+    points REAL DEFAULT 0,  -- Общие очки за всё время
+    global_rank INTEGER,  -- Глобальное место
+    week_points REAL DEFAULT 0,  -- Очки за текущую неделю
+    month_points REAL DEFAULT 0,  -- Очки за текущий месяц
+    season_points REAL DEFAULT 0,  -- Очки за текущий сезон
+
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
@@ -159,13 +176,19 @@ CREATE TABLE IF NOT EXISTS coach_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     coach_id INTEGER NOT NULL,
     student_id INTEGER NOT NULL,
-    status TEXT DEFAULT 'active',  -- 'active', 'pending', 'removed'
-    link_code TEXT UNIQUE,
-    coach_nickname TEXT,  -- Псевдоним ученика (виден только тренеру)
+
+    -- Статус связи и уникальный код
+    status TEXT DEFAULT 'active',  -- active, pending, removed
+    link_code TEXT UNIQUE,  -- Уникальный код для подключения
+    coach_nickname TEXT,  -- Псевдоним ученика (видит только тренер)
+
+    -- Временные метки
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     removed_at TIMESTAMP,
+
     FOREIGN KEY (coach_id) REFERENCES users(id),
     FOREIGN KEY (student_id) REFERENCES users(id),
+    -- Один тренер может быть связан с одним учеником только один раз
     UNIQUE(coach_id, student_id)
 )
 """
@@ -174,7 +197,7 @@ CREATE_TRAINING_COMMENTS_TABLE = """
 CREATE TABLE IF NOT EXISTS training_comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     training_id INTEGER NOT NULL,
-    author_id INTEGER NOT NULL,
+    author_id INTEGER NOT NULL,  -- ID автора комментария (обычно тренер)
     comment TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -189,24 +212,25 @@ CREATE TABLE IF NOT EXISTS health_metrics (
     user_id INTEGER NOT NULL,
     date DATE NOT NULL,
 
-    -- Утренние показатели
-    morning_pulse INTEGER,
-    weight REAL,
-    sleep_duration REAL,  -- в часах (например, 7.5)
-    sleep_quality INTEGER, -- 1-5 (1=плохо, 5=отлично)
+    -- Утренние физические показатели
+    morning_pulse INTEGER,  -- Утренний пульс в покое
+    weight REAL,  -- Вес в кг или фунтах
+    sleep_duration REAL,  -- Продолжительность сна в часах (7.5, 8.0)
+    sleep_quality INTEGER,  -- Качество сна по шкале 1-5
 
-    -- Дополнительные показатели
-    mood INTEGER, -- 1-5
-    stress_level INTEGER, -- 1-5
-    energy_level INTEGER, -- 1-5
+    -- Психологические показатели (шкала 1-5)
+    mood INTEGER,  -- Настроение
+    stress_level INTEGER,  -- Уровень стресса
+    energy_level INTEGER,  -- Уровень энергии
 
-    -- Заметки
+    -- Дополнительные заметки
     notes TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id),
+    -- Один пользователь может иметь только одну запись на одну дату
     UNIQUE(user_id, date)
 )
 """
@@ -214,65 +238,58 @@ CREATE TABLE IF NOT EXISTS health_metrics (
 CREATE_USER_SETTINGS_TABLE = """
 CREATE TABLE IF NOT EXISTS user_settings (
     user_id INTEGER PRIMARY KEY,
-    
-    -- Персональные данные
+
+    -- Персональные данные пользователя
     name TEXT,
     birth_date DATE,
-    gender TEXT,
+    gender TEXT,  -- male, female
     weight REAL,
     height REAL,
-    
-    -- Основные типы тренировок (JSON массив)
+
+    -- Основные типы тренировок (JSON массив: ["кросс", "плавание"])
     main_training_types TEXT DEFAULT '["кросс"]',
-    
-    -- Пульсовые зоны (автоматически или вручную)
-    max_pulse INTEGER,
-    zone1_min INTEGER,
-    zone1_max INTEGER,
-    zone2_min INTEGER,
-    zone2_max INTEGER,
-    zone3_min INTEGER,
-    zone3_max INTEGER,
-    zone4_min INTEGER,
-    zone4_max INTEGER,
-    zone5_min INTEGER,
-    zone5_max INTEGER,
-    
+
+    -- Пульсовые зоны (рассчитываются автоматически или задаются вручную)
+    max_pulse INTEGER,  -- Максимальный пульс
+    zone1_min INTEGER, zone1_max INTEGER,  -- Зона 1: восстановительная (50-60%)
+    zone2_min INTEGER, zone2_max INTEGER,  -- Зона 2: аэробная (60-70%)
+    zone3_min INTEGER, zone3_max INTEGER,  -- Зона 3: темповая (70-80%)
+    zone4_min INTEGER, zone4_max INTEGER,  -- Зона 4: пороговая (80-90%)
+    zone5_min INTEGER, zone5_max INTEGER,  -- Зона 5: максимальная (90-100%)
+
     -- Целевые показатели
-    weekly_volume_goal REAL,
-    weekly_trainings_goal INTEGER,
-    weight_goal REAL,
-    
-    -- Цели по типам тренировок (JSON объект)
-    -- {"кросс": 30, "плавание": 5, "силовая": 2}
+    weekly_volume_goal REAL,  -- Цель по недельному объему (км)
+    weekly_trainings_goal INTEGER,  -- Цель по количеству тренировок в неделю
+    weight_goal REAL,  -- Целевой вес
+
+    -- Цели по типам тренировок (JSON: {"кросс": 30, "плавание": 5})
     training_type_goals TEXT DEFAULT '{}',
-    
+
     -- Единицы измерения
-    distance_unit TEXT DEFAULT 'км',
-    weight_unit TEXT DEFAULT 'кг',
+    distance_unit TEXT DEFAULT 'км',  -- км или мили
+    weight_unit TEXT DEFAULT 'кг',  -- кг или фунты
     date_format TEXT DEFAULT 'ДД.ММ.ГГГГ',
     timezone TEXT DEFAULT 'Europe/Moscow',
 
-    -- Уведомления
-    daily_pulse_weight_time TEXT,
+    -- Настройки уведомлений
+    daily_pulse_weight_time TEXT,  -- Время ежедневного напоминания
     weekly_report_day TEXT DEFAULT 'Понедельник',
     weekly_report_time TEXT DEFAULT '09:00',
-    last_goal_notification_week TEXT,  -- Неделя последнего уведомления о достижении цели (формат: YYYY-WW) - DEPRECATED, используем goal_notifications
-    goal_notifications TEXT,  -- JSON с информацией о достигнутых целях {week: {goal_type: True/False}}
+    last_goal_notification_week TEXT,  -- DEPRECATED
+    goal_notifications TEXT,  -- JSON с достигнутыми целями
 
     -- Напоминания о тренировках
-    training_reminders_enabled INTEGER DEFAULT 0,  -- Включены ли напоминания о тренировках
-    training_reminder_days TEXT DEFAULT '[]',  -- JSON массив с днями недели для напоминаний
-    training_reminder_time TEXT,  -- Время напоминания (HH:MM)
+    training_reminders_enabled INTEGER DEFAULT 0,  -- 0=выключены, 1=включены
+    training_reminder_days TEXT DEFAULT '[]',  -- JSON массив дней недели
+    training_reminder_time TEXT,  -- Время напоминания HH:MM
 
     -- Режим тренера
-    is_coach BOOLEAN DEFAULT 0,  -- Является ли пользователь тренером
+    is_coach BOOLEAN DEFAULT 0,  -- 1 если пользователь - тренер
     coach_link_code TEXT UNIQUE,  -- Уникальный код для подключения учеников
-    
-    -- Дата создания и обновления
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 """
@@ -282,20 +299,20 @@ CREATE TABLE IF NOT EXISTS personal_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     user_id INTEGER NOT NULL,
-    distance REAL NOT NULL,  -- 5, 10, 21.1, 42.195 и т.д.
+    distance REAL NOT NULL,  -- Дистанция в км (5, 10, 21.1, 42.195)
 
-    -- Лучший результат
-    best_time TEXT NOT NULL,  -- лучшее время (HH:MM:SS)
-    competition_id INTEGER,  -- на каком соревновании установлен (если есть)
-    date DATE NOT NULL,  -- дата установления рекорда
-    qualification TEXT,  -- выполненный разряд (КМС, МС, МСМК и т.д.)
+    -- Данные о лучшем результате
+    best_time TEXT NOT NULL,  -- Лучшее время в формате HH:MM:SS
+    competition_id INTEGER,  -- ID соревнования где установлен рекорд
+    date DATE NOT NULL,  -- Дата установления PR
+    qualification TEXT,  -- Выполненный разряд (III, II, I, КМС, МС, МСМК)
 
-    -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (competition_id) REFERENCES competitions(id),
+    -- Один пользователь может иметь только один PR на каждую дистанцию
     UNIQUE(user_id, distance)
 )
 """
@@ -305,19 +322,25 @@ CREATE TABLE IF NOT EXISTS competition_reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     competition_id INTEGER NOT NULL,
-    reminder_type TEXT NOT NULL,  -- '7days', '3days', '1day'
-    scheduled_date DATE NOT NULL,
-    sent INTEGER DEFAULT 0,
+
+    -- Тип и расписание напоминания
+    reminder_type TEXT NOT NULL,  -- 7days, 3days, 1day (за сколько дней до старта)
+    scheduled_date DATE NOT NULL,  -- Дата отправки напоминания
+
+    -- Статус отправки
+    sent INTEGER DEFAULT 0,  -- 0=не отправлено, 1=отправлено
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    sent_at TIMESTAMP,
+    sent_at TIMESTAMP,  -- Время фактической отправки
 
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (competition_id) REFERENCES competitions(id),
+    -- Для каждого пользователя и соревнования может быть только одно напоминание каждого типа
     UNIQUE(user_id, competition_id, reminder_type)
 )
 """
 
-# Таблицы для хранения нормативов ЕВСК
+# ==================== ТАБЛИЦЫ НОРМАТИВОВ ЕВСК ====================
+
 CREATE_RUNNING_STANDARDS_TABLE = """
 CREATE TABLE IF NOT EXISTS running_standards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -336,11 +359,11 @@ CREATE TABLE IF NOT EXISTS running_standards (
 CREATE_SWIMMING_STANDARDS_TABLE = """
 CREATE TABLE IF NOT EXISTS swimming_standards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    distance REAL NOT NULL,
-    pool_length INTEGER NOT NULL,
+    distance REAL NOT NULL,  -- Дистанция в метрах (50, 100, 200, 400, 800, 1500)
+    pool_length INTEGER NOT NULL,  -- Длина бассейна: 25 или 50 метров
     gender TEXT NOT NULL,
     rank TEXT NOT NULL,
-    time_seconds REAL NOT NULL,
+    time_seconds REAL NOT NULL,  -- Норматив в секундах
     version TEXT NOT NULL,
     effective_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -352,12 +375,12 @@ CREATE TABLE IF NOT EXISTS swimming_standards (
 CREATE_CYCLING_STANDARDS_TABLE = """
 CREATE TABLE IF NOT EXISTS cycling_standards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    distance REAL NOT NULL,
-    discipline TEXT NOT NULL,  -- 'шоссе' (разряды присваиваются только за шоссейные гонки)
+    distance REAL NOT NULL,  -- Дистанция в км
+    discipline TEXT NOT NULL,  -- Дисциплина (обычно 'шоссе')
     gender TEXT NOT NULL,
     rank TEXT NOT NULL,
-    time_seconds REAL,  -- Nullable, так как для велоспорта разряды присваиваются по местам, а не по времени
-    place INTEGER,  -- Место, необходимое для присвоения разряда
+    time_seconds REAL,  -- Nullable: для велоспорта разряды обычно по местам
+    place INTEGER,  -- Место необходимое для разряда (например, 1-3 для МС)
     version TEXT NOT NULL,
     effective_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -369,39 +392,39 @@ CREATE TABLE IF NOT EXISTS cycling_standards (
 CREATE_STANDARDS_VERSIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS standards_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sport_type TEXT NOT NULL,
-    version TEXT NOT NULL,
-    effective_date DATE NOT NULL,
-    source_url TEXT,
-    file_hash TEXT,
-    is_active INTEGER DEFAULT 1,
+    sport_type TEXT NOT NULL,  -- Вид спорта (бег, плавание, велоспорт)
+    version TEXT NOT NULL,  -- Версия нормативов (год)
+    effective_date DATE NOT NULL,  -- Дата вступления в силу
+    source_url TEXT,  -- URL источника нормативов
+    file_hash TEXT,  -- Хеш файла для проверки обновлений
+    is_active INTEGER DEFAULT 1,  -- 1=актуальная версия
     loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(sport_type, version)
 )
 """
 
-# ==================== TRAINING ASSISTANT TABLES ====================
+# ==================== ТАБЛИЦЫ TRAINING ASSISTANT (AI) ====================
 
 CREATE_TRAINING_PLANS_TABLE = """
 CREATE TABLE IF NOT EXISTS training_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
 
-    -- Параметры плана
-    plan_type TEXT NOT NULL,              -- 'week', 'month'
-    sport_type TEXT NOT NULL,             -- 'run', 'swim', 'bike', 'triathlon'
-    target_distance REAL,                 -- Целевая дистанция (если есть)
-    target_competition_id INTEGER,        -- ID соревнования (если планируем под него)
-    current_fitness_level TEXT,           -- 'beginner', 'intermediate', 'advanced'
-    available_days TEXT NOT NULL,         -- JSON массив доступных дней ["Пн", "Ср", "Пт"]
-    goal_description TEXT,                -- Описание цели (результат, просто финиш и т.д.)
+    -- Параметры тренировочного плана
+    plan_type TEXT NOT NULL,  -- week (неделя), month (месяц)
+    sport_type TEXT NOT NULL,  -- run, swim, bike, triathlon
+    target_distance REAL,  -- Целевая дистанция если есть
+    target_competition_id INTEGER,  -- ID соревнования для подготовки
+    current_fitness_level TEXT,  -- beginner, intermediate, advanced
+    available_days TEXT NOT NULL,  -- JSON массив доступных дней ["Пн", "Ср", "Пт"]
+    goal_description TEXT,  -- Описание цели пользователя
 
     -- AI сгенерированный план
-    plan_content TEXT NOT NULL,           -- JSON структура с планом
-    ai_explanation TEXT,                  -- Объяснение от AI почему такой план
+    plan_content TEXT NOT NULL,  -- JSON с детальным планом тренировок
+    ai_explanation TEXT,  -- Объяснение AI почему выбран такой план
 
-    -- Статус и метаданные
-    status TEXT DEFAULT 'active',         -- 'active', 'completed', 'abandoned'
+    -- Статус и даты
+    status TEXT DEFAULT 'active',  -- active, completed, abandoned
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
 
@@ -418,18 +441,17 @@ CREATE TABLE IF NOT EXISTS training_corrections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     training_id INTEGER NOT NULL,
-    plan_id INTEGER,                      -- Связь с планом (если есть)
+    plan_id INTEGER,  -- Связь с планом если коррекция в рамках плана
 
     -- Обратная связь от пользователя
-    user_feedback TEXT NOT NULL,          -- 'too_hard', 'too_easy', 'high_pulse', 'didnt_finish', etc.
-    user_comment TEXT,                    -- Комментарий пользователя
+    user_feedback TEXT NOT NULL,  -- too_hard, too_easy, high_pulse, didnt_finish
+    user_comment TEXT,  -- Дополнительный комментарий
 
-    -- AI коррекция
-    ai_analysis TEXT NOT NULL,            -- Анализ от AI
-    ai_recommendation TEXT NOT NULL,      -- Рекомендация для следующих тренировок
-    correction_applied TEXT,              -- JSON с примененными изменениями
+    -- AI анализ и рекомендации
+    ai_analysis TEXT NOT NULL,  -- Анализ выполненной тренировки
+    ai_recommendation TEXT NOT NULL,  -- Рекомендации для будущих тренировок
+    correction_applied TEXT,  -- JSON с конкретными изменениями плана
 
-    -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id),
@@ -444,20 +466,20 @@ CREATE TABLE IF NOT EXISTS race_preparations (
     user_id INTEGER NOT NULL,
     competition_id INTEGER NOT NULL,
 
-    -- Параметры подготовки
-    days_before INTEGER NOT NULL,         -- 7, 5, 3, 1
+    -- Параметры подготовки к старту
+    days_before INTEGER NOT NULL,  -- За сколько дней (7, 5, 3, 1)
     race_distance REAL NOT NULL,
-    target_time TEXT,
+    target_time TEXT,  -- Целевое время
 
-    -- AI рекомендации
-    recommendations TEXT NOT NULL,        -- JSON структура с рекомендациями
-    ai_explanation TEXT,
+    -- AI рекомендации по подготовке
+    recommendations TEXT NOT NULL,  -- JSON с рекомендациями (питание, сон, тренировки)
+    ai_explanation TEXT,  -- Объяснение рекомендаций
 
-    -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (competition_id) REFERENCES competitions(id),
+    -- Для каждого соревнования может быть несколько рекомендаций на разные даты
     UNIQUE(user_id, competition_id, days_before)
 )
 """
@@ -468,17 +490,16 @@ CREATE TABLE IF NOT EXISTS race_tactics (
     user_id INTEGER NOT NULL,
     competition_id INTEGER NOT NULL,
 
-    -- Параметры забега
+    -- Параметры забега для тактики
     distance REAL NOT NULL,
     target_time TEXT NOT NULL,
-    race_type TEXT,                       -- 'flat', 'hilly', 'trail', etc.
+    race_type TEXT,  -- flat (ровная), hilly (холмы), trail (трейл)
 
-    -- AI тактика
-    tactics_plan TEXT NOT NULL,           -- JSON со сплитами и рекомендациями
-    pacing_strategy TEXT NOT NULL,        -- Стратегия темпа
-    key_points TEXT,                      -- Ключевые моменты по дистанции
+    -- AI тактический план
+    tactics_plan TEXT NOT NULL,  -- JSON с планом сплитов по км
+    pacing_strategy TEXT NOT NULL,  -- Стратегия распределения темпа
+    key_points TEXT,  -- Ключевые точки дистанции и действия
 
-    -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -492,15 +513,14 @@ CREATE TABLE IF NOT EXISTS ai_conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
 
-    -- Контекст разговора
-    conversation_type TEXT NOT NULL,      -- 'psychologist', 'general', 'plan', 'correction'
-    context_data TEXT,                    -- JSON с контекстом (план, тренировка и т.д.)
+    -- Контекст и тип диалога
+    conversation_type TEXT NOT NULL,  -- psychologist, general, plan, correction
+    context_data TEXT,  -- JSON с контекстом (данные о плане, тренировке)
 
-    -- Сообщения
-    user_message TEXT NOT NULL,
-    ai_response TEXT NOT NULL,
+    -- История переписки
+    user_message TEXT NOT NULL,  -- Сообщение пользователя
+    ai_response TEXT NOT NULL,  -- Ответ AI
 
-    -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -512,20 +532,20 @@ CREATE TABLE IF NOT EXISTS result_predictions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
 
-    -- Параметры прогноза
-    distance REAL NOT NULL,
-    based_on_trainings_period TEXT NOT NULL,  -- Период анализа ('last_month', 'last_2_weeks')
+    -- Параметры для прогнозирования
+    distance REAL NOT NULL,  -- Дистанция для прогноза
+    based_on_trainings_period TEXT NOT NULL,  -- Период анализа (last_month, last_2_weeks)
 
-    -- Прогноз
-    predicted_time_realistic TEXT NOT NULL,   -- Реалистичный прогноз
-    predicted_time_optimistic TEXT NOT NULL,  -- Оптимистичный
-    predicted_time_conservative TEXT NOT NULL,-- Осторожный
+    -- Три варианта прогноза
+    predicted_time_realistic TEXT NOT NULL,  -- Реалистичный прогноз
+    predicted_time_optimistic TEXT NOT NULL,  -- Оптимистичный (лучший сценарий)
+    predicted_time_conservative TEXT NOT NULL,  -- Консервативный (безопасный)
 
-    confidence_level REAL,                    -- Уровень уверенности (0-100%)
-    ai_explanation TEXT NOT NULL,             -- Объяснение прогноза
-    key_factors TEXT,                         -- JSON с ключевыми факторами
+    -- Метаданные прогноза
+    confidence_level REAL,  -- Уровень уверенности 0-100%
+    ai_explanation TEXT NOT NULL,  -- Объяснение от AI
+    key_factors TEXT,  -- JSON с факторами влияющими на прогноз
 
-    -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -536,17 +556,16 @@ CREATE_TA_USER_SETTINGS_TABLE = """
 CREATE TABLE IF NOT EXISTS ta_user_settings (
     user_id INTEGER PRIMARY KEY,
 
-    -- Предпочтения пользователя
-    preferred_ai_style TEXT DEFAULT 'friendly',  -- 'friendly', 'professional', 'motivational'
-    coaching_experience TEXT DEFAULT 'none',     -- 'none', 'self', 'with_coach'
-    injury_history TEXT,                         -- JSON с историей травм
+    -- Предпочтения взаимодействия с AI
+    preferred_ai_style TEXT DEFAULT 'friendly',  -- friendly, professional, motivational
+    coaching_experience TEXT DEFAULT 'none',  -- none (новичок), self (самоподготовка), with_coach (с тренером)
+    injury_history TEXT,  -- JSON с историей травм и ограничений
 
-    -- Статистика использования
-    total_plans_generated INTEGER DEFAULT 0,
-    total_corrections_made INTEGER DEFAULT 0,
-    total_ai_chats INTEGER DEFAULT 0,
+    -- Статистика использования AI функций
+    total_plans_generated INTEGER DEFAULT 0,  -- Количество созданных планов
+    total_corrections_made INTEGER DEFAULT 0,  -- Количество корректировок
+    total_ai_chats INTEGER DEFAULT 0,  -- Количество диалогов с AI
 
-    -- Метаданные
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -554,7 +573,9 @@ CREATE TABLE IF NOT EXISTS ta_user_settings (
 )
 """
 
-# Список всех таблиц для инициализации
+# ==================== СПИСОК ВСЕХ ТАБЛИЦ ====================
+
+# Список таблиц для инициализации БД при первом запуске
 ALL_TABLES = [
     CREATE_USERS_TABLE,
     CREATE_TRAININGS_TABLE,

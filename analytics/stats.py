@@ -27,20 +27,15 @@ def calculate_weekly_stats(trainings: List[Dict[str, Any]]) -> Dict[str, Any]:
             "avg_fatigue": 0.0
         }
 
-    # Создаём DataFrame из списка тренировок
     df = pd.DataFrame(trainings)
 
-    # Общее количество тренировок
     total_trainings = len(df)
 
-    # Средний километраж (для тренировок, где есть distance)
     avg_distance = df['distance'].mean() if 'distance' in df and df['distance'].notna().any() else 0.0
 
-    # Процентное распределение типов тренировок
     type_counts = df['type'].value_counts()
     type_percentages = (type_counts / total_trainings * 100).round(2).to_dict()
 
-    # Средний уровень усилий
     avg_fatigue = df['fatigue_level'].mean().round(2) if 'fatigue_level' in df and df['fatigue_level'].notna().any() else 0.0
 
     return {

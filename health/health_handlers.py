@@ -40,7 +40,6 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-# ============== Вспомогательные функции ==============
 
 async def format_date_for_user(date_obj: date, user_id: int) -> str:
     """Форматировать дату согласно настройкам пользователя"""
@@ -85,7 +84,6 @@ async def return_to_health_menu(message: Message):
     )
 
 
-# ============== Главное меню здоровья ==============
 
 @router.message(F.text == "❤️ Здоровье")
 async def health_menu(message: Message, state: FSMContext):
@@ -95,7 +93,6 @@ async def health_menu(message: Message, state: FSMContext):
 
     logger.info(f"health_menu called for user_id = {user_id}")
 
-    # Проверяем, какие метрики уже заполнены сегодня
     filled = await check_today_metrics_filled(user_id)
 
     status_text = "📋 <b>Статус на сегодня:</b>\n"
@@ -120,10 +117,7 @@ async def health_menu(message: Message, state: FSMContext):
 @router.callback_query(F.data == "health:menu")
 async def health_menu_callback(callback: CallbackQuery, state: FSMContext):
     """Возврат в меню здоровья"""
-    # НЕ очищаем state - пусть пользователь продолжит добавлять метрики
-    # await state.clear()
 
-    # Очищаем только состояние FSM, но оставляем данные
     await state.set_state(None)
 
     user_id = callback.from_user.id
@@ -145,19 +139,16 @@ async def health_menu_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ============== Ввод метрик ==============
 
 @router.callback_query(F.data == "health:add_metrics")
 async def choose_input_type(callback: CallbackQuery):
     """Выбор типа ввода метрик"""
     user_id = callback.from_user.id
 
-    # Получаем метрики на сегодня
     from datetime import date
     today = date.today()
     today_metrics = await get_health_metrics_by_date(user_id, today)
 
-    # Формируем текст сообщения
     if today_metrics and (today_metrics.get('morning_pulse') or today_metrics.get('weight') or today_metrics.get('sleep_duration')):
         message_text = "📝 <b>Ваши данные на сегодня</b>"
     else:
@@ -191,7 +182,6 @@ async def start_full_input(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:input_pulse")
 async def start_pulse_input(callback: CallbackQuery, state: FSMContext):
     """Ввод только пульса"""
-    # НЕ очищаем state - чтобы сохранить другие метрики!
     await callback.message.answer(
         "💗 Введите ваш <b>утренний пульс</b> (уд/мин):\n\n"
         "Например: 60",
@@ -210,7 +200,6 @@ async def start_pulse_input(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:input_weight")
 async def start_weight_input(callback: CallbackQuery, state: FSMContext):
     """Ввод только веса"""
-    # НЕ очищаем state - чтобы сохранить другие метрики!
     user_id = callback.from_user.id
     settings = await get_user_settings(user_id)
     weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
@@ -234,7 +223,6 @@ async def start_weight_input(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "health:input_sleep")
 async def start_sleep_input(callback: CallbackQuery, state: FSMContext):
     """Ввод только сна"""
-    # НЕ очищаем state - чтобы сохранить другие метрики!
     await callback.message.answer(
         "😴 Введите <b>длительность сна</b> (часы):\n\n"
         "Например: 7.5 или 8",
@@ -252,7 +240,6 @@ async def choose_date_for_metrics(callback: CallbackQuery, state: FSMContext):
     from bot.calendar_keyboard import CalendarKeyboard
     from datetime import datetime
 
-    # Создаем календарь (ограничен текущей датой)
     calendar_keyboard = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
@@ -260,14 +247,12 @@ async def choose_date_for_metrics(callback: CallbackQuery, state: FSMContext):
         max_date=datetime.now()
     )
 
-    # Отправляем календарь как инлайн-клавиатуру и обычные кнопки одновременно
     await callback.message.answer(
         "📅 <b>За какую дату вы хотите внести данные?</b>",
         reply_markup=get_date_choice_keyboard(),
         parse_mode="HTML"
     )
 
-    # Отправляем календарь
     await callback.message.answer(
         "Выберите дату:",
         reply_markup=calendar_keyboard
@@ -281,7 +266,6 @@ async def choose_date_for_metrics(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ============== Обработка календаря ==============
 
 @router.callback_query(F.data.startswith("healthcal_"))
 async def process_health_calendar(callback: CallbackQuery, state: FSMContext):
@@ -292,18 +276,15 @@ async def process_health_calendar(callback: CallbackQuery, state: FSMContext):
     logger.info(f"=== CALENDAR CALLBACK RECEIVED: {callback_data} ===")
     logger.info(f"Current state: {await state.get_state()}")
 
-    # Обработка навигации (ограничен текущей датой)
     from datetime import datetime
     new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="healthcal", max_date=datetime.now())
     logger.info(f"Navigation result: {new_keyboard is not None}")
 
     if new_keyboard:
-        # Это навигация - обновляем календарь
         await callback.message.edit_reply_markup(reply_markup=new_keyboard)
         await callback.answer()
         return
 
-    # Это выбор даты (action=select, format=1)
     parsed = CalendarKeyboard.parse_callback_data(callback_data)
     logger.info(f"Parsed callback data: {parsed}")
     logger.info(f"Action: {parsed.get('action')}, Format: {parsed.get('format')}, Date: {parsed.get('date')}")
@@ -312,12 +293,10 @@ async def process_health_calendar(callback: CallbackQuery, state: FSMContext):
         logger.info(">>> DATE SELECTION BLOCK ENTERED <<<")
         selected_date = parsed["date"].date()
 
-        # Проверяем что дата не в будущем
         if selected_date > date.today():
             await callback.answer("❌ Нельзя вносить данные за будущую дату.", show_alert=True)
             return
 
-        # Сохраняем выбранную дату
         await state.update_data(selected_date=selected_date)
 
         user_id = callback.from_user.id
@@ -336,10 +315,8 @@ async def process_health_calendar(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Удаляем календарь
         await callback.message.delete()
 
-        # Очищаем состояние
         await state.set_state(None)
         await callback.answer()
     else:
@@ -374,7 +351,6 @@ async def process_date_choice(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем выбранную дату и показываем меню ввода
     await state.update_data(selected_date=selected_date)
 
     user_id = message.from_user.id
@@ -409,7 +385,6 @@ async def process_custom_date(message: Message, state: FSMContext):
 
     user_id = message.from_user.id
 
-    # Парсим дату с использованием пользовательского формата
     try:
         selected_date = await parse_user_date(message.text, user_id)
     except ValueError:
@@ -419,14 +394,12 @@ async def process_custom_date(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем что дата не в будущем
     if selected_date > date.today():
         await message.answer(
             "❌ Нельзя вносить данные за будущую дату."
         )
         return
 
-    # Сохраняем выбранную дату и показываем меню ввода
     await state.update_data(selected_date=selected_date)
 
     metrics = await get_health_metrics_by_date(user_id, selected_date)
@@ -446,7 +419,6 @@ async def process_custom_date(message: Message, state: FSMContext):
     await state.set_state(None)
 
 
-# ============== Обработка ввода метрик ==============
 
 @router.message(HealthMetricsStates.waiting_for_pulse)
 async def process_pulse(message: Message, state: FSMContext):
@@ -465,7 +437,6 @@ async def process_pulse(message: Message, state: FSMContext):
         await ask_weight(message, state)
         return
 
-    # Валидация
     try:
         pulse = int(message.text)
         if not (30 <= pulse <= 200):
@@ -477,12 +448,10 @@ async def process_pulse(message: Message, state: FSMContext):
 
     await state.update_data(pulse=pulse)
 
-    # Проверяем изменение пульса по сравнению с вчерашним днем
     user_id = message.from_user.id
     data = await state.get_data()
     selected_date = data.get('selected_date', date.today())
 
-    # Получаем пульс за вчерашний день
     yesterday = selected_date - timedelta(days=1)
     yesterday_metrics = await get_health_metrics_by_date(user_id, yesterday)
 
@@ -490,7 +459,6 @@ async def process_pulse(message: Message, state: FSMContext):
         yesterday_pulse = yesterday_metrics['morning_pulse']
         pulse_diff = pulse - yesterday_pulse
 
-        # Если пульс выше на 20 или более ударов - отправляем предупреждение
         if pulse_diff >= 20:
             await message.answer(
                 f"⚠️ <b>Внимание!</b>\n\n"
@@ -507,12 +475,9 @@ async def process_pulse(message: Message, state: FSMContext):
                 parse_mode="HTML"
             )
 
-    # Проверяем режим ввода
     if data.get('quick_input') == 'pulse':
-        # Быстрый ввод - сохраняем только пульс
         await save_and_finish(message, state, morning_pulse=pulse)
     else:
-        # Полный ввод - переходим к весу
         await ask_weight(message, state)
 
 
@@ -557,7 +522,6 @@ async def process_weight(message: Message, state: FSMContext):
             await ask_sleep_duration(message, state)
         return
 
-    # Валидация
     try:
         weight = float(message.text.replace(',', '.'))
         if not (30 <= weight <= 300):
@@ -569,7 +533,6 @@ async def process_weight(message: Message, state: FSMContext):
 
     await state.update_data(weight=weight)
 
-    # Проверяем режим ввода
     data = await state.get_data()
     if data.get('quick_input') == 'weight':
         await save_and_finish(message, state, weight=weight)
@@ -613,11 +576,9 @@ async def process_sleep_duration(message: Message, state: FSMContext):
             await ask_sleep_quality(message, state)
         return
 
-    # Валидация и парсинг
     try:
         text = message.text.strip()
 
-        # Проверяем формат ЧЧ:ММ или Ч:М
         if ':' in text:
             parts = text.split(':')
             if len(parts) != 2:
@@ -635,10 +596,8 @@ async def process_sleep_duration(message: Message, state: FSMContext):
                 await message.answer("❌ Минуты должны быть в диапазоне 0-59")
                 return
 
-            # Конвертируем в десятичное число часов
             sleep_duration = hours + (minutes / 60.0)
         else:
-            # Обычный формат - просто число
             sleep_duration = float(text.replace(',', '.'))
 
         if not (1 <= sleep_duration <= 20):
@@ -651,10 +610,8 @@ async def process_sleep_duration(message: Message, state: FSMContext):
 
     await state.update_data(sleep_duration=sleep_duration)
 
-    # Проверяем режим ввода
     data = await state.get_data()
     if data.get('quick_input') == 'sleep':
-        # После сна в быстром режиме спрашиваем качество
         await ask_sleep_quality(message, state)
     else:
         await ask_sleep_quality(message, state)
@@ -683,7 +640,6 @@ async def process_sleep_quality(callback: CallbackQuery, state: FSMContext):
         quality = int(quality_str)
         await state.update_data(sleep_quality=quality)
 
-    # Сохраняем данные (передаем user_id из callback)
     await save_and_finish(callback.message, state, user_id=callback.from_user.id)
     await callback.answer()
 
@@ -692,31 +648,25 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
     """Сохранение данных и завершение"""
     data = await state.get_data()
 
-    # Извлекаем user_id из extra_data, если передан
     user_id = extra_data.pop('user_id', None)
 
-    # Если user_id не передан, пытаемся получить из message
     if user_id is None:
         user_id = message.from_user.id if hasattr(message, 'from_user') else message.chat.id
 
     data.update(extra_data)
 
-    # Используем выбранную дату из state, или сегодня по умолчанию
     metric_date = data.get('selected_date', date.today())
 
-    # ОТЛАДКА: Логируем что в state
     logger.info(f"save_and_finish: user_id = {user_id}")
     logger.info(f"save_and_finish: data from state = {data}")
     logger.info(f"save_and_finish: extra_data = {extra_data}")
     logger.info(f"save_and_finish: metric_date = {metric_date}")
 
-    # Подготавливаем параметры для сохранения - передаем только заполненные значения
     save_params = {
         'user_id': user_id,
         'metric_date': metric_date
     }
 
-    # Добавляем только те параметры, которые были введены (не None)
     if 'pulse' in data and data['pulse'] is not None:
         save_params['morning_pulse'] = data['pulse']
     if 'weight' in data and data['weight'] is not None:
@@ -726,26 +676,21 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
     if 'sleep_quality' in data and data['sleep_quality'] is not None:
         save_params['sleep_quality'] = data['sleep_quality']
 
-    # ОТЛАДКА: Логируем что передаем в БД
     logger.info(f"save_and_finish: save_params = {save_params}")
 
-    # Сохраняем в БД
     success = await save_health_metrics(**save_params)
 
     if success:
-        # Получаем настройки пользователя для целевого веса
         settings = await get_user_settings(user_id)
         weight_goal = settings.get('weight_goal') if settings else None
         weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
 
-        # Формируем сообщение о сохраненных данных
         saved_items = []
         if data.get('pulse'):
             saved_items.append(f"💗 Пульс: {data['pulse']} уд/мин")
         if data.get('weight'):
             weight_text = f"⚖️ Вес: {data['weight']} {weight_unit}"
 
-            # Добавляем разницу с целевым весом, если он установлен
             if weight_goal:
                 diff = data['weight'] - weight_goal
                 if abs(diff) < 0.1:
@@ -757,10 +702,7 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
 
             saved_items.append(weight_text)
         if data.get('sleep_duration'):
-            # Форматируем длительность сна
             duration = data['sleep_duration']
-            # Преобразуем в минуты, округляем, потом обратно в часы и минуты
-            # Это избегает проблем с точностью float
             total_minutes = round(duration * 60)
             hours = total_minutes // 60
             minutes = total_minutes % 60
@@ -771,7 +713,6 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
         if data.get('sleep_quality'):
             saved_items.append(f"⭐ Качество: {data['sleep_quality']}/5")
 
-        # Показываем статус на сегодня
         filled = await check_today_metrics_filled(user_id)
         status_text = "\n\n📋 <b>Статус на сегодня:</b>\n"
         status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
@@ -785,10 +726,8 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
             parse_mode="HTML"
         )
 
-        # Получаем обновленные метрики и возвращаем в меню ввода данных
         updated_metrics = await get_health_metrics_by_date(user_id, metric_date)
 
-        # Форматируем дату для отображения
         date_str = await format_date_for_user(metric_date, user_id)
         is_today = metric_date == date.today()
 
@@ -814,12 +753,8 @@ async def save_and_finish(message: Message, state: FSMContext, **extra_data):
             reply_markup=ReplyKeyboardRemove()
         )
 
-    # НЕ очищаем state - чтобы пользователь мог добавлять другие метрики
-    # State будет очищен только когда пользователь выйдет из раздела здоровья
-    # await state.clear()
 
 
-# ============== Статистика и графики ==============
 
 @router.callback_query(F.data == "health:stats_and_graphs")
 async def show_stats_graphs_periods(callback: CallbackQuery):
@@ -845,7 +780,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
 
     await callback.answer("⏳ Загрузка данных...", show_alert=True)
 
-    # Определяем период и название
     if period_param == "week":
         metrics = await get_current_week_metrics(user_id)
         period_name = "эту неделю"
@@ -855,7 +789,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         period_name = "этот месяц"
         logger.info(f"Period: CURRENT MONTH")
     else:
-        # Для числовых значений - последние N дней
         days = int(period_param)
         metrics = await get_latest_health_metrics(user_id, days)
         period_name = f"{days} дней"
@@ -867,7 +800,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         for m in metrics:
             logger.info(f"  {m['date']}: pulse={m.get('morning_pulse')}, weight={m.get('weight')}, sleep={m.get('sleep_duration')}")
 
-    # Вычисляем статистику на основе полученных метрик
     if not metrics:
         stats = {}
     else:
@@ -899,7 +831,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         }
 
     if not stats and not metrics:
-        # Возвращаемся в главное меню здоровья
         filled = await check_today_metrics_filled(user_id)
         status_text = "📋 <b>Статус на сегодня:</b>\n"
         status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
@@ -916,10 +847,8 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         )
         return
 
-    # Форматируем статистику
     msg = f"📊 <b>Статистика за {period_name}</b>\n\n"
 
-    # Пульс
     if stats and stats['pulse']['avg']:
         msg += f"💗 <b>Утренний пульс:</b>\n"
         msg += f"   Среднее: {stats['pulse']['avg']:.1f} уд/мин\n"
@@ -928,7 +857,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         trend_emoji = "📈" if trend == "increasing" else "📉" if trend == "decreasing" else "➡️"
         msg += f"   Тренд: {trend_emoji}\n\n"
 
-    # Вес
     if stats and stats['weight']['current']:
         msg += f"⚖️ <b>Вес:</b>\n"
         msg += f"   Текущий: {stats['weight']['current']:.1f} кг\n"
@@ -940,9 +868,7 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         trend_emoji = "📈" if trend == "increasing" else "📉" if trend == "decreasing" else "➡️"
         msg += f"   Тренд: {trend_emoji}\n\n"
 
-    # Сон
     if stats and stats['sleep']['avg']:
-        # Форматируем среднюю длительность
         avg_hours = int(stats['sleep']['avg'])
         avg_minutes = round((stats['sleep']['avg'] - avg_hours) * 60)
         if avg_minutes == 60:
@@ -950,7 +876,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
             avg_minutes = 0
         avg_text = f"{avg_hours} ч {avg_minutes} мин" if avg_minutes > 0 else f"{avg_hours} ч"
 
-        # Форматируем минимум
         min_hours = int(stats['sleep']['min'])
         min_minutes = round((stats['sleep']['min'] - min_hours) * 60)
         if min_minutes == 60:
@@ -958,7 +883,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
             min_minutes = 0
         min_text = f"{min_hours}:{min_minutes:02d}" if min_minutes > 0 else f"{min_hours}:00"
 
-        # Форматируем максимум
         max_hours = int(stats['sleep']['max'])
         max_minutes = round((stats['sleep']['max'] - max_hours) * 60)
         if max_minutes == 60:
@@ -970,7 +894,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         msg += f"   Среднее: {avg_text}\n"
         msg += f"   Диапазон: {min_text} - {max_text}\n"
 
-        # Оценка качества сна
         avg_sleep = stats['sleep']['avg']
         if 7 <= avg_sleep <= 9:
             msg += f"   Оценка: ✅ В норме\n"
@@ -979,10 +902,8 @@ async def show_stats_and_graphs(callback: CallbackQuery):
         else:
             msg += f"   Оценка: ⚠️ Избыточно\n"
 
-    # Отправляем статистику
     await callback.message.answer(msg, parse_mode="HTML")
 
-    # Генерируем и отправляем графики
     if metrics:
         try:
             logger.info(f"Generating graph with {len(metrics)} metrics, period_name={period_name}")
@@ -990,7 +911,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
             for m in metrics:
                 logger.info(f"  {m['date']}: pulse={m.get('morning_pulse')}, weight={m.get('weight')}, sleep={m.get('sleep_duration')}")
 
-            # Получаем целевой вес из настроек пользователя
             settings = await get_user_settings(user_id)
             weight_goal = settings.get('weight_goal') if settings else None
 
@@ -1009,7 +929,6 @@ async def show_stats_and_graphs(callback: CallbackQuery):
             logger.error(traceback.format_exc())
             await callback.message.answer("❌ Ошибка при генерации графиков")
 
-    # Показываем меню с действиями (включая AI-анализ)
     from health.health_keyboards import get_health_stats_actions_keyboard
 
     await callback.message.answer(
@@ -1019,14 +938,12 @@ async def show_stats_and_graphs(callback: CallbackQuery):
     )
 
 
-# AI-анализ здоровья
 @router.callback_query(F.data.startswith("ai_analyze_health:"))
 async def ai_analyze_health(callback: CallbackQuery):
     """AI-анализ статистики здоровья за период"""
     period_param = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
-    # Проверяем доступность AI
     if not is_ai_available():
         await callback.answer(
             "❌ AI-анализ недоступен. Добавьте OPENROUTER_API_KEY в .env файл",
@@ -1034,18 +951,14 @@ async def ai_analyze_health(callback: CallbackQuery):
         )
         return
 
-    # Показываем индикатор загрузки
     await callback.answer("🤖 Анализирую данные...", show_alert=False)
 
-    # Отправляем сообщение о процессе
     processing_msg = await callback.message.answer("🤖 AI анализирует показатели здоровья...")
 
     try:
-        # Получаем данные
         user_settings = await get_user_settings(user_id)
         weight_unit = user_settings.get('weight_unit', 'кг') if user_settings else 'кг'
 
-        # Определяем период и получаем метрики
         if period_param == "week":
             metrics = await get_current_week_metrics(user_id)
             period_name = "эту неделю"
@@ -1059,7 +972,6 @@ async def ai_analyze_health(callback: CallbackQuery):
             metrics = await get_latest_health_metrics(user_id, days)
             period_name = f"{days} дней"
 
-        # Получаем статистику
         statistics = await get_health_statistics(user_id, days)
 
         if not metrics:
@@ -1068,7 +980,6 @@ async def ai_analyze_health(callback: CallbackQuery):
             )
             return
 
-        # Получаем AI-анализ
         analysis = await analyze_health_statistics(
             statistics=statistics,
             metrics=metrics,
@@ -1080,7 +991,6 @@ async def ai_analyze_health(callback: CallbackQuery):
             import html
             from bot.keyboards import get_main_menu_keyboard
 
-            # Экранируем HTML-специальные символы в тексте AI
             safe_analysis = html.escape(analysis)
 
             msg_text = (
@@ -1091,7 +1001,6 @@ async def ai_analyze_health(callback: CallbackQuery):
 
             await processing_msg.edit_text(msg_text, parse_mode="HTML")
 
-            # Редирект в главное меню
             from coach.coach_queries import is_user_coach
             is_coach_status = await is_user_coach(user_id)
             await processing_msg.answer(
@@ -1110,7 +1019,6 @@ async def ai_analyze_health(callback: CallbackQuery):
         )
 
 
-# Оставляем старые обработчики для обратной совместимости
 @router.callback_query(F.data == "health:statistics")
 async def show_statistics_periods(callback: CallbackQuery):
     """Выбор периода для статистики (перенаправление на новый обработчик)"""
@@ -1123,7 +1031,6 @@ async def show_graphs_periods(callback: CallbackQuery):
     await show_stats_graphs_periods(callback)
 
 
-# ============== Анализ сна ==============
 
 @router.callback_query(F.data == "health:sleep_analysis")
 async def show_sleep_analysis(callback: CallbackQuery):
@@ -1132,11 +1039,9 @@ async def show_sleep_analysis(callback: CallbackQuery):
 
     await callback.answer("⏳ Анализирую данные...", show_alert=True)
 
-    # Получаем данные за 30 дней
     metrics = await get_latest_health_metrics(user_id, 30)
 
     if not metrics or len(metrics) < 3:
-        # Возвращаемся в главное меню здоровья
         filled = await check_today_metrics_filled(user_id)
         status_text = "📋 <b>Статус на сегодня:</b>\n"
         status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
@@ -1155,11 +1060,9 @@ async def show_sleep_analysis(callback: CallbackQuery):
         return
 
     try:
-        # Выполняем анализ
         analyzer = SleepAnalyzer(metrics)
         analysis = analyzer.get_full_analysis()
 
-        # Форматируем сообщение
         message_text = format_sleep_analysis_message(analysis)
 
         await callback.message.answer(
@@ -1167,7 +1070,6 @@ async def show_sleep_analysis(callback: CallbackQuery):
             parse_mode="HTML"
         )
 
-        # Генерируем график сна
         graph_buffer = await generate_sleep_quality_graph(metrics, "30 дней")
         photo = BufferedInputFile(graph_buffer.read(), filename="sleep_analysis.png")
         await callback.message.answer_photo(
@@ -1175,7 +1077,6 @@ async def show_sleep_analysis(callback: CallbackQuery):
             caption="📊 График анализа сна"
         )
 
-        # Возвращаем пользователя в главное меню здоровья
         filled = await check_today_metrics_filled(user_id)
         status_text = "📋 <b>Статус на сегодня:</b>\n"
         status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
@@ -1193,7 +1094,6 @@ async def show_sleep_analysis(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Ошибка при анализе сна: {e}")
 
-        # Возвращаемся в главное меню здоровья даже при ошибке
         filled = await check_today_metrics_filled(user_id)
         status_text = "📋 <b>Статус на сегодня:</b>\n"
         status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
@@ -1210,24 +1110,10 @@ async def show_sleep_analysis(callback: CallbackQuery):
         )
 
 
-# ============== Отмена ==============
-
-# Обработчик отмены перенесен в bot/handlers.py (глобальный обработчик с контекстно-зависимой навигацией)
 
 
-# ============== Экспорт в PDF ==============
 
-# Удален обработчик health:export_pdf - экспорт теперь доступен через главное меню
-# @router.callback_query(F.data == "health:export_pdf")
-# async def show_export_periods(callback: CallbackQuery):
-#     """Показать выбор периода для экспорта"""
-#     await callback.message.edit_text(
-#         "📄 <b>Экспорт данных здоровья в PDF</b>\n\n"
-#         "Выберите период для экспорта:\n\n",
-#         reply_markup=get_export_period_keyboard(),
-#         parse_mode="HTML"
-#     )
-#     await callback.answer()
+
 
 
 @router.callback_query(F.data.startswith("health_export:"))
@@ -1236,12 +1122,10 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
     period_param = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
-    # Если выбран произвольный период - запрашиваем даты
     if period_param == "custom":
         user_id = callback.from_user.id
         date_format_desc = await get_date_format_description(user_id)
 
-        # Отправляем календарь с inline кнопкой отмены
         from bot.calendar_keyboard import CalendarKeyboard
         from datetime import datetime
         calendar_keyboard = CalendarKeyboard.create_calendar(
@@ -1267,13 +1151,10 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
     await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
     try:
-        # Импортируем функцию экспорта
         from health.health_pdf_export import create_health_pdf
 
-        # Генерируем PDF
         pdf_buffer = await create_health_pdf(user_id, period_param)
 
-        # Определяем название периода для имени файла и caption
         if period_param == "week":
             period_name = "неделю"
             filename_part = "week"
@@ -1290,10 +1171,8 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
             period_name = f"{period_param} дней"
             filename_part = f"{period_param}days"
 
-        # Формируем имя файла
         filename = f"health_{filename_part}_{date.today().strftime('%Y%m%d')}.pdf"
 
-        # Отправляем PDF
         document = BufferedInputFile(pdf_buffer.read(), filename=filename)
         await callback.message.answer_document(
             document=document,
@@ -1302,7 +1181,6 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
 
         logger.info(f"PDF экспорт здоровья успешно создан для пользователя {user_id}, период: {period_param}")
 
-        # Автоматически возвращаемся в меню экспорта
         from bot.keyboards import get_export_type_keyboard
         await callback.message.answer(
             "📥 <b>Экспорт в PDF</b>\n\n"
@@ -1318,7 +1196,6 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
             "Попробуйте выбрать другой период или внесите больше данных."
         )
 
-        # Возвращаем в меню
         filled = await check_today_metrics_filled(user_id)
         status_text = "📋 <b>Статус на сегодня:</b>\n"
         status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
@@ -1339,7 +1216,6 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
             "❌ Произошла ошибка при генерации PDF. Попробуйте позже."
         )
 
-        # Возвращаем в меню
         filled = await check_today_metrics_filled(user_id)
         status_text = "📋 <b>Статус на сегодня:</b>\n"
         status_text += f"{'✅' if filled['morning_pulse'] else '❌'} Утренний пульс\n"
@@ -1354,7 +1230,6 @@ async def export_health_pdf(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
 
-# ============== Обработчики для произвольного периода экспорта ==============
 
 @router.message(HealthExportStates.waiting_for_start_date)
 async def process_export_start_date(message: Message, state: FSMContext):
@@ -1362,10 +1237,8 @@ async def process_export_start_date(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
     try:
-        # Парсим дату с использованием пользовательского формата
         start_date = await parse_user_date(message.text, user_id)
 
-        # Проверяем, что дата не в будущем
         if start_date > date.today():
             await message.answer(
                 "❌ Дата начала не может быть в будущем!\n\n"
@@ -1373,14 +1246,11 @@ async def process_export_start_date(message: Message, state: FSMContext):
             )
             return
 
-        # Сохраняем дату начала
         await state.update_data(export_start_date=start_date)
 
-        # Запрашиваем дату окончания
         date_format_desc = await get_date_format_description(user_id)
         formatted_start = await format_date_for_user(start_date, user_id)
 
-        # Отправляем календарь с inline кнопкой отмены
         from bot.calendar_keyboard import CalendarKeyboard
         from datetime import datetime
         calendar_keyboard = CalendarKeyboard.create_calendar(
@@ -1415,10 +1285,8 @@ async def process_export_end_date(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
     try:
-        # Парсим дату с использованием пользовательского формата
         end_date = await parse_user_date(message.text, user_id)
 
-        # Проверяем, что дата не в будущем
         if end_date > date.today():
             await message.answer(
                 "❌ Дата окончания не может быть в будущем!\n\n"
@@ -1426,11 +1294,9 @@ async def process_export_end_date(message: Message, state: FSMContext):
             )
             return
 
-        # Получаем дату начала
         data = await state.get_data()
         start_date = data.get('export_start_date')
 
-        # Проверяем, что дата окончания не раньше даты начала
         if end_date < start_date:
             formatted_start = await format_date_for_user(start_date, user_id)
             await message.answer(
@@ -1440,15 +1306,12 @@ async def process_export_end_date(message: Message, state: FSMContext):
             )
             return
 
-        # Очищаем состояние
         await state.clear()
 
         try:
-            # Импортируем функцию экспорта
             from health.health_pdf_export import create_health_pdf
             from health.health_queries import get_health_metrics_range
 
-            # Получаем метрики за произвольный период
             metrics = await get_health_metrics_range(user_id, start_date, end_date)
 
             if not metrics:
@@ -1461,25 +1324,19 @@ async def process_export_end_date(message: Message, state: FSMContext):
                 await return_to_health_menu(message)
                 return
 
-            # Генерируем PDF с произвольным периодом
             formatted_start = await format_date_for_user(start_date, user_id)
             formatted_end = await format_date_for_user(end_date, user_id)
             period_name = f"{formatted_start} - {formatted_end}"
 
-            # Создаем специальный параметр для произвольного периода
             await state.update_data(custom_metrics=metrics, custom_period_name=period_name)
 
-            # Генерируем PDF (передаем специальный параметр "custom_STARTDATE_ENDDATE")
             period_param = f"custom_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
             pdf_buffer = await create_health_pdf(user_id, period_param)
 
-            # Очищаем временные данные
             await state.clear()
 
-            # Формируем имя файла
             filename = f"health_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.pdf"
 
-            # Отправляем PDF
             document = BufferedInputFile(pdf_buffer.read(), filename=filename)
             await message.answer_document(
                 document=document,
@@ -1488,7 +1345,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
 
             logger.info(f"PDF экспорт здоровья (произвольный период) успешно создан для пользователя {user_id}")
 
-            # Возвращаем в меню
             await return_to_health_menu(message)
 
         except Exception as e:
@@ -1505,7 +1361,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
             f"Введите дату в формате {date_format_desc}"
         )
 
-# ============== Обработчик ежедневного напоминания ==============
 
 @router.callback_query(F.data == "daily_reminder:yes")
 async def handle_daily_reminder_yes(callback: CallbackQuery, state: FSMContext):
@@ -1514,23 +1369,18 @@ async def handle_daily_reminder_yes(callback: CallbackQuery, state: FSMContext):
 
     user_id = callback.from_user.id
 
-    # Очищаем состояние на всякий случай
     await state.clear()
 
-    # Устанавливаем сегодняшнюю дату
     today = date.today()
     await state.update_data(selected_date=today)
 
-    # Проверяем какие метрики уже заполнены
     metrics = await get_health_metrics_by_date(user_id, today)
 
-    # Удаляем сообщение с напоминанием
     try:
         await callback.message.delete()
     except:
         pass
 
-    # Начинаем полный ввод всех метрик
     await callback.message.answer(
         "💗 Введите ваш <b>утренний пульс</b> (уд/мин):\n\n"
         "Например: 60",
@@ -1545,7 +1395,6 @@ async def handle_daily_reminder_no(callback: CallbackQuery):
     """Обработка отказа от ввода данных из ежедневного напоминания"""
     await callback.answer("Хорошо, напомню позже! 👌", show_alert=False)
 
-    # Удаляем сообщение с напоминанием
     try:
         await callback.message.delete()
     except:
@@ -1558,7 +1407,6 @@ async def cancel_health_export_inline(callback: CallbackQuery, state: FSMContext
     await state.clear()
     from bot.keyboards import get_export_type_keyboard
 
-    # Возвращаем пользователя в меню экспорта
     await callback.message.edit_text(
         "📥 <b>Экспорт в PDF</b>\n\n"
         "Выберите, что вы хотите экспортировать:",

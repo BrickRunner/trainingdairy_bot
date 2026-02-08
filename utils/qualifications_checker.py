@@ -14,7 +14,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Пути к официальным источникам нормативов
 SOURCES = {
     'running': {
         'url': 'https://xn--b1afq1a.xn--p1ai/evsk/athletics_norm/',
@@ -50,13 +49,11 @@ async def get_page_hash(url: str) -> Optional[str]:
         MD5 хеш содержимого страницы или None при ошибке
     """
     try:
-        # Используем connector без проверки SSL для некоторых сайтов
         connector = aiohttp.TCPConnector(ssl=False)
         async with aiohttp.ClientSession(connector=connector) as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status == 200:
                     content = await response.text()
-                    # Вычисляем хеш содержимого
                     return hashlib.md5(content.encode('utf-8')).hexdigest()
                 else:
                     logger.warning(f"Не удалось загрузить {url}: статус {response.status}")
@@ -105,25 +102,25 @@ async def check_standards_updates() -> Dict[str, bool]:
         for sport_type, source in SOURCES.items():
             logger.info(f"Проверка обновлений для {source['name']}...")
 
-            # Проверяем, есть ли нормативы в БД
+            # Проверяем, есть ли уже нормативы в БД для данного вида спорта
             table_name = f"{sport_type}_standards"
             async with db.execute(f"SELECT COUNT(*) as cnt FROM {table_name}") as cursor:
                 row = await cursor.fetchone()
                 standards_count = row['cnt'] if row else 0
 
-            # Если нормативов нет - нужно загрузить
+            # Если нормативов нет в БД - помечаем для первичной загрузки
             if standards_count == 0:
                 logger.warning(f"⚠️ Нормативы {source['name']} отсутствуют в БД - требуется загрузка")
                 updates[sport_type] = True
                 continue
 
-            # Получаем текущий хеш страницы
+            # Получаем MD5 хеш текущей версии страницы с нормативами
             current_hash = await get_page_hash(source['url'])
             if not current_hash:
                 updates[sport_type] = False
                 continue
 
-            # Получаем сохраненный хеш
+            # Получаем сохраненный хеш из БД
             async with db.execute(
                 "SELECT content_hash, last_check_date FROM standards_tracking WHERE sport_type = ?",
                 (sport_type,)
@@ -132,9 +129,10 @@ async def check_standards_updates() -> Dict[str, bool]:
 
             if row:
                 saved_hash = row['content_hash']
+                # Сравниваем хеши - если отличаются, значит нормативы изменились
                 has_update = (saved_hash != current_hash)
 
-                # Обновляем информацию о проверке
+                # Обновляем информацию о проверке в БД
                 await db.execute("""
                     UPDATE standards_tracking
                     SET content_hash = ?,
@@ -228,7 +226,9 @@ async def daily_standards_check(bot):
     try:
         updates = await check_standards_updates()
 
-        # Если есть обновления по плаванию, пытаемся автоматически загрузить новые нормативы
+        # Автоматическая загрузка новых нормативов при обнаружении изменений
+
+        # Плавание
         if updates.get('swimming', False):
             logger.info("Обнаружены изменения в нормативах по плаванию, попытка автоматической загрузки...")
             try:

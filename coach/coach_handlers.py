@@ -34,14 +34,12 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-# ========== ТРЕНЕРСКАЯ СТОРОНА ==========
 
 @router.callback_query(F.data == "coach:menu")
 async def show_coach_menu(callback: CallbackQuery):
     """Показать главное меню тренера"""
     user_id = callback.from_user.id
 
-    # Проверяем что пользователь тренер
     if not await is_user_coach(user_id):
         await callback.answer("У вас нет доступа к этому разделу", show_alert=True)
         return
@@ -99,7 +97,6 @@ async def show_student_detail(callback: CallbackQuery):
     student_id = int(callback.data.split(":")[2])
     coach_id = callback.from_user.id
 
-    # Проверяем что это ученик данного тренера
     students = await get_coach_students(coach_id)
     student = next((s for s in students if s['id'] == student_id), None)
 
@@ -107,19 +104,15 @@ async def show_student_detail(callback: CallbackQuery):
         await callback.answer("Ученик не найден", show_alert=True)
         return
 
-    # Получаем отображаемое имя (с учётом псевдонима)
     display_name = await get_student_display_name(coach_id, student_id)
 
     user_info = await get_user(student_id)
 
-    # Форматируем дату подключения согласно настройкам тренера
     from utils.date_formatter import get_user_date_format, DateFormatter
     coach_date_format = await get_user_date_format(coach_id)
 
-    # Извлекаем только дату из timestamp (берём первые 10 символов: YYYY-MM-DD)
     connected_at_str = student.get('connected_at', '')
     if connected_at_str:
-        # Если есть пробел (формат datetime), берём только дату
         connected_date_only = connected_at_str.split()[0] if ' ' in connected_at_str else connected_at_str[:10]
         connected_date = DateFormatter.format_date(connected_date_only, coach_date_format)
     else:
@@ -146,7 +139,6 @@ async def show_student_trainings_menu(callback: CallbackQuery):
     student_id = int(callback.data.split(":")[2])
     coach_id = callback.from_user.id
 
-    # Проверяем доступ
     if not await can_coach_access_student(coach_id, student_id):
         await callback.answer("Нет доступа к этому ученику", show_alert=True)
         return
@@ -182,12 +174,10 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
     period = parts[3]
     coach_id = callback.from_user.id
 
-    # Проверяем доступ
     if not await can_coach_access_student(coach_id, student_id):
         await callback.answer("Нет доступа к этому ученику", show_alert=True)
         return
 
-    # Удаляем старые сообщения с графиками, если они есть
     data = await state.get_data()
     old_message_ids = data.get('coach_trainings_message_ids', [])
     for msg_id in old_message_ids:
@@ -197,12 +187,10 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
             pass
     await state.update_data(coach_trainings_message_ids=[])
 
-    # Получаем формат даты и единицы измерения ТРЕНЕРА (не ученика)
     coach_date_format = await get_user_date_format(coach_id)
     coach_settings = await get_user_settings(coach_id)
     distance_unit = coach_settings.get('distance_unit', 'км') if coach_settings else 'км'
 
-    # Получаем тренировки и статистику за период
     trainings = await get_trainings_by_period(student_id, period)
     stats = await get_training_statistics(student_id, period)
     display_name = await get_student_display_name(coach_id, student_id)
@@ -210,7 +198,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
     period_names = {"week": "неделю", "2weeks": "2 недели", "month": "месяц"}
     period_name = period_names.get(period, "период")
 
-    # Определяем количество дней для графиков
     period_days = {
         "week": 7,
         "2weeks": 14,
@@ -218,7 +205,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
     }
     days = period_days.get(period, 7)
 
-    # Определяем начальную дату периода для отображения
     today = datetime.now().date()
     if period == 'week':
         start_date = today - timedelta(days=today.weekday())
@@ -263,21 +249,17 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
         await callback.answer()
         return
 
-    # Формируем заголовок с общей статистикой
     message_text = f"📊 *Статистика: {display_name}*\n"
     message_text += f"📅 За {period_display}\n\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n"
     message_text += "📈 *ОБЩАЯ СТАТИСТИКА*\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n\n"
 
-    # 1. Общее количество тренировок
     message_text += f"🏃 Всего тренировок: *{stats['total_count']}*\n"
 
-    # 2. Общий километраж (и средний за неделю для периодов > 1 недели)
     if stats['total_distance'] > 0:
         message_text += f"📏 Общий километраж: *{format_distance(stats['total_distance'], distance_unit)}*\n"
 
-        # Для периодов больше недели показываем средний км за неделю
         if period in ['2weeks', 'month']:
             days_in_period = (today - start_date).days + 1
             weeks_count = days_in_period / 7
@@ -286,7 +268,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
                 avg_per_week = stats['total_distance'] / weeks_count
                 message_text += f"   _(Средний за неделю: {format_distance(avg_per_week, distance_unit)})_\n"
 
-    # 3. Типы тренировок с процентами
     if stats['types_count']:
         message_text += f"\n📋 *Типы тренировок:*\n"
 
@@ -298,7 +279,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
             'интервальная': '⚡'
         }
 
-        # Сортируем по количеству (от большего к меньшему)
         sorted_types = sorted(stats['types_count'].items(), key=lambda x: x[1], reverse=True)
 
         for t_type, count in sorted_types:
@@ -306,7 +286,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
             percentage = (count / stats['total_count']) * 100
             message_text += f"  {emoji} {t_type.capitalize()}: {count} ({percentage:.1f}%)\n"
 
-    # 4. Средний уровень усилий
     if stats['avg_fatigue'] > 0:
         message_text += f"\n💪 Средний уровень усилий: *{stats['avg_fatigue']}/10*\n"
 
@@ -314,7 +293,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
     message_text += "📝 *СПИСОК ТРЕНИРОВОК*\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n\n"
 
-    # Эмодзи для типов
     type_emoji = {
         'кросс': '🏃',
         'плавание': '🏊',
@@ -323,22 +301,17 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
         'интервальная': '⚡'
     }
 
-    # Добавляем детали каждой тренировки
-    for idx, training in enumerate(trainings[:15], 1):  # Показываем максимум 15
-        # Парсим и форматируем дату согласно настройкам тренера
+    for idx, training in enumerate(trainings[:15], 1):  
         date = DateFormatter.format_date(training['date'], coach_date_format)
         t_type = training['type']
         emoji = type_emoji.get(t_type, '📝')
 
-        # 1. Дата и тип (с отметкой если добавлено тренером)
         coach_mark = " 👨‍🏫" if training.get('added_by_coach_id') else ""
         message_text += f"*{idx}.* {emoji} *{t_type.capitalize()}* • {date}{coach_mark}\n"
 
-        # 2. Продолжительность в формате ЧЧ:ММ:СС
         if training.get('time'):
             message_text += f"   ⏰ Время: {training['time']}\n"
 
-        # 3. Общий километраж с учетом единиц измерения
         if t_type == 'интервальная':
             if training.get('calculated_volume'):
                 message_text += f"   📏 Дистанция: {format_distance(training['calculated_volume'], distance_unit)}\n"
@@ -349,28 +322,22 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
                 else:
                     message_text += f"   📏 Дистанция: {format_distance(training['distance'], distance_unit)}\n"
 
-        # 4. Средний темп/скорость/интервалов
         if t_type == 'интервальная':
-            # Показываем средний темп отрезков
             if training.get('intervals'):
                 from utils.interval_calculator import calculate_average_interval_pace
                 avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
                 if avg_pace_intervals:
                     message_text += f"   ⚡ Средний темп отрезков: {avg_pace_intervals}\n"
         elif t_type == 'велотренировка':
-            # Для велосипеда - скорость
             if training.get('avg_pace'):
                 message_text += f"   🚴 Средняя скорость: {training['avg_pace']} {training.get('pace_unit', '')}\n"
         elif t_type != 'силовая':
-            # Для остальных (кросс, плавание) - темп
             if training.get('avg_pace'):
                 message_text += f"   ⚡ Средний темп: {training['avg_pace']} {training.get('pace_unit', '')}\n"
 
-        # Дополнительно: пульс
         if training.get('avg_pulse'):
             message_text += f"   ❤️ Пульс: {training['avg_pulse']} уд/мин\n"
 
-        # Усилия
         if training.get('fatigue_level'):
             message_text += f"   💪 Усилия: {training['fatigue_level']}/10\n"
 
@@ -386,11 +353,9 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
             reply_markup=get_student_trainings_period_keyboard(student_id)
         )
     except Exception as e:
-        # Если сообщение не изменилось - просто отвечаем на callback
         if "message is not modified" in str(e):
             await callback.answer("Данные актуальны", show_alert=False)
         elif "message to edit not found" in str(e).lower():
-            # Если сообщение было удалено - отправляем новое
             logger.warning(f"Сообщение для редактирования не найдено, отправляем новое")
             await callback.message.answer(
                 message_text,
@@ -401,7 +366,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
             logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
             raise
 
-    # Генерируем и отправляем графики для всех периодов (только если тренировок >= 2)
     new_message_ids = []
     if len(trainings) >= 2:
         try:
@@ -434,7 +398,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
     else:
         logger.info(f"Недостаточно тренировок для графиков: {len(trainings)} (минимум 2)")
 
-    # Отправляем сообщение с кнопками для выбора тренировки
     from coach.coach_keyboards import get_student_trainings_keyboard
     menu_msg = await callback.message.answer(
         "📋 *Выберите тренировку для просмотра деталей:*\n\n"
@@ -444,7 +407,6 @@ async def show_student_trainings_by_period(callback: CallbackQuery, state: FSMCo
     )
     new_message_ids.append(menu_msg.message_id)
 
-    # Сохраняем ID новых сообщений в state
     await state.update_data(coach_trainings_message_ids=new_message_ids)
 
     await callback.answer()
@@ -459,7 +421,6 @@ async def show_student_health_menu(callback: CallbackQuery):
     student_id = int(callback.data.split(":")[2])
     coach_id = callback.from_user.id
 
-    # Проверяем доступ
     if not await can_coach_access_student(coach_id, student_id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -488,51 +449,42 @@ async def show_student_health_data(callback: CallbackQuery):
 
     parts = callback.data.split(":")
     student_id = int(parts[2])
-    period = parts[3]  # week, 2weeks, month
+    period = parts[3]  
     coach_id = callback.from_user.id
 
-    # Проверяем доступ
     if not await can_coach_access_student(coach_id, student_id):
         await callback.answer("Нет доступа", show_alert=True)
         return
 
     display_name = await get_student_display_name(coach_id, student_id)
 
-    # Получаем формат даты и единицы измерения тренера
     coach_date_format = await get_user_date_format(coach_id)
     coach_settings = await get_user_settings(coach_id)
     weight_unit = coach_settings.get('weight_unit', 'кг') if coach_settings else 'кг'
 
-    # Определяем начальную и конечную даты в зависимости от периода
     from datetime import datetime, timedelta
     import calendar
 
     today = datetime.now().date()
 
     if period == 'week':
-        # Текущая календарная неделя: от понедельника до воскресенья
-        start_date = today - timedelta(days=today.weekday())  # Понедельник
-        end_date = start_date + timedelta(days=6)  # Воскресенье
+        start_date = today - timedelta(days=today.weekday())  
+        end_date = start_date + timedelta(days=6)  
         period_name = 'неделя'
     elif period == '2weeks':
-        # Последние 14 дней до сегодня
         start_date = today - timedelta(days=13)
         end_date = today
         period_name = 'две недели'
     elif period == 'month':
-        # Текущий календарный месяц: с 1 до последнего числа
         start_date = today.replace(day=1)
-        # Последний день месяца
         last_day = calendar.monthrange(today.year, today.month)[1]
         end_date = today.replace(day=last_day)
         period_name = 'месяц'
     else:
-        # По умолчанию - неделя
         start_date = today - timedelta(days=today.weekday())
         end_date = start_date + timedelta(days=6)
         period_name = 'неделя'
 
-    # Получаем данные о здоровье за период
     from health.health_queries import get_health_metrics_range
     health_data = await get_health_metrics_range(student_id, start_date, end_date)
 
@@ -546,17 +498,16 @@ async def show_student_health_data(callback: CallbackQuery):
         text = f"💊 <b>Здоровье: {display_name}</b>\n"
         text += f"📅 За {period_name}\n\n"
 
-        for record in reversed(health_data):  # Новые сверху
+        for record in reversed(health_data):  
             date_str = record['date']
             if isinstance(date_str, str):
-                # Форматируем дату согласно настройкам тренера (короткий формат)
                 formatted_date = DateFormatter.format_date(date_str, coach_date_format)
                 if coach_date_format == 'ДД.ММ.ГГГГ':
-                    date_str = formatted_date[:5]  # ДД.ММ
+                    date_str = formatted_date[:5]  
                 elif coach_date_format == 'ММ/ДД/ГГГГ':
-                    date_str = formatted_date[:5]  # ММ/ДД
-                else:  # ГГГГ-ММ-ДД
-                    date_str = formatted_date[5:]  # ММ-ДД
+                    date_str = formatted_date[:5]  
+                else:  
+                    date_str = formatted_date[5:]  
 
             line = f"📅 {date_str}: "
             parts_list = []
@@ -565,7 +516,6 @@ async def show_student_health_data(callback: CallbackQuery):
                 parts_list.append(f"💗 {record['morning_pulse']} уд/мин")
 
             if record.get('weight'):
-                # Вес в БД всегда хранится в кг, конвертируем если нужно
                 weight_value = record['weight']
                 if weight_unit == 'фунты':
                     weight_value = kg_to_lbs(weight_value)
@@ -581,7 +531,6 @@ async def show_student_health_data(callback: CallbackQuery):
 
             text += line + "\n"
 
-    # Кнопка назад к выбору периода
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
@@ -629,17 +578,13 @@ async def remove_student(callback: CallbackQuery):
     student_id = int(callback.data.split(":")[2])
     coach_id = callback.from_user.id
 
-    # Получаем имя ученика для уведомления
     student_display_name = await get_student_display_name(coach_id, student_id)
 
-    # Получаем информацию о тренере для уведомления
     coach_settings = await get_user_settings(coach_id)
     coach_name = coach_settings.get('name', 'Тренер') if coach_settings else 'Тренер'
 
-    # Удаляем ученика
     await remove_student_from_coach(coach_id, student_id)
 
-    # Уведомляем ученика об удалении
     try:
         await callback.bot.send_message(
             student_id,
@@ -649,7 +594,6 @@ async def remove_student(callback: CallbackQuery):
         )
         logger.info(f"Notified student {student_id} about removal by coach {coach_id}")
 
-        # Редирект ученика в главное меню
         student_settings = await get_user_settings(student_id)
         student_is_coach = await is_user_coach(student_id)
 
@@ -662,7 +606,6 @@ async def remove_student(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Failed to notify student {student_id} about removal: {e}")
 
-    # Перенаправляем тренера в главное меню кабинета тренера
     await callback.message.edit_text(
         "👨‍🏫 <b>Кабинет тренера</b>\n\n"
         "Здесь вы можете управлять своими учениками, "
@@ -701,7 +644,6 @@ async def show_coach_link(callback: CallbackQuery):
     await callback.answer()
 
 
-# ========== УЧЕНИЧЕСКАЯ СТОРОНА ==========
 
 @router.callback_query(F.data == "student:my_coach")
 async def show_my_coach(callback: CallbackQuery):
@@ -765,10 +707,8 @@ async def cancel_add_coach(callback: CallbackQuery, state: FSMContext):
     """Отменить добавление тренера и вернуться в настройки"""
     await state.clear()
 
-    # Редирект в настройки
     from settings.settings_keyboards import get_settings_menu_keyboard
 
-    # Проверяем, является ли пользователь тренером
     user_id = callback.from_user.id
     user_is_coach = await is_user_coach(user_id)
 
@@ -786,7 +726,6 @@ async def process_coach_code(message: Message, state: FSMContext):
     """Обработать введённый код тренера"""
     code = message.text.strip().upper()
 
-    # Ищем тренера по коду
     coach_id = await find_coach_by_code(code)
 
     if not coach_id:
@@ -797,10 +736,8 @@ async def process_coach_code(message: Message, state: FSMContext):
         )
         return
 
-    # Добавляем связь
     student_id = message.from_user.id
 
-    # Проверяем, что пользователь не пытается добавить себя
     if coach_id == student_id:
         await message.answer(
             "❌ <b>Ошибка подключения</b>\n\n"
@@ -823,7 +760,6 @@ async def process_coach_code(message: Message, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Уведомляем тренера
         try:
             student_name = message.from_user.full_name
             await message.bot.send_message(
@@ -832,7 +768,6 @@ async def process_coach_code(message: Message, state: FSMContext):
                 f"К вам подключился: {student_name}"
             )
 
-            # Редирект тренера в главное меню
             from database.queries import get_user_settings
             coach_settings = await get_user_settings(coach_id)
             coach_is_coach = await is_user_coach(coach_id)
@@ -846,7 +781,6 @@ async def process_coach_code(message: Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Failed to notify coach: {e}")
 
-        # Редирект в главное меню
         from database.queries import get_user_settings
         user_id = message.from_user.id
         is_coach_status = await is_user_coach(user_id)
@@ -865,7 +799,6 @@ async def process_coach_code(message: Message, state: FSMContext):
             parse_mode="HTML"
         )
 
-        # Редирект в главное меню
         from database.queries import get_user_settings
         user_id = message.from_user.id
         settings = await get_user_settings(user_id)
@@ -908,7 +841,6 @@ async def remove_coach(callback: CallbackQuery):
     )
     await callback.answer()
 
-    # Уведомляем тренера об отключении
     if coach_id:
         try:
             await callback.bot.send_message(
@@ -919,7 +851,6 @@ async def remove_coach(callback: CallbackQuery):
             )
             logger.info(f"Notified coach {coach_id} about student {user_id} disconnect")
 
-            # Редирект тренера в главное меню
             from database.queries import get_user_settings
             coach_settings = await get_user_settings(coach_id)
             coach_is_coach = await is_user_coach(coach_id)
@@ -934,7 +865,6 @@ async def remove_coach(callback: CallbackQuery):
             logger.error(f"Failed to notify coach {coach_id} about disconnect: {e}")
 
 
-# ========== НОВЫЕ ФУНКЦИИ: ПСЕВДОНИМ, КОММЕНТАРИИ, ДОБАВЛЕНИЕ ТРЕНИРОВОК ==========
 
 @router.callback_query(F.data.startswith("coach:edit_nickname:"))
 async def edit_nickname_prompt(callback: CallbackQuery, state: FSMContext):
@@ -944,7 +874,6 @@ async def edit_nickname_prompt(callback: CallbackQuery, state: FSMContext):
     student_id = int(callback.data.split(":")[2])
     coach_id = callback.from_user.id
 
-    # Сохраняем student_id в состоянии
     await state.update_data(student_id=student_id)
 
     display_name = await get_student_display_name(coach_id, student_id)
@@ -974,18 +903,14 @@ async def process_nickname(message: Message, state: FSMContext):
 
     await set_student_nickname(coach_id, student_id, nickname)
 
-    # Получаем обновленное имя
     display_name = await get_student_display_name(coach_id, student_id)
 
-    # Получаем информацию об ученике
     students = await get_coach_students(coach_id)
     student = next((s for s in students if s['id'] == student_id), None)
 
     if student:
-        # Форматируем дату подключения
         coach_date_format = await get_user_date_format(coach_id)
 
-        # Извлекаем только дату из timestamp
         connected_at_str = student.get('connected_at', '')
         if connected_at_str:
             connected_date_only = connected_at_str.split()[0] if ' ' in connected_at_str else connected_at_str[:10]
@@ -1024,7 +949,6 @@ async def show_training_detail(callback: CallbackQuery):
     period = parts[4] if len(parts) > 4 else None
     coach_id = callback.from_user.id
 
-    # Проверяем доступ
     if not await can_coach_access_student(coach_id, student_id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -1034,17 +958,14 @@ async def show_training_detail(callback: CallbackQuery):
         await callback.answer("Тренировка не найдена", show_alert=True)
         return
 
-    # Логирование для отладки комментариев
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"Training {training_id}: comment field = {training.get('comment')}, has {len(training.get('comments', []))} trainer comments")
 
-    # Форматируем информацию о тренировке
     from database.queries import get_user_settings
     from utils.date_formatter import get_user_date_format, DateFormatter
     from competitions.competitions_utils import km_to_miles
 
-    # Используем формат даты и единицы измерения ТРЕНЕРА для единообразия в кабинете тренера
     coach_date_format = await get_user_date_format(coach_id)
     formatted_date = DateFormatter.format_date(training['date'], coach_date_format)
 
@@ -1067,19 +988,15 @@ async def show_training_detail(callback: CallbackQuery):
     text += f"📅 <b>Дата:</b> {formatted_date}\n"
     text += f"🏋️ <b>Тип:</b> {t_type.capitalize()}\n"
 
-    # Время тренировки
     if training.get('time'):
         text += f"⏱ <b>Время:</b> {training['time']}\n"
 
-    # Специфичная информация в зависимости от типа
     if t_type == 'интервальная':
-        # Для интервальной - описание и объем
         if training.get('calculated_volume'):
             from utils.unit_converter import format_distance
             text += f"📏 <b>Объем:</b> {format_distance(training['calculated_volume'], distance_unit)}\n"
 
         if training.get('intervals'):
-            # Показываем средний темп отрезков если есть результаты
             from utils.interval_calculator import calculate_average_interval_pace
             avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
             if avg_pace_intervals:
@@ -1088,12 +1005,10 @@ async def show_training_detail(callback: CallbackQuery):
             text += f"\n📋 <b>Описание тренировки:</b>\n{training['intervals']}\n"
 
     elif t_type == 'силовая':
-        # Для силовой - упражнения
         if training.get('exercises'):
             text += f"\n💪 <b>Упражнения:</b>\n{training['exercises']}\n"
 
     else:
-        # Для кросса, плавания, велотренировки - дистанция и темп
         if training.get('distance'):
             if t_type == 'плавание':
                 from utils.unit_converter import format_swimming_distance
@@ -1102,9 +1017,7 @@ async def show_training_detail(callback: CallbackQuery):
                 from utils.unit_converter import format_distance
                 text += f"📏 <b>Дистанция:</b> {format_distance(training['distance'], distance_unit)}\n"
 
-        # Для плавания - дополнительная информация
         if t_type == 'плавание':
-            # Место тренировки
             if training.get('swimming_location'):
                 from utils.swimming_pace import format_swimming_location
                 location_text = format_swimming_location(
@@ -1113,7 +1026,6 @@ async def show_training_detail(callback: CallbackQuery):
                 )
                 text += f"📍 <b>Место:</b> {location_text}\n"
 
-            # Стили плавания
             if training.get('swimming_styles'):
                 import json
                 try:
@@ -1124,7 +1036,6 @@ async def show_training_detail(callback: CallbackQuery):
                 except:
                     pass
 
-            # Описание отрезков
             if training.get('swimming_sets'):
                 text += f"\n📝 <b>Отрезки:</b>\n{training['swimming_sets']}\n"
 
@@ -1135,24 +1046,20 @@ async def show_training_detail(callback: CallbackQuery):
             else:
                 text += f"⚡ <b>Средний темп:</b> {training['avg_pace']} {pace_unit}\n"
 
-    # Пульс (для всех типов)
     if training.get('avg_pulse'):
         text += f"❤️ <b>Средний пульс:</b> {training['avg_pulse']} уд/мин\n"
 
     if training.get('max_pulse'):
         text += f"💗 <b>Максимальный пульс:</b> {training['max_pulse']} уд/мин\n"
 
-    # Уровень усилий
     if training.get('fatigue_level'):
         text += f"\n💪 <b>Уровень усилий:</b> {training['fatigue_level']}/10\n"
 
     text += "\n━━━━━━━━━━━━━━━━━\n"
 
-    # Комментарий ученика (его личный комментарий к тренировке)
     if training.get('comment'):
         text += f"\n💬 <b>Комментарий ученика:</b>\n<i>{training['comment']}</i>\n"
 
-    # Комментарии тренера
     comments = training.get('comments', [])
     coach_has_comment = False
     if comments:
@@ -1160,7 +1067,6 @@ async def show_training_detail(callback: CallbackQuery):
         for comment in comments:
             author_name = comment.get('author_name') or comment.get('author_username')
             text += f"\n<i>{author_name}:</i> {comment['comment']}\n"
-            # Проверяем, есть ли комментарий от текущего тренера
             if comment.get('author_id') == coach_id:
                 coach_has_comment = True
 
@@ -1180,7 +1086,6 @@ async def add_comment_prompt(callback: CallbackQuery, state: FSMContext):
     student_id = int(parts[3])
     period = parts[4] if len(parts) > 4 else None
 
-    # Сохраняем в состоянии
     await state.update_data(training_id=training_id, student_id=student_id, period=period)
 
     await callback.message.edit_text(
@@ -1208,18 +1113,15 @@ async def process_comment(message: Message, state: FSMContext):
     coach_id = message.from_user.id
     comment_text = message.text.strip()
 
-    # Получаем информацию о тренировке до добавления комментария (для уведомления)
     training = await get_training_with_comments(training_id)
     if not training:
         await message.answer("❌ Тренировка не найдена", parse_mode="HTML")
         await state.clear()
         return
 
-    # Форматируем дату согласно настройкам ученика
     user_date_format = await get_user_date_format(student_id)
     formatted_date = DateFormatter.format_date(training['date'], user_date_format)
 
-    # Определяем тип тренировки для эмодзи
     type_emoji = {
         'кросс': '🏃',
         'плавание': '🏊',
@@ -1229,17 +1131,13 @@ async def process_comment(message: Message, state: FSMContext):
     }
     emoji = type_emoji.get(training['type'], '📝')
 
-    # Добавляем комментарий
     await add_comment_to_training(training_id, coach_id, comment_text)
 
-    # Уведомляем ученика с датой тренировки и кнопкой для просмотра
     try:
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
         from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-        # Создаем клавиатуру с кнопкой просмотра деталей
         builder = InlineKeyboardBuilder()
-        # Используем period или "week" как дефолт
         view_period = period if period else "week"
         builder.row(
             InlineKeyboardButton(
@@ -1260,14 +1158,11 @@ async def process_comment(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Failed to notify student: {e}")
 
-    # Получаем обновленную тренировку с комментариями (для отображения тренеру)
     training = await get_training_with_comments(training_id)
 
-    # Используем настройки ТРЕНЕРА (а не ученика) для отображения деталей
     coach_settings = await get_user_settings(coach_id)
     distance_unit = coach_settings.get('distance_unit', 'км') if coach_settings else 'км'
 
-    # Форматируем дату согласно настройкам ТРЕНЕРА
     coach_date_format = await get_user_date_format(coach_id)
     coach_formatted_date = DateFormatter.format_date(training['date'], coach_date_format)
 
@@ -1279,19 +1174,15 @@ async def process_comment(message: Message, state: FSMContext):
     text += f"📅 <b>Дата:</b> {coach_formatted_date}\n"
     text += f"🏋️ <b>Тип:</b> {t_type.capitalize()}\n"
 
-    # Время тренировки
     if training.get('time'):
         text += f"⏱ <b>Время:</b> {training['time']}\n"
 
-    # Специфичная информация в зависимости от типа
     if t_type == 'интервальная':
-        # Для интервальной - описание и объем
         if training.get('calculated_volume'):
             from utils.unit_converter import format_distance
             text += f"📏 <b>Объем:</b> {format_distance(training['calculated_volume'], distance_unit)}\n"
 
         if training.get('intervals'):
-            # Показываем средний темп отрезков если есть результаты
             from utils.interval_calculator import calculate_average_interval_pace
             avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
             if avg_pace_intervals:
@@ -1300,12 +1191,10 @@ async def process_comment(message: Message, state: FSMContext):
             text += f"\n📋 <b>Описание тренировки:</b>\n{training['intervals']}\n"
 
     elif t_type == 'силовая':
-        # Для силовой - упражнения
         if training.get('exercises'):
             text += f"\n💪 <b>Упражнения:</b>\n{training['exercises']}\n"
 
     else:
-        # Для кросса, плавания, велотренировки - дистанция и темп
         if training.get('distance'):
             if t_type == 'плавание':
                 from utils.unit_converter import format_swimming_distance
@@ -1314,9 +1203,7 @@ async def process_comment(message: Message, state: FSMContext):
                 from utils.unit_converter import format_distance
                 text += f"📏 <b>Дистанция:</b> {format_distance(training['distance'], distance_unit)}\n"
 
-        # Для плавания - дополнительная информация
         if t_type == 'плавание':
-            # Место тренировки
             if training.get('swimming_location'):
                 from utils.swimming_pace import format_swimming_location
                 location_text = format_swimming_location(
@@ -1325,7 +1212,6 @@ async def process_comment(message: Message, state: FSMContext):
                 )
                 text += f"📍 <b>Место:</b> {location_text}\n"
 
-            # Стили плавания
             if training.get('swimming_styles'):
                 import json
                 try:
@@ -1336,7 +1222,6 @@ async def process_comment(message: Message, state: FSMContext):
                 except:
                     pass
 
-            # Описание отрезков
             if training.get('swimming_sets'):
                 text += f"\n📝 <b>Отрезки:</b>\n{training['swimming_sets']}\n"
 
@@ -1347,24 +1232,20 @@ async def process_comment(message: Message, state: FSMContext):
             else:
                 text += f"⚡ <b>Средний темп:</b> {training['avg_pace']} {pace_unit}\n"
 
-    # Пульс (для всех типов)
     if training.get('avg_pulse'):
         text += f"❤️ <b>Средний пульс:</b> {training['avg_pulse']} уд/мин\n"
 
     if training.get('max_pulse'):
         text += f"💗 <b>Максимальный пульс:</b> {training['max_pulse']} уд/мин\n"
 
-    # Уровень усилий
     if training.get('fatigue_level'):
         text += f"\n💪 <b>Уровень усилий:</b> {training['fatigue_level']}/10\n"
 
     text += "\n━━━━━━━━━━━━━━━━━\n"
 
-    # Комментарий ученика (его личный комментарий к тренировке)
     if training.get('comment'):
         text += f"\n💬 <b>Комментарий ученика:</b>\n<i>{training['comment']}</i>\n"
 
-    # Комментарии тренера
     comments = training.get('comments', [])
     coach_has_comment = False
     if comments:
@@ -1395,7 +1276,6 @@ async def show_student_stats_menu(callback: CallbackQuery):
     student_id = int(callback.data.split(":")[2])
     coach_id = callback.from_user.id
 
-    # Проверяем доступ
     if not await can_coach_access_student(coach_id, student_id):
         await callback.answer("Нет доступа", show_alert=True)
         return
@@ -1425,18 +1305,15 @@ async def show_student_statistics(callback: CallbackQuery):
     period = parts[3]
     coach_id = callback.from_user.id
 
-    # Проверяем доступ
     if not await can_coach_access_student(coach_id, student_id):
         await callback.answer("Нет доступа", show_alert=True)
         return
 
     display_name = await get_student_display_name(coach_id, student_id)
 
-    # Получаем настройки ученика для единиц измерения
     settings = await get_user_settings(student_id)
     distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-    # Получаем статистику
     stats = await get_training_statistics(student_id, period)
 
     period_names = {"week": "неделю", "2weeks": "2 недели", "month": "месяц"}
@@ -1452,7 +1329,6 @@ async def show_student_statistics(callback: CallbackQuery):
         await callback.answer()
         return
 
-    # Определяем начальную дату периода для отображения
     from utils.date_formatter import get_user_date_format, DateFormatter
     coach_date_format = await get_user_date_format(coach_id)
 
@@ -1461,54 +1337,47 @@ async def show_student_statistics(callback: CallbackQuery):
     if period == 'week':
         start_date = today - timedelta(days=today.weekday())
         formatted_start = DateFormatter.format_date(start_date, coach_date_format)
-        # Берем только день и месяц
         if coach_date_format == 'ДД.ММ.ГГГГ':
-            short_start = formatted_start[:5]  # ДД.ММ
+            short_start = formatted_start[:5]  
         elif coach_date_format == 'ММ/ДД/ГГГГ':
-            short_start = formatted_start[:5]  # ММ/ДД
-        else:  # ГГГГ-ММ-ДД
-            short_start = formatted_start[5:]  # ММ-ДД
+            short_start = formatted_start[:5]  
+        else:  
+            short_start = formatted_start[5:]  
         period_display = f"неделю (с {short_start} по сегодня)"
     elif period == '2weeks':
         start_date = today - timedelta(days=today.weekday() + 7)
         formatted_start = DateFormatter.format_date(start_date, coach_date_format)
-        # Берем только день и месяц
         if coach_date_format == 'ДД.ММ.ГГГГ':
-            short_start = formatted_start[:5]  # ДД.ММ
+            short_start = formatted_start[:5]  
         elif coach_date_format == 'ММ/ДД/ГГГГ':
-            short_start = formatted_start[:5]  # ММ/ДД
-        else:  # ГГГГ-ММ-ДД
-            short_start = formatted_start[5:]  # ММ-ДД
+            short_start = formatted_start[:5]  
+        else:  
+            short_start = formatted_start[5:]  
         period_display = f"2 недели (с {short_start} по сегодня)"
     elif period == 'month':
         start_date = today.replace(day=1)
         formatted_start = DateFormatter.format_date(start_date, coach_date_format)
-        # Берем только день и месяц
         if coach_date_format == 'ДД.ММ.ГГГГ':
-            short_start = formatted_start[:5]  # ДД.ММ
+            short_start = formatted_start[:5]  
         elif coach_date_format == 'ММ/ДД/ГГГГ':
-            short_start = formatted_start[:5]  # ММ/ДД
-        else:  # ГГГГ-ММ-ДД
-            short_start = formatted_start[5:]  # ММ-ДД
+            short_start = formatted_start[:5]  
+        else:  
+            short_start = formatted_start[5:]  
         period_display = f"месяц (с {short_start} по сегодня)"
     else:
         period_display = period_name
 
-    # Формируем сообщение с статистикой
     message_text = f"📈 <b>Статистика {display_name}</b>\n"
     message_text += f"📅 Период: {period_display}\n\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n"
     message_text += "📊 <b>ОБЩАЯ СТАТИСТИКА</b>\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n\n"
 
-    # 1. Общее количество тренировок
     message_text += f"🏃 Всего тренировок: <b>{stats['total_count']}</b>\n"
 
-    # 2. Общий километраж
     if stats['total_distance'] > 0:
         message_text += f"📏 Общий километраж: <b>{format_distance(stats['total_distance'], distance_unit)}</b>\n"
 
-        # Для периодов больше недели показываем средний км за неделю
         if period in ['2weeks', 'month']:
             days_in_period = (today - start_date).days + 1
             weeks_count = days_in_period / 7
@@ -1517,7 +1386,6 @@ async def show_student_statistics(callback: CallbackQuery):
                 avg_per_week = stats['total_distance'] / weeks_count
                 message_text += f"   <i>(Средний за неделю: {format_distance(avg_per_week, distance_unit)})</i>\n"
 
-    # 3. Типы тренировок с процентами
     if stats['types_count']:
         message_text += f"\n📋 <b>Типы тренировок:</b>\n"
 
@@ -1529,7 +1397,6 @@ async def show_student_statistics(callback: CallbackQuery):
             'интервальная': '⚡'
         }
 
-        # Сортируем по количеству
         sorted_types = sorted(stats['types_count'].items(), key=lambda x: x[1], reverse=True)
 
         for t_type, count in sorted_types:
@@ -1537,7 +1404,6 @@ async def show_student_statistics(callback: CallbackQuery):
             percentage = (count / stats['total_count']) * 100
             message_text += f"  {emoji} {t_type.capitalize()}: {count} ({percentage:.1f}%)\n"
 
-    # 4. Средний уровень усилий
     if stats['avg_fatigue'] > 0:
         message_text += f"\n💪 Средний уровень усилий: <b>{stats['avg_fatigue']}/10</b>\n"
 

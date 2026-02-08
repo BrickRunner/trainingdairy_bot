@@ -46,15 +46,12 @@ async def process_name(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем имя в FSM
     await state.update_data(name=name)
 
-    # Сохраняем в БД
     user_id = message.from_user.id
     await init_user_settings(user_id)
     await update_user_setting(user_id, 'name', name)
 
-    # Переходим к дате рождения
     await state.set_state(RegistrationStates.waiting_for_birth_date)
 
     await message.answer(
@@ -72,11 +69,9 @@ async def process_birth_date(message: Message, state: FSMContext):
     user_id = message.from_user.id
     date_str = message.text.strip()
 
-    # Парсим дату
     try:
         birth_date = datetime.strptime(date_str, "%d.%m.%Y")
 
-        # Проверяем адекватность даты
         today = datetime.now()
         age = (today - birth_date).days // 365
 
@@ -87,11 +82,9 @@ async def process_birth_date(message: Message, state: FSMContext):
             )
             return
 
-        # Сохраняем дату рождения
         await state.update_data(birth_date=birth_date.strftime("%Y-%m-%d"), age=age)
         await update_user_setting(user_id, 'birth_date', birth_date.strftime("%Y-%m-%d"))
 
-        # Переходим к выбору пола
         await state.set_state(RegistrationStates.waiting_for_gender)
 
         await message.answer(
@@ -112,19 +105,16 @@ async def process_birth_date(message: Message, state: FSMContext):
 async def process_gender(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора пола"""
     user_id = callback.from_user.id
-    gender = callback.data.split(":")[1]  # male или female
+    gender = callback.data.split(":")[1]  
 
-    # Сохраняем пол
     await state.update_data(gender=gender)
     await update_user_setting(user_id, 'gender', gender)
 
-    # Рассчитываем пульсовые зоны на основе возраста и пола
     data = await state.get_data()
     age = data.get('age')
     if age:
         await set_pulse_zones_auto(user_id, age)
 
-    # Переходим к росту
     await state.set_state(RegistrationStates.waiting_for_height)
 
     gender_text = "Мужской" if gender == "male" else "Женский"
@@ -151,11 +141,9 @@ async def process_height(message: Message, state: FSMContext):
             )
             return
 
-        # Сохраняем рост
         await state.update_data(height=height)
         await update_user_setting(user_id, 'height', height)
 
-        # Переходим к весу
         await state.set_state(RegistrationStates.waiting_for_weight)
 
         await message.answer(
@@ -185,11 +173,9 @@ async def process_weight(message: Message, state: FSMContext):
             )
             return
 
-        # Сохраняем вес
         await state.update_data(weight=weight)
         await update_user_setting(user_id, 'weight', weight)
 
-        # Переходим к выбору типов тренировок
         await state.set_state(RegistrationStates.selecting_main_types)
         await state.update_data(selected_types=[])
 
@@ -214,11 +200,9 @@ async def toggle_training_type(callback: CallbackQuery, state: FSMContext):
     """Переключение выбора типа тренировки"""
     training_type = callback.data.split(":")[1]
 
-    # Получаем текущий список выбранных типов
     data = await state.get_data()
     selected_types = data.get('selected_types', [])
 
-    # Переключаем тип
     if training_type in selected_types:
         selected_types.remove(training_type)
     else:
@@ -226,7 +210,6 @@ async def toggle_training_type(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(selected_types=selected_types)
 
-    # Обновляем клавиатуру
     await callback.message.edit_reply_markup(
         reply_markup=get_training_types_keyboard(selected_types)
     )
@@ -244,15 +227,11 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Выбери хотя бы один тип тренировки!", show_alert=True)
         return
 
-    # Сохраняем типы тренировок в БД
     await update_user_setting(user_id, 'main_training_types', json.dumps(selected_types))
 
-    # Автоопределение часового пояса на основе языка пользователя
     try:
-        # Получаем языковой код пользователя из Telegram
         language_code = callback.from_user.language_code or 'ru'
 
-        # Определение часового пояса по языковому коду
         timezone_map = {
             'ru': 'Europe/Moscow',
             'en': 'Europe/London',
@@ -275,13 +254,10 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
 
     await update_user_setting(user_id, 'timezone', timezone)
 
-    # Завершаем регистрацию
     await state.clear()
 
-    # Получаем имя для персонализации
     name = data.get('name', 'друг')
 
-    # Форматируем список выбранных типов для отображения
     type_names = {
         'кросс': '🏃 Кросс',
         'плавание': '🏊 Плавание',
@@ -292,7 +268,6 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
     }
     selected_names = [type_names.get(t, t) for t in selected_types]
 
-    # Форматируем дату рождения с учетом настроек пользователя
     from utils.date_formatter import get_user_date_format, DateFormatter
 
     birth_date_str = data.get('birth_date', '')
@@ -303,7 +278,6 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
     else:
         birth_date_formatted = 'не указана'
 
-    # Форматируем пол
     gender_text = 'Мужской' if data.get('gender') == 'male' else 'Женский'
 
     completion_text = (
@@ -326,7 +300,6 @@ async def confirm_training_types(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML"
     )
 
-    # Отправляем главное меню с учётом статуса тренера
     is_coach_status = await is_user_coach(callback.from_user.id)
     await callback.message.answer(
         "Выбери действие:",

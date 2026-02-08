@@ -25,7 +25,6 @@ async def get_user_competition_stats(user_id: int) -> Optional[Dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Проверяем есть ли запись в таблице статистики
         async with db.execute(
             "SELECT * FROM user_competition_stats WHERE user_id = ?",
             (user_id,)
@@ -35,7 +34,6 @@ async def get_user_competition_stats(user_id: int) -> Optional[Dict[str, Any]]:
             if row:
                 return dict(row)
 
-        # Если записи нет, создаём её и возвращаем пустую статистику
         await db.execute(
             """
             INSERT INTO user_competition_stats (user_id)
@@ -72,7 +70,6 @@ async def update_user_competition_stats(user_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Получаем все завершённые соревнования с результатами
         async with db.execute(
             """
             SELECT
@@ -90,7 +87,6 @@ async def update_user_competition_stats(user_id: int):
             results = await cursor.fetchall()
 
         if not results:
-            # Нет результатов, сбрасываем статистику
             await db.execute(
                 """
                 UPDATE user_competition_stats
@@ -113,7 +109,6 @@ async def update_user_competition_stats(user_id: int):
             await db.commit()
             return
 
-        # Подсчитываем статистику
         total_completed = len(results)
         total_marathons = 0
         total_half_marathons = 0
@@ -132,9 +127,7 @@ async def update_user_competition_stats(user_id: int):
 
             total_distance += distance
 
-            # Определяем категорию дистанции
             if 42.0 <= distance <= 42.3:
-                # Марафон
                 total_marathons += 1
                 if finish_time:
                     normalized_time = normalize_time(finish_time)
@@ -142,7 +135,6 @@ async def update_user_competition_stats(user_id: int):
                         best_marathon = normalized_time
 
             elif 21.0 <= distance <= 21.2:
-                # Полумарафон
                 total_half_marathons += 1
                 if finish_time:
                     normalized_time = normalize_time(finish_time)
@@ -150,7 +142,6 @@ async def update_user_competition_stats(user_id: int):
                         best_half_marathon = normalized_time
 
             elif 9.5 <= distance <= 10.5:
-                # 10 км
                 total_10k += 1
                 if finish_time:
                     normalized_time = normalize_time(finish_time)
@@ -158,14 +149,12 @@ async def update_user_competition_stats(user_id: int):
                         best_10k = normalized_time
 
             elif 4.5 <= distance <= 5.5:
-                # 5 км
                 total_5k += 1
                 if finish_time:
                     normalized_time = normalize_time(finish_time)
                     if best_5k is None or time_to_seconds(normalized_time) < time_to_seconds(best_5k):
                         best_5k = normalized_time
 
-        # Получаем общее количество соревнований (включая предстоящие)
         async with db.execute(
             """
             SELECT COUNT(*) as total
@@ -177,7 +166,6 @@ async def update_user_competition_stats(user_id: int):
             row = await cursor.fetchone()
             total_competitions = row['total'] if row else 0
 
-        # Обновляем статистику в БД
         await db.execute(
             """
             UPDATE user_competition_stats
@@ -251,8 +239,6 @@ async def add_result_and_update_stats(user_id: int, competition_id: int, result_
 
     from competitions.competitions_queries import add_competition_result
 
-    # Добавляем результат
     await add_competition_result(user_id, competition_id, result_data)
 
-    # Обновляем статистику
     await update_user_competition_stats(user_id)

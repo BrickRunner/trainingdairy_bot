@@ -19,14 +19,12 @@ def parse_time_to_seconds(time_str: str) -> float:
     """
     time_str = str(time_str).strip().replace(',', '.')
 
-    # Формат мин:с (например 1:03.84)
     if ':' in time_str:
         parts = time_str.split(':')
         minutes = int(parts[0])
         seconds = float(parts[1])
         return minutes * 60 + seconds
 
-    # Только секунды
     return float(time_str)
 
 
@@ -39,10 +37,8 @@ def get_frs24_swimming_standards() -> List[Dict]:
     """
     standards = []
 
-    # МУЖЧИНЫ - бассейн 25м
     male_25m = {
-        # Дистанция: {стиль: {разряд: время}}
-        0.05: {  # 50м
+        0.05: {  
             'freestyle': {
                 'МСМК': '21,18', 'МС': '22,45', 'КМС': '23,20',
                 'I': '24,45', 'II': '26,85', 'III': '29,05',
@@ -64,7 +60,7 @@ def get_frs24_swimming_standards() -> List[Dict]:
                 'I юн.': '38,05', 'II юн.': '48,05', 'III юн.': '58,05'
             }
         },
-        0.1: {  # 100м
+        0.1: {  
             'freestyle': {
                 'МСМК': '46,72', 'МС': '50,00', 'КМС': '53,30',
                 'I': '56,70', 'II': '1:03,1', 'III': '1:10,6',
@@ -91,7 +87,7 @@ def get_frs24_swimming_standards() -> List[Dict]:
                 'I юн.': '1:34,6', 'II юн.': '1:53,6', 'III юн.': '2:13,6'
             }
         },
-        0.2: {  # 200м
+        0.2: {  
             'freestyle': {
                 'МСМК': '1:43,02', 'МС': '1:50,95', 'КМС': '1:57,45',
                 'I': '2:05,7', 'II': '2:20,2', 'III': '2:38,7',
@@ -118,7 +114,7 @@ def get_frs24_swimming_standards() -> List[Dict]:
                 'I юн.': '3:29,2', 'II юн.': '4:04,2', 'III юн.': '4:44,2'
             }
         },
-        0.4: {  # 400м
+        0.4: {  
             'freestyle': {
                 'МСМК': '3:40,94', 'МС': '3:56,0', 'КМС': '4:08,5',
                 'I': '4:25,0', 'II': '5:00,0', 'III': '5:41,0',
@@ -130,14 +126,14 @@ def get_frs24_swimming_standards() -> List[Dict]:
                 'I юн.': '7:26,0', 'II юн.': '8:22,0', 'III юн.': '9:18,0'
             }
         },
-        0.8: {  # 800м
+        0.8: {  
             'freestyle': {
                 'МСМК': '7:42,7', 'МС': '8:17,0', 'КМС': '8:50,0',
                 'I': '9:24,0', 'II': '11:02,0', 'III': '12:24,0',
                 'I юн.': '14:26,0', 'II юн.': '16:26,0', 'III юн.': '18:26,0'
             }
         },
-        1.5: {  # 1500м
+        1.5: {  
             'freestyle': {
                 'МСМК': '14:44,74', 'МС': '15:28,5', 'КМС': '17:06,5',
                 'I': '18:05,0', 'II': '20:27,5', 'III': '23:27,5',
@@ -146,7 +142,6 @@ def get_frs24_swimming_standards() -> List[Dict]:
         }
     }
 
-    # МУЖЧИНЫ - бассейн 50м
     male_50m = {
         0.05: {
             'freestyle': {
@@ -247,7 +242,6 @@ def get_frs24_swimming_standards() -> List[Dict]:
         }
     }
 
-    # ЖЕНЩИНЫ - бассейн 25м
     female_25m = {
         0.05: {
             'freestyle': {
@@ -353,7 +347,6 @@ def get_frs24_swimming_standards() -> List[Dict]:
         }
     }
 
-    # ЖЕНЩИНЫ - бассейн 50м
     female_50m = {
         0.05: {
             'freestyle': {
@@ -454,7 +447,6 @@ def get_frs24_swimming_standards() -> List[Dict]:
         }
     }
 
-    # Маппинг стилей
     style_names = {
         'freestyle': 'вольный стиль',
         'backstroke': 'на спине',
@@ -463,7 +455,6 @@ def get_frs24_swimming_standards() -> List[Dict]:
         'medley': 'комплексное плавание'
     }
 
-    # Конвертируем в список
     datasets = [
         (male_25m, 'male', 25),
         (male_50m, 'male', 50),
@@ -488,11 +479,9 @@ def get_frs24_swimming_standards() -> List[Dict]:
 
 
 if __name__ == "__main__":
-    # Тест
     standards = get_frs24_swimming_standards()
     print(f"Всего нормативов: {len(standards)}")
 
-    # Примеры
     print("\nПримеры (мужчины, 100м вольный стиль, 50м бассейн):")
     for s in standards:
         if (s['distance'] == 0.1 and s['style'] == 'вольный стиль' and

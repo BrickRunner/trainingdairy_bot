@@ -10,9 +10,8 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
-# Настройки retry для rate limit (429)
 MAX_RETRIES = 3
-RETRY_DELAYS = [3, 6, 12]  # секунды между повторными попытками
+RETRY_DELAYS = [3, 6, 12]  
 
 
 async def _call_with_retry(client, **kwargs):
@@ -31,17 +30,15 @@ async def _call_with_retry(client, **kwargs):
                 raise
     raise last_error
 
-# Инициализация OpenRouter клиента
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
-# Создаем клиент OpenRouter через OpenAI-совместимый API
 ai_client = None
 if OPENROUTER_API_KEY:
     ai_client = AsyncOpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=OPENROUTER_API_KEY,
         default_headers={
-            "HTTP-Referer": "https://github.com/trainingdiary-bot",  # Опциональное поле для OpenRouter
+            "HTTP-Referer": "https://github.com/trainingdiary-bot",  
         }
     )
 
@@ -69,7 +66,6 @@ async def analyze_training_statistics(
         return None
 
     try:
-        # Формируем данные для анализа
         period_names = {
             "week": "неделю",
             "2weeks": "2 недели",
@@ -77,11 +73,9 @@ async def analyze_training_statistics(
         }
         period_name = period_names.get(period, period)
 
-        # Подготовка данных о тренировках
         training_types = statistics.get('types_count', {})
         types_str = ", ".join([f"{t}: {c}" for t, c in training_types.items()])
 
-        # Создаем промпт для AI
         prompt = f"""Ты спортивный аналитик. Проанализируй данные тренировок спортсмена за {period_name}.
 
 Данные:
@@ -97,7 +91,6 @@ async def analyze_training_statistics(
 
 Пиши как дружелюбный тренер, без сложных терминов. Используй эмодзи для наглядности."""
 
-        # Запрос к OpenRouter API с retry при rate limit
         response = await _call_with_retry(
             ai_client,
             model="google/gemini-2.0-flash-exp:free",
@@ -147,12 +140,10 @@ async def analyze_health_statistics(
         return None
 
     try:
-        # Подготовка данных
         pulse_data = statistics.get('pulse', {})
         weight_data = statistics.get('weight', {})
         sleep_data = statistics.get('sleep', {})
 
-        # Формируем строки с данными
         pulse_str = ""
         if pulse_data.get('avg'):
             pulse_str = f"Средний: {pulse_data['avg']:.0f} уд/мин, Диапазон: {pulse_data.get('min', 0):.0f}-{pulse_data.get('max', 0):.0f}"
@@ -167,7 +158,6 @@ async def analyze_health_statistics(
         if sleep_data.get('avg'):
             sleep_str = f"Среднее: {sleep_data['avg']:.1f} ч, Диапазон: {sleep_data.get('min', 0):.1f}-{sleep_data.get('max', 0):.1f} ч"
 
-        # Создаем промпт для AI
         prompt = f"""Ты врач спортивной медицины. Проанализируй показатели здоровья спортсмена за {period_name}.
 
 Данные:
@@ -183,7 +173,6 @@ async def analyze_health_statistics(
 
 Пиши как дружелюбный врач, без медицинских терминов. Используй эмодзи для наглядности."""
 
-        # Запрос к OpenRouter API с retry при rate limit
         response = await _call_with_retry(
             ai_client,
             model="google/gemini-2.0-flash-exp:free",

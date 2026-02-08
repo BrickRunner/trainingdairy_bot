@@ -9,21 +9,18 @@ from typing import Optional, Union
 class DateFormatter:
     """Класс для форматирования и парсинга дат согласно настройкам пользователя"""
     
-    # Маппинг форматов настроек на Python strftime форматы
     FORMAT_MAPPING = {
         'ДД.ММ.ГГГГ': '%d.%m.%Y',
         'ММ/ДД/ГГГГ': '%m/%d/%Y',
         'ГГГГ-ММ-ДД': '%Y-%m-%d'
     }
 
-    # Паттерны для валидации ввода
     VALIDATION_PATTERNS = {
         'ДД.ММ.ГГГГ': r'^\d{2}\.\d{2}\.\d{4}$',
         'ММ/ДД/ГГГГ': r'^\d{2}/\d{2}/\d{4}$',
         'ГГГГ-ММ-ДД': r'^\d{4}-\d{2}-\d{2}$'
     }
 
-    # Описания форматов для пользователя
     FORMAT_DESCRIPTIONS = {
         'ДД.ММ.ГГГГ': 'ДД.ММ.ГГГГ (например, 15.01.2024)',
         'ММ/ДД/ГГГГ': 'ММ/ДД/ГГГГ (например, 01/15/2024)',
@@ -45,18 +42,15 @@ class DateFormatter:
         Returns:
             Отформатированная строка даты
         """
-        # Если это строка, преобразуем в date объект
         if isinstance(date_obj, str):
             try:
                 date_obj = datetime.strptime(date_obj, '%Y-%m-%d').date()
             except ValueError:
-                return date_obj  # Возвращаем как есть, если не удалось распарсить
+                return date_obj  
         
-        # Если это datetime, берем только date
         if isinstance(date_obj, datetime):
             date_obj = date_obj.date()
         
-        # Получаем Python формат из настроек
         python_format = DateFormatter.FORMAT_MAPPING.get(user_format, '%d.%m.%Y')
         
         try:

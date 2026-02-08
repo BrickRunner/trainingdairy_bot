@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
-# URL источников нормативов
 CYCLING_SOURCES = {
     'current': {
         'url': 'https://fvsr.ru/wp-content/uploads/2024/11/velosport_dejstvuyut_c_26_noyabrya_2024_g.xls',
@@ -31,8 +30,6 @@ CYCLING_SOURCES = {
     }
 }
 
-# Дисциплины велоспорта
-# ВАЖНО: Разряды по велоспорту присваиваются только за шоссейные гонки
 CYCLING_DISCIPLINES = ['шоссе']
 
 
@@ -41,7 +38,6 @@ async def init_standards_database():
     Инициализирует таблицы для хранения нормативов ЕВСК в базе данных.
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        # Таблица нормативов по велоспорту
         await db.execute("""
             CREATE TABLE IF NOT EXISTS cycling_standards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

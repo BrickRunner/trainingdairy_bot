@@ -21,16 +21,13 @@ async def schedule_qualifications_check(bot):
 
     while True:
         try:
-            # Выполняем проверку
             await daily_standards_check(bot)
 
-            # Ждем 24 часа до следующей проверки
-            await asyncio.sleep(24 * 60 * 60)  # 24 часа
+            await asyncio.sleep(24 * 60 * 60)  
 
         except asyncio.CancelledError:
             logger.info("Планировщик проверки нормативов остановлен")
             break
         except Exception as e:
             logger.error(f"Ошибка в планировщике проверки нормативов: {e}")
-            # Ждем 1 час перед повторной попыткой
             await asyncio.sleep(60 * 60)

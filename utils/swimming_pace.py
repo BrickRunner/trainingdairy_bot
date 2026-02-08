@@ -24,14 +24,12 @@ def calculate_swimming_pace(distance_km: float, time_seconds: float, distance_un
         return "—"
 
     if distance_unit == 'мили':
-        # Для миль используем ярды: 1 км = 1093.61 ярдов
         distance_in_yards = distance_km * 1093.61
         pace_per_100yards = (time_seconds / distance_in_yards) * 100
         minutes = int(pace_per_100yards // 60)
         seconds = int(pace_per_100yards % 60)
         return f"{minutes:02d}:{seconds:02d} на 100ярд"
     else:
-        # Для километров используем метры
         distance_m = distance_km * 1000
         pace_per_100m = (time_seconds / distance_m) * 100
         minutes = int(pace_per_100m // 60)

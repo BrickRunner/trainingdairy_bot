@@ -27,7 +27,6 @@ async def create_reminders_for_competition(user_id: int, competition_id: int, co
         comp_date = datetime.strptime(comp_date_str, '%Y-%m-%d').date()
         today = date.today()
 
-        # Типы напоминаний и за сколько дней до соревнования
         reminder_periods = {
             '30days': 30,
             '14days': 14,
@@ -40,7 +39,6 @@ async def create_reminders_for_competition(user_id: int, competition_id: int, co
             for reminder_type, days_before in reminder_periods.items():
                 scheduled_date = comp_date - timedelta(days=days_before)
 
-                # Создаём напоминание только если дата ещё не прошла
                 if scheduled_date >= today:
                     await db.execute(
                         """
@@ -51,7 +49,6 @@ async def create_reminders_for_competition(user_id: int, competition_id: int, co
                         (user_id, competition_id, reminder_type, scheduled_date.strftime('%Y-%m-%d'))
                     )
 
-            # Добавляем напоминание для ввода результатов (на следующий день после соревнования)
             result_reminder_date = comp_date + timedelta(days=1)
             await db.execute(
                 """
@@ -155,7 +152,7 @@ async def send_competition_reminders(bot):
             try:
                 await send_single_reminder(bot, reminder)
                 await mark_reminder_as_sent(reminder['id'])
-                await asyncio.sleep(0.5)  # Небольшая задержка между отправками
+                await asyncio.sleep(0.5)  
 
             except Exception as e:
                 logger.error(f"Error sending reminder {reminder['id']}: {e}")
@@ -180,13 +177,10 @@ async def send_single_reminder(bot, reminder: dict):
     comp_name = reminder['competition_name']
     comp_date_str = reminder['competition_date']
 
-    # Парсим дату
     comp_date = datetime.strptime(comp_date_str, '%Y-%m-%d').date()
     days_until = (comp_date - date.today()).days
 
-    # Формируем текст напоминания в зависимости от типа
     if reminder_type == 'result_input':
-        # Напоминание о вводе результатов
         text = (
             "🏁 <b>КАК ПРОШЛО СОРЕВНОВАНИЕ?</b>\n\n"
             f"Вчера было ваше соревнование:\n"
@@ -220,7 +214,6 @@ async def send_single_reminder(bot, reminder: dict):
         )
 
     else:
-        # Напоминание о предстоящем соревновании
         day_word = "день" if days_until == 1 else "дня" if 2 <= days_until <= 4 else "дней"
 
         from utils.date_formatter import get_user_date_format, DateFormatter
@@ -250,7 +243,6 @@ async def send_single_reminder(bot, reminder: dict):
     logger.info(f"Sent {reminder_type} reminder to user {user_id} for competition {reminder['competition_id']}")
 
 
-# Функция для запуска планировщика (вызывается из main.py)
 async def schedule_competition_reminders(bot):
     """
     Планировщик проверки напоминаний (запускается раз в день)
@@ -263,13 +255,11 @@ async def schedule_competition_reminders(bot):
 
     while True:
         try:
-            # Проверяем время - отправляем напоминания в 10:20
             now = datetime.now()
             if now.hour == 6 and 5 <= now.minute < 10:
                 logger.info(f"Sending reminders at {now.strftime('%H:%M')}")
                 await send_competition_reminders(bot)
 
-            # Ждём 5 минут перед следующей проверкой
             await asyncio.sleep(300)
 
         except Exception as e:

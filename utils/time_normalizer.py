@@ -24,7 +24,6 @@ def normalize_time(time_str: str) -> Optional[str]:
     """
     time_str = time_str.strip()
 
-    # Паттерн для времени с двоеточием: 8:0, 08:00, 23:45
     pattern_with_colon = r'^(\d{1,2}):(\d{1,2})$'
     match = re.match(pattern_with_colon, time_str)
 
@@ -33,16 +32,13 @@ def normalize_time(time_str: str) -> Optional[str]:
         hour_int = int(hour)
         minute_int = int(minute)
 
-        # Проверка валидности
         if hour_int < 0 or hour_int > 23:
             return None
         if minute_int < 0 or minute_int > 59:
             return None
 
-        # Нормализуем к формату ЧЧ:ММ
         return f"{hour_int:02d}:{minute_int:02d}"
 
-    # Паттерн для времени без двоеточия: 8, 9, 23
     pattern_without_colon = r'^(\d{1,2})$'
     match = re.match(pattern_without_colon, time_str)
 
@@ -50,11 +46,9 @@ def normalize_time(time_str: str) -> Optional[str]:
         hour = match.group(1)
         hour_int = int(hour)
 
-        # Проверка валидности
         if hour_int < 0 or hour_int > 23:
             return None
 
-        # Нормализуем к формату ЧЧ:00
         return f"{hour_int:02d}:00"
 
     return None

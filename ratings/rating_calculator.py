@@ -6,26 +6,27 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta
 
 
-# Баллы за типы тренировок
+# Базовые баллы за различные типы тренировок
+# Используется для расчета общего рейтинга пользователя
 TRAINING_TYPE_POINTS = {
     'беговая': 3,
     'силовая': 2,
     'кросс': 1,
     'велотренировка': 3,
     'плавание': 3,
-    # Другие типы получают 1 балл по умолчанию
 }
 
-# Баллы за час тренировки
+# Дополнительные баллы за каждый час тренировки
 POINTS_PER_HOUR = 0.5
 
-# Баллы за места в соревнованиях
+# Баллы за призовые места в соревнованиях
 COMPETITION_PLACE_POINTS = {
-    1: 10,
-    2: 7,
-    3: 5,
+    1: 10,  # 1 место
+    2: 7,   # 2 место
+    3: 5,   # 3 место
 }
-COMPETITION_PARTICIPATION_POINTS = 2  # За участие без подиума
+# Баллы просто за участие (без призового места)
+COMPETITION_PARTICIPATION_POINTS = 2  
 
 
 def calculate_training_type_points(training_type: str) -> int:
@@ -89,9 +90,7 @@ def calculate_training_points(trainings: List[Dict[str, Any]]) -> float:
         duration = training.get('duration', 0)
 
         if training_type and duration:
-            # Баллы за тип
             type_points = calculate_training_type_points(training_type)
-            # Баллы за время
             duration_points = calculate_duration_points(duration)
 
             total_points += type_points + duration_points
@@ -151,26 +150,25 @@ def get_period_dates(period: str) -> tuple:
     today = datetime.now().date()
 
     if period == 'week':
-        # Текущая календарная неделя: от понедельника до воскресенья
-        start_date = today - timedelta(days=today.weekday())  # Понедельник
-        end_date = start_date + timedelta(days=6)  # Воскресенье
+        # Неделя начинается с понедельника (weekday=0)
+        start_date = today - timedelta(days=today.weekday())
+        end_date = start_date + timedelta(days=6)
         return start_date, end_date
 
     elif period == 'month':
-        # Текущий календарный месяц: с 1 до последнего числа
+        # Текущий месяц: с 1 числа до последнего дня
         start_date = today.replace(day=1)
-        # Последний день месяца
         last_day = calendar.monthrange(today.year, today.month)[1]
         end_date = today.replace(day=last_day)
         return start_date, end_date
 
     elif period == 'season':
-        # Последние 3 месяца (90 дней)
+        # Сезон = последние 90 дней (~3 месяца)
         start_date = today - timedelta(days=89)
         return start_date, today
 
-    else:  # 'all'
-        # Все время
+    else:
+        # Для 'all' возвращаем None - означает весь период
         return None, None
 
 
@@ -189,6 +187,7 @@ def get_season_name(date: datetime = None) -> str:
 
     month = date.month
 
+    # Определяем сезон по месяцу
     if month in [12, 1, 2]:
         return 'Зима'
     elif month in [3, 4, 5]:

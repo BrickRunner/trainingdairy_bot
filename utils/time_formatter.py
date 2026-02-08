@@ -27,7 +27,6 @@ def normalize_time(time_str: str) -> str:
 
     time_str = time_str.strip()
 
-    # Проверяем формат HH:MM:SS.ss (с сотыми) - теперь разрешаем 1-2 цифры везде
     match = re.match(r'^(\d{1,2}):(\d{1,2}):(\d{1,2})\.(\d{1,2})$', time_str)
     if match:
         hours, minutes, seconds, hundredths = match.groups()
@@ -35,21 +34,16 @@ def normalize_time(time_str: str) -> str:
         minutes_int = int(minutes)
         seconds_int = int(seconds)
 
-        # Нормализуем сотые до 2 цифр
         hundredths = hundredths.ljust(2, '0')[:2]
 
-        # Форматируем минуты и секунды с ведущими нулями
         minutes_str = f"{minutes_int:02d}"
         seconds_str = f"{seconds_int:02d}"
 
-        # Если часы = 0, возвращаем MM:SS.ss без ведущих нулей в минутах
         if hours_int == 0:
             return f"{minutes_int}:{seconds_str}.{hundredths}"
 
-        # Убираем ведущий ноль из часов
         return f"{hours_int}:{minutes_str}:{seconds_str}.{hundredths}"
 
-    # Проверяем формат HH:MM:SS (без сотых) - теперь разрешаем 1-2 цифры везде
     match = re.match(r'^(\d{1,2}):(\d{1,2}):(\d{1,2})$', time_str)
     if match:
         hours, minutes, seconds = match.groups()
@@ -57,45 +51,36 @@ def normalize_time(time_str: str) -> str:
         minutes_int = int(minutes)
         seconds_int = int(seconds)
 
-        # Форматируем минуты и секунды с ведущими нулями
         minutes_str = f"{minutes_int:02d}"
         seconds_str = f"{seconds_int:02d}"
 
-        # Если часы = 0, возвращаем MM:SS без ведущих нулей в минутах
         if hours_int == 0:
             return f"{minutes_int}:{seconds_str}"
 
-        # Убираем ведущий ноль из часов, оставляем минуты и секунды с ведущими нулями
         return f"{hours_int}:{minutes_str}:{seconds_str}"
 
-    # Проверяем формат MM:SS.ss (с сотыми) - разрешаем 1-2 цифры
     match = re.match(r'^(\d{1,2}):(\d{1,2})\.(\d{1,2})$', time_str)
     if match:
         minutes, seconds, hundredths = match.groups()
         minutes_int = int(minutes)
         seconds_int = int(seconds)
 
-        # Нормализуем сотые до 2 цифр
         hundredths = hundredths.ljust(2, '0')[:2]
 
-        # Форматируем секунды с ведущими нулями
         seconds_str = f"{seconds_int:02d}"
 
         return f"{minutes_int}:{seconds_str}.{hundredths}"
 
-    # Проверяем формат MM:SS - разрешаем 1-2 цифры
     match = re.match(r'^(\d{1,2}):(\d{1,2})$', time_str)
     if match:
         minutes, seconds = match.groups()
         minutes_int = int(minutes)
         seconds_int = int(seconds)
 
-        # Форматируем секунды с ведущими нулями
         seconds_str = f"{seconds_int:02d}"
 
         return f"{minutes_int}:{seconds_str}"
 
-    # Если формат не распознан, возвращаем как есть
     return time_str
 
 
@@ -112,8 +97,6 @@ def validate_time_format(time_str: str) -> bool:
     if not time_str or not isinstance(time_str, str):
         return False
 
-    # Допустимые форматы: HH:MM:SS.ss, HH:MM:SS, MM:SS.ss, MM:SS, H:M:S, M:S и т.д.
-    # Теперь разрешаем любое количество цифр в минутах и секундах
     return bool(re.match(r'^\d{1,2}:\d{1,2}(:\d{1,2})?(\.\d{1,2})?$', time_str.strip()))
 
 
@@ -132,12 +115,10 @@ def parse_time_to_seconds(time_str: str) -> Optional[float]:
 
     time_str = time_str.strip()
 
-    # Отделяем сотые доли если есть
     hundredths = 0.0
     if '.' in time_str:
         time_str, hundredths_str = time_str.split('.')
         try:
-            # Нормализуем к 2 цифрам
             hundredths_str = hundredths_str.ljust(2, '0')[:2]
             hundredths = int(hundredths_str) / 100.0
         except ValueError:
@@ -147,11 +128,9 @@ def parse_time_to_seconds(time_str: str) -> Optional[float]:
 
     try:
         if len(parts) == 3:
-            # HH:MM:SS
             hours, minutes, seconds = map(int, parts)
             return hours * 3600 + minutes * 60 + seconds + hundredths
         elif len(parts) == 2:
-            # MM:SS
             minutes, seconds = map(int, parts)
             return minutes * 60 + seconds + hundredths
     except ValueError:
@@ -235,7 +214,6 @@ async def calculate_pace_with_unit(time_str: str, distance_km: float, user_id: i
         seconds = pace_seconds % 60
         return f"{minutes}:{seconds:02d}/км"
     else:
-        # Конвертируем в мили
         from competitions.competitions_utils import km_to_miles
         distance_miles = km_to_miles(distance_km)
         pace_seconds = int(total_seconds / distance_miles)

@@ -31,7 +31,6 @@ def get_settings_menu_keyboard(is_coach: bool = False) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🔔 Уведомления", callback_data="settings:notifications")
     )
 
-    # Режим тренера и Мой тренер
     if is_coach:
         builder.row(
             InlineKeyboardButton(text="✅ Режим тренера", callback_data="settings:coach_mode")
@@ -84,14 +83,9 @@ def get_pulse_zones_menu_keyboard() -> InlineKeyboardMarkup:
     """Меню настроек пульсовых зон"""
     builder = InlineKeyboardBuilder()
 
-    # TODO: Вернуть после подключения AI
-    # builder.row(
-    #     InlineKeyboardButton(text="🔄 Автоматический расчет", callback_data="settings:pulse:auto")
-    # )
     builder.row(
         InlineKeyboardButton(text="✏️ Ручной ввод", callback_data="settings:pulse:manual")
     )
-    # Убрана кнопка "Показать текущие зоны" - информация и так отображается в меню
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="settings:menu")
     )
@@ -103,22 +97,18 @@ def get_goals_settings_keyboard() -> InlineKeyboardMarkup:
     """Меню настройки целей"""
     builder = InlineKeyboardBuilder()
 
-    # Недельный объем
     builder.row(
         InlineKeyboardButton(text="📊 Недельный объем", callback_data="settings:goals:volume")
     )
 
-    # Количество тренировок
     builder.row(
         InlineKeyboardButton(text="🔢 Количество тренировок", callback_data="settings:goals:count")
     )
 
-    # Цели по типам
     builder.row(
         InlineKeyboardButton(text="🏃 Цели по типам", callback_data="settings:goals:by_type")
     )
 
-    # Целевой вес
     builder.row(
         InlineKeyboardButton(text="⚖️ Целевой вес", callback_data="settings:goals:weight")
     )
@@ -206,7 +196,6 @@ def get_training_types_selection_keyboard(selected_types: list) -> InlineKeyboar
     ]
     
     for name, type_id in all_types:
-        # Добавляем галочку если тип уже выбран
         text = f"✅ {name}" if type_id in selected_types else name
         builder.row(
             InlineKeyboardButton(
@@ -310,7 +299,6 @@ def get_training_type_goals_keyboard(main_types: list = None, type_goals: dict =
     type_goals = type_goals or {}
     main_types = main_types or []
 
-    # Эмодзи для типов
     type_emoji = {
         'кросс': '🏃',
         'плавание': '🏊',
@@ -319,11 +307,9 @@ def get_training_type_goals_keyboard(main_types: list = None, type_goals: dict =
         'интервальная': '⚡'
     }
 
-    # Показываем только основные типы пользователя
     for t_type in main_types:
         emoji = type_emoji.get(t_type, '🏃')
 
-        # Для силовых - минуты, для остальных - км
         if t_type == 'силовая':
             goal_text = f" ({type_goals[t_type]:.0f} мин)" if t_type in type_goals else ""
         else:
@@ -361,7 +347,6 @@ def get_timezone_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора часового пояса"""
     builder = InlineKeyboardBuilder()
 
-    # Все часовые пояса России (с запада на восток)
     builder.row(
         InlineKeyboardButton(text="🌍 Калининград (UTC+2)", callback_data="timezone:Europe/Kaliningrad")
     )
@@ -422,14 +407,12 @@ def get_training_reminder_days_keyboard(selected_days: list) -> InlineKeyboardMa
     ]
 
     for day_full, day_short in weekdays:
-        # Добавляем галочку если день уже выбран
         text = f"✅ {day_short}" if day_full in selected_days else day_short
         builder.button(
             text=text,
             callback_data=f"toggle_reminder_day:{day_full}"
         )
 
-    # Размещаем по 4 кнопки в ряду
     builder.adjust(4, 3)
 
     builder.row(
@@ -451,7 +434,6 @@ def get_training_reminder_toggle_keyboard(is_enabled: bool) -> InlineKeyboardMar
     """
     builder = InlineKeyboardBuilder()
 
-    # Кнопка включения/выключения
     if is_enabled:
         builder.row(
             InlineKeyboardButton(text="🔕 Выключить напоминания", callback_data="toggle_training_reminders:off")

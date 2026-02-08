@@ -7,7 +7,6 @@ import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-# Путь к базе данных (импортируем так же, как в queries.py)
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
@@ -24,7 +23,6 @@ async def update_user_rating(user_id: int, points: float, week_points: float,
         season_points: Очки за сезон
     """
     async with aiosqlite.connect(DB_PATH) as db:
-        # Проверяем, есть ли запись для пользователя
         async with db.execute(
             "SELECT user_id FROM ratings WHERE user_id = ?",
             (user_id,)
@@ -32,7 +30,6 @@ async def update_user_rating(user_id: int, points: float, week_points: float,
             existing = await cursor.fetchone()
 
         if existing:
-            # Обновляем существующую запись
             await db.execute(
                 """
                 UPDATE ratings
@@ -43,7 +40,6 @@ async def update_user_rating(user_id: int, points: float, week_points: float,
                 (points, week_points, month_points, season_points, user_id)
             )
         else:
-            # Создаем новую запись
             await db.execute(
                 """
                 INSERT INTO ratings (user_id, points, week_points, month_points, season_points)
@@ -219,18 +215,16 @@ async def get_user_rank(user_id: int, period: str = 'global') -> Optional[int]:
     Returns:
         Место в рейтинге или None
     """
-    # Определяем поле для сортировки
     if period == 'week':
         points_field = 'week_points'
     elif period == 'month':
         points_field = 'month_points'
     elif period == 'season':
         points_field = 'season_points'
-    else:  # 'global'
+    else:  
         points_field = 'points'
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Получаем очки пользователя
         async with db.execute(
             f"SELECT {points_field} FROM ratings WHERE user_id = ?",
             (user_id,)
@@ -240,7 +234,6 @@ async def get_user_rank(user_id: int, period: str = 'global') -> Optional[int]:
                 return None
             user_points = row[0]
 
-        # Считаем, сколько пользователей имеют больше очков
         async with db.execute(
             f"""
             SELECT COUNT(*) + 1 as rank

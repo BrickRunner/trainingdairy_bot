@@ -43,20 +43,16 @@ async def predict_race_result(
         return None
 
     try:
-        # Получаем настройки пользователя
         user_prefs = await get_user_preferences(user_id)
 
-        # Анализируем тренировки
         training_analysis = _analyze_training_data(training_data)
 
-        # Форматируем период
         period_names = {
             'month': 'последний месяц',
             '2weeks': 'последние 2 недели'
         }
         period_name = period_names.get(analysis_period, analysis_period)
 
-        # Форматируем промпт с настройками пользователя
         prompt = PROMPT_RESULT_PREDICTION.format(
             distance_unit=user_prefs['distance_unit'],
             date_format=user_prefs['date_format'],
@@ -69,22 +65,20 @@ async def predict_race_result(
             training_types_distribution=training_analysis.get('types_distribution', 'нет данных')
         )
 
-        # Запрос к AI
         response = await _call_with_retry(
             ai_client,
-            model="google/gemini-2.5-flash",  # Бесплатная модель
+            model="google/gemini-2.5-flash",  
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_COACH},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.6,  # Более консервативная температура для прогноза
+            temperature=0.6,  
             max_tokens=1500
         )
 
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"Result prediction generated for user {user_id}, {target_distance} km")
 
-        # Парсим JSON
         try:
             if "```json" in ai_response:
                 json_start = ai_response.find("```json") + 7
@@ -111,7 +105,6 @@ def _analyze_training_data(trainings: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     analysis = {}
 
-    # Распределение по типам тренировок
     types_count = {}
     for t in trainings:
         training_type = t.get('type', 'unknown')
@@ -120,7 +113,6 @@ def _analyze_training_data(trainings: List[Dict[str, Any]]) -> Dict[str, Any]:
     types_distribution = ", ".join([f"{t}: {c}" for t, c in types_count.items()])
     analysis['types_distribution'] = types_distribution
 
-    # Простой анализ соблюдения пульсовых зон (если есть данные)
     pulse_data = [t.get('avg_pulse') for t in trainings if t.get('avg_pulse')]
     if pulse_data:
         avg_pulse = sum(pulse_data) / len(pulse_data)

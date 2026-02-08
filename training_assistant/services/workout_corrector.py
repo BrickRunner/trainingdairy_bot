@@ -38,7 +38,6 @@ async def analyze_and_correct_workout(
         return None
 
     try:
-        # Переводим feedback
         feedback_translations = {
             'too_hard': 'Было слишком тяжело',
             'too_easy': 'Было слишком легко',
@@ -48,7 +47,6 @@ async def analyze_and_correct_workout(
         }
         feedback_text = feedback_translations.get(user_feedback, user_feedback)
 
-        # Форматируем промпт
         prompt = PROMPT_CORRECTION.format(
             training_type=training_data.get('type', 'N/A'),
             planned_volume=training_data.get('planned_volume', 'не указан'),
@@ -64,10 +62,9 @@ async def analyze_and_correct_workout(
             pulse_zones=_format_pulse_zones(pulse_zones or {})
         )
 
-        # Запрос к AI
         response = await _call_with_retry(
             ai_client,
-            model="google/gemini-2.5-flash",  # Бесплатная модель
+            model="google/gemini-2.5-flash",  
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_COACH},
                 {"role": "user", "content": prompt}
@@ -79,7 +76,6 @@ async def analyze_and_correct_workout(
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"Workout correction generated for user {user_id}")
 
-        # Парсим JSON
         try:
             if "```json" in ai_response:
                 json_start = ai_response.find("```json") + 7
@@ -105,7 +101,7 @@ def _format_recent_trainings(trainings: List[Dict]) -> str:
         return "Нет данных"
 
     formatted = []
-    for t in trainings[:5]:  # Последние 5
+    for t in trainings[:5]:  
         formatted.append(
             f"- {t.get('date')}: {t.get('type')}, "
             f"{t.get('distance', 'N/A')} км, "

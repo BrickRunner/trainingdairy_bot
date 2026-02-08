@@ -38,15 +38,12 @@ def time_to_seconds(time_str: str) -> float:
     parts = time_str.split(':')
 
     if len(parts) == 1:
-        # Только секунды (например, "23.95")
         return float(parts[0].replace(',', '.'))
     elif len(parts) == 2:
-        # Минуты:Секунды
         minutes = int(parts[0])
         seconds = float(parts[1].replace(',', '.'))
         return minutes * 60 + seconds
     elif len(parts) == 3:
-        # Часы:Минуты:Секунды
         hours = int(parts[0])
         minutes = int(parts[1])
         seconds = float(parts[2].replace(',', '.'))
@@ -55,13 +52,9 @@ def time_to_seconds(time_str: str) -> float:
         raise ValueError(f"Неверный формат времени: {time_str}")
 
 
-# Нормативы по легкой атлетике (бег) - ЕВСК 2022-2025
-# Официальный источник: https://rusathletics.info/ (ВФЛА)
-# Файл: https://rusathletics.info/wp-content/uploads/2025/01/legkaya_atletika_dejstvuyut_c_26_noyabrya_2024_g_87b8cad5ee.xls
-# Действуют с 26 ноября 2024 года
 RUNNING_STANDARDS = {
     'men': {
-        0.06: {  # 60 м
+        0.06: {  
             'МСМК': 6.63,
             'МС': 6.83,
             'КМС': 7.04,
@@ -72,7 +65,7 @@ RUNNING_STANDARDS = {
             '2ю': 8.94,
             '3ю': 9.44,
         },
-        0.1: {  # 100 м
+        0.1: {  
             'МСМК': 10.15,
             'МС': 10.62,
             'КМС': 11.00,
@@ -83,7 +76,7 @@ RUNNING_STANDARDS = {
             '2ю': 14.44,
             '3ю': 15.44,
         },
-        0.2: {  # 200 м
+        0.2: {  
             'МСМК': 20.51,
             'МС': 21.41,
             'КМС': 22.24,
@@ -94,7 +87,7 @@ RUNNING_STANDARDS = {
             '2ю': 30.74,
             '3ю': 34.24,
         },
-        0.3: {  # 300 м
+        0.3: {  
             'КМС': 34.24,
             'I': 36.54,
             'II': 38.94,
@@ -103,7 +96,7 @@ RUNNING_STANDARDS = {
             '2ю': 49.24,
             '3ю': 53.24,
         },
-        0.4: {  # 400 м
+        0.4: {  
             'МСМК': 46.53,
             'МС': 47.93,
             'КМС': 49.94,
@@ -114,7 +107,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("1:11.74"),
             '3ю': time_to_seconds("1:17.74"),
         },
-        0.6: {  # 600 м
+        0.6: {  
             'КМС': time_to_seconds("1:19.54"),
             'I': time_to_seconds("1:23.74"),
             'II': time_to_seconds("1:30.24"),
@@ -123,7 +116,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("1:54.24"),
             '3ю': time_to_seconds("2:05.24"),
         },
-        0.8: {  # 800 м
+        0.8: {  
             'МСМК': time_to_seconds("1:46.20"),
             'МС': time_to_seconds("1:49.39"),
             'КМС': time_to_seconds("1:53.34"),
@@ -134,7 +127,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("2:43.24"),
             '3ю': time_to_seconds("2:57.24"),
         },
-        1.0: {  # 1000 м
+        1.0: {  
             'КМС': time_to_seconds("2:28.24"),
             'I': time_to_seconds("2:37.24"),
             'II': time_to_seconds("2:49.24"),
@@ -143,7 +136,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("3:35.24"),
             '3ю': time_to_seconds("3:54.24"),
         },
-        1.5: {  # 1500 м
+        1.5: {  
             'МСМК': time_to_seconds("3:40.00"),
             'МС': time_to_seconds("3:47.79"),
             'КМС': time_to_seconds("3:58.74"),
@@ -154,7 +147,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("5:30.24"),
             '3ю': time_to_seconds("6:00.24"),
         },
-        3.0: {  # 3000 м
+        3.0: {  
             'КМС': time_to_seconds("8:30.24"),
             'I': time_to_seconds("9:00.24"),
             'II': time_to_seconds("9:40.24"),
@@ -163,7 +156,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("12:15.24"),
             '3ю': time_to_seconds("13:20.24"),
         },
-        5.0: {  # 5000 м
+        5.0: {  
             'МСМК': time_to_seconds("13:26.55"),
             'МС': time_to_seconds("14:06.83"),
             'КМС': time_to_seconds("14:50.24"),
@@ -173,7 +166,7 @@ RUNNING_STANDARDS = {
             '1ю': time_to_seconds("19:50.24"),
             '2ю': time_to_seconds("21:30.24"),
         },
-        10.0: {  # 10000 м
+        10.0: {  
             'МСМК': time_to_seconds("27:55.71"),
             'МС': time_to_seconds("29:19.50"),
             'КМС': time_to_seconds("31:10.34"),
@@ -181,13 +174,13 @@ RUNNING_STANDARDS = {
             'II': time_to_seconds("35:50.34"),
             'III': time_to_seconds("38:40.34"),
         },
-        15.0: {  # 15000 м
+        15.0: {  
             'КМС': time_to_seconds("49:30"),
             'I': time_to_seconds("53:00"),
             'II': time_to_seconds("57:00"),
             'III': time_to_seconds("1:01:30"),
         },
-        21.1: {  # 21100 м
+        21.1: {  
             'МСМК': time_to_seconds("1:01:52"),
             'МС': time_to_seconds("1:06:30"),
             'КМС': time_to_seconds("1:12:00"),
@@ -195,7 +188,7 @@ RUNNING_STANDARDS = {
             'II': time_to_seconds("1:22:35"),
             'III': time_to_seconds("1:28:50"),
         },
-        42.2: {  # 42200 м
+        42.2: {  
             'МСМК': time_to_seconds("2:14:00"),
             'МС': time_to_seconds("2:22:00"),
             'КМС': time_to_seconds("2:30:30"),
@@ -203,7 +196,7 @@ RUNNING_STANDARDS = {
             'II': time_to_seconds("2:50:00"),
             'III': time_to_seconds("3:02:00"),
         },
-        100.0: {  # 100000 м
+        100.0: {  
             'МСМК': time_to_seconds("6:49:00"),
             'МС': time_to_seconds("7:01:15"),
             'КМС': time_to_seconds("7:25:00"),
@@ -213,7 +206,7 @@ RUNNING_STANDARDS = {
         },
     },
     'women': {
-        0.06: {  # 60 м
+        0.06: {  
             'МСМК': 7.22,
             'МС': 7.51,
             'КМС': 7.84,
@@ -224,7 +217,7 @@ RUNNING_STANDARDS = {
             '2ю': 10.14,
             '3ю': 10.74,
         },
-        0.1: {  # 100 м
+        0.1: {  
             'МСМК': 11.25,
             'МС': 11.76,
             'КМС': 12.34,
@@ -235,7 +228,7 @@ RUNNING_STANDARDS = {
             '2ю': 16.44,
             '3ю': 17.54,
         },
-        0.2: {  # 200 м
+        0.2: {  
             'МСМК': 23.01,
             'МС': 24.00,
             'КМС': 25.34,
@@ -246,7 +239,7 @@ RUNNING_STANDARDS = {
             '2ю': 35.24,
             '3ю': 38.24,
         },
-        0.3: {  # 300 м
+        0.3: {  
             'КМС': 40.34,
             'I': 42.44,
             'II': 44.64,
@@ -255,7 +248,7 @@ RUNNING_STANDARDS = {
             '2ю': 53.74,
             '3ю': 57.44,
         },
-        0.4: {  # 400 м
+        0.4: {  
             'МСМК': 52.61,
             'МС': 54.19,
             'КМС': 57.24,
@@ -266,7 +259,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("1:21.84"),
             '3ю': time_to_seconds("1:27.84"),
         },
-        0.6: {  # 600 м
+        0.6: {  
             'КМС': time_to_seconds("1:34.44"),
             'I': time_to_seconds("1:39.44"),
             'II': time_to_seconds("1:48.94"),
@@ -275,7 +268,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("2:17.24"),
             '3ю': time_to_seconds("2:27.24"),
         },
-        0.8: {  # 800 м
+        0.8: {  
             'МСМК': time_to_seconds("2:00.77"),
             'МС': time_to_seconds("2:04.39"),
             'КМС': time_to_seconds("2:11.84"),
@@ -286,7 +279,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("3:13.34"),
             '3ю': time_to_seconds("3:29.34"),
         },
-        1.0: {  # 1000 м
+        1.0: {  
             'КМС': time_to_seconds("2:55.34"),
             'I': time_to_seconds("3:07.24"),
             'II': time_to_seconds("3:21.24"),
@@ -295,7 +288,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("4:14.24"),
             '3ю': time_to_seconds("4:45.24"),
         },
-        1.5: {  # 1500 м
+        1.5: {  
             'МСМК': time_to_seconds("4:08.74"),
             'МС': time_to_seconds("4:20.10"),
             'КМС': time_to_seconds("4:38.34"),
@@ -306,7 +299,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("6:46.34"),
             '3ю': time_to_seconds("7:22.34"),
         },
-        3.0: {  # 3000 м
+        3.0: {  
             'КМС': time_to_seconds("9:58.34"),
             'I': time_to_seconds("10:53.34"),
             'II': time_to_seconds("11:53.34"),
@@ -315,7 +308,7 @@ RUNNING_STANDARDS = {
             '2ю': time_to_seconds("15:10.34"),
             '3ю': time_to_seconds("16:30.34"),
         },
-        5.0: {  # 5000 м
+        5.0: {  
             'МСМК': time_to_seconds("15:21.88"),
             'МС': time_to_seconds("16:07.05"),
             'КМС': time_to_seconds("17:20.34"),
@@ -325,7 +318,7 @@ RUNNING_STANDARDS = {
             '1ю': time_to_seconds("24:00.34"),
             '2ю': time_to_seconds("26:05.34"),
         },
-        10.0: {  # 10000 м
+        10.0: {  
             'МСМК': time_to_seconds("31:43.43"),
             'МС': time_to_seconds("34:06.19"),
             'КМС': time_to_seconds("37:00.34"),
@@ -333,13 +326,13 @@ RUNNING_STANDARDS = {
             'II': time_to_seconds("43:40.34"),
             'III': time_to_seconds("47:50.34"),
         },
-        15.0: {  # 15000 м
+        15.0: {  
             'КМС': time_to_seconds("59:00"),
             'I': time_to_seconds("1:03:00"),
             'II': time_to_seconds("1:08:00"),
             'III': time_to_seconds("1:14:00"),
         },
-        21.1: {  # 21100 м
+        21.1: {  
             'МСМК': time_to_seconds("1:10:40"),
             'МС': time_to_seconds("1:15:58"),
             'КМС': time_to_seconds("1:25:00"),
@@ -347,7 +340,7 @@ RUNNING_STANDARDS = {
             'II': time_to_seconds("1:46:40"),
             'III': time_to_seconds("2:00:00"),
         },
-        42.2: {  # 42200 м
+        42.2: {  
             'МСМК': time_to_seconds("2:31:42"),
             'МС': time_to_seconds("2:43:05"),
             'КМС': time_to_seconds("3:00:00"),
@@ -355,7 +348,7 @@ RUNNING_STANDARDS = {
             'II': time_to_seconds("3:50:00"),
             'III': time_to_seconds("4:15:00"),
         },
-        100.0: {  # 100000 м
+        100.0: {  
             'МСМК': time_to_seconds("7:53:20"),
             'МС': time_to_seconds("8:07:32"),
             'КМС': time_to_seconds("9:00:00"),
@@ -366,12 +359,9 @@ RUNNING_STANDARDS = {
     },
 }
 
-# Нормативы по плаванию (вольный стиль, бассейн 50м) - ЕВСК 2024
-# Источник: https://marathonec.ru/razryadi-normativi-po-plavaniu/
-# Действуют с 26 ноября 2024 года
 SWIMMING_STANDARDS_50M = {
     'men': {
-        0.05: {  # 50м
+        0.05: {  
             'МСМК': 21.91,
             'МС': 23.20,
             'КМС': 23.95,
@@ -382,7 +372,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': 45.80,
             '3ю': 55.80,
         },
-        0.1: {  # 100м
+        0.1: {  
             'МСМК': 48.25,
             'МС': 51.50,
             'КМС': 54.90,
@@ -393,7 +383,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("1:44.60"),
             '3ю': time_to_seconds("2:04.60"),
         },
-        0.2: {  # 200м
+        0.2: {  
             'МСМК': time_to_seconds("1:46.50"),
             'МС': time_to_seconds("1:53.95"),
             'КМС': time_to_seconds("2:00.65"),
@@ -404,7 +394,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("3:47.20"),
             '3ю': time_to_seconds("4:27.20"),
         },
-        0.4: {  # 400м
+        0.4: {  
             'МСМК': time_to_seconds("3:47.71"),
             'МС': time_to_seconds("4:02.00"),
             'КМС': time_to_seconds("4:14.50"),
@@ -415,7 +405,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("7:39.00"),
             '3ю': time_to_seconds("8:35.00"),
         },
-        0.8: {  # 800м
+        0.8: {  
             'МСМК': time_to_seconds("7:52.60"),
             'МС': time_to_seconds("8:25.00"),
             'КМС': time_to_seconds("8:58.00"),
@@ -426,7 +416,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("16:38.00"),
             '3ю': time_to_seconds("18:38.00"),
         },
-        1.5: {  # 1500м
+        1.5: {  
             'МСМК': time_to_seconds("15:06.19"),
             'МС': time_to_seconds("15:51.00"),
             'КМС': time_to_seconds("17:29.00"),
@@ -439,7 +429,7 @@ SWIMMING_STANDARDS_50M = {
         },
     },
     'women': {
-        0.05: {  # 50м
+        0.05: {  
             'МСМК': 24.82,
             'МС': 26.50,
             'КМС': 27.30,
@@ -450,7 +440,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': 50.30,
             '3ю': 59.80,
         },
-        0.1: {  # 100м
+        0.1: {  
             'МСМК': 53.99,
             'МС': 57.50,
             'КМС': time_to_seconds("1:01.50"),
@@ -461,7 +451,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("1:54.60"),
             '3ю': time_to_seconds("2:13.60"),
         },
-        0.2: {  # 200м
+        0.2: {  
             'МСМК': time_to_seconds("1:56.90"),
             'МС': time_to_seconds("2:06.45"),
             'КМС': time_to_seconds("2:14.76"),
@@ -472,7 +462,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("4:08.20"),
             '3ю': time_to_seconds("4:46.20"),
         },
-        0.4: {  # 400м
+        0.4: {  
             'МСМК': time_to_seconds("4:08.04"),
             'МС': time_to_seconds("4:26.00"),
             'КМС': time_to_seconds("4:41.00"),
@@ -483,7 +473,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("8:46.00"),
             '3ю': time_to_seconds("9:57.00"),
         },
-        0.8: {  # 800м
+        0.8: {  
             'МСМК': time_to_seconds("8:31.12"),
             'МС': time_to_seconds("9:08.00"),
             'КМС': time_to_seconds("9:42.00"),
@@ -494,7 +484,7 @@ SWIMMING_STANDARDS_50M = {
             '2ю': time_to_seconds("18:42.00"),
             '3ю': time_to_seconds("21:12.00"),
         },
-        1.5: {  # 1500м
+        1.5: {  
             'МСМК': time_to_seconds("16:20.88"),
             'МС': time_to_seconds("17:35.00"),
             'КМС': time_to_seconds("18:44.00"),
@@ -508,20 +498,16 @@ SWIMMING_STANDARDS_50M = {
     }
 }
 
-# Примечание: Для велоспорта разряды присваиваются по занятым местам на соревнованиях,
-# а не по времени. Здесь приведена упрощенная структура для справки.
-# Реальное присвоение разрядов требует информации о ранге соревнования.
 CYCLING_STANDARDS_PLACES = {
-    # Структура: {ранг_соревнования: {разряд: максимальное_место}}
     'чемпионат_россии': {
-        'МСМК': 3,  # 1-3 место на ЧР
-        'МС': 6,    # 1-6 место на ЧР
-        'КМС': 12,  # 1-12 место на ЧР
+        'МСМК': 3,  
+        'МС': 6,    
+        'КМС': 12,  
     },
     'первенство_россии': {
-        'МС': 3,    # 1-3 место на первенстве России
-        'КМС': 6,   # 1-6 место на первенстве России
-        'I': 12,    # 1-12 место на первенстве России
+        'МС': 3,    
+        'КМС': 6,   
+        'I': 12,    
     },
     'кубок_россии': {
         'МС': 6,
@@ -529,16 +515,15 @@ CYCLING_STANDARDS_PLACES = {
         'I': 20,
     },
     'региональные': {
-        'I': 3,     # 1-3 место на региональных соревнованиях
+        'I': 3,     
         'II': 6,
         'III': 12,
     }
 }
 
-# Нормативы по плаванию (вольный стиль, бассейн 25м) - ЕВСК 2024
 SWIMMING_STANDARDS_25M = {
     'men': {
-        0.05: {  # 50м
+        0.05: {  
             'МСМК': 21.18,
             'МС': 22.45,
             'КМС': 23.20,
@@ -549,7 +534,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': 45.05,
             '3ю': 55.05,
         },
-        0.1: {  # 100м
+        0.1: {  
             'МСМК': 46.72,
             'МС': 50.00,
             'КМС': 53.30,
@@ -560,7 +545,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("1:43.10"),
             '3ю': time_to_seconds("2:03.10"),
         },
-        0.2: {  # 200м
+        0.2: {  
             'МСМК': time_to_seconds("1:43.02"),
             'МС': time_to_seconds("1:50.95"),
             'КМС': time_to_seconds("1:57.45"),
@@ -571,7 +556,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("3:45.00"),
             '3ю': time_to_seconds("4:24.20"),
         },
-        0.4: {  # 400м
+        0.4: {  
             'МСМК': time_to_seconds("3:40.94"),
             'МС': time_to_seconds("3:56.00"),
             'КМС': time_to_seconds("4:08.50"),
@@ -582,7 +567,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("7:33.00"),
             '3ю': time_to_seconds("8:29.00"),
         },
-        0.8: {  # 800м
+        0.8: {  
             'МСМК': time_to_seconds("7:42.70"),
             'МС': time_to_seconds("8:17.00"),
             'КМС': time_to_seconds("8:50.00"),
@@ -593,7 +578,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("16:26.00"),
             '3ю': time_to_seconds("18:26.00"),
         },
-        1.5: {  # 1500м
+        1.5: {  
             'МСМК': time_to_seconds("14:44.74"),
             'МС': time_to_seconds("15:28.50"),
             'КМС': time_to_seconds("17:06.50"),
@@ -606,7 +591,7 @@ SWIMMING_STANDARDS_25M = {
         },
     },
     'women': {
-        0.05: {  # 50м
+        0.05: {  
             'МСМК': 24.13,
             'МС': 25.75,
             'КМС': 26.55,
@@ -617,7 +602,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': 49.55,
             '3ю': 59.05,
         },
-        0.1: {  # 100м
+        0.1: {  
             'МСМК': 52.68,
             'МС': 56.00,
             'КМС': time_to_seconds("1:00.00"),
@@ -628,7 +613,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("1:53.10"),
             '3ю': time_to_seconds("2:12.10"),
         },
-        0.2: {  # 200м
+        0.2: {  
             'МСМК': time_to_seconds("1:55.02"),
             'МС': time_to_seconds("2:03.45"),
             'КМС': time_to_seconds("2:11.75"),
@@ -639,7 +624,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("4:05.20"),
             '3ю': time_to_seconds("4:43.20"),
         },
-        0.4: {  # 400м
+        0.4: {  
             'МСМК': time_to_seconds("4:03.32"),
             'МС': time_to_seconds("4:20.00"),
             'КМС': time_to_seconds("4:30.00"),
@@ -650,7 +635,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("8:40.00"),
             '3ю': time_to_seconds("9:51.00"),
         },
-        0.8: {  # 800м
+        0.8: {  
             'МСМК': time_to_seconds("8:23.99"),
             'МС': time_to_seconds("9:00.00"),
             'КМС': time_to_seconds("9:30.00"),
@@ -661,7 +646,7 @@ SWIMMING_STANDARDS_25M = {
             '2ю': time_to_seconds("18:30.00"),
             '3ю': time_to_seconds("21:00.00"),
         },
-        1.5: {  # 1500м
+        1.5: {  
             'МСМК': time_to_seconds("16:12.06"),
             'МС': time_to_seconds("17:12.50"),
             'КМС': time_to_seconds("18:21.50"),
@@ -676,7 +661,6 @@ SWIMMING_STANDARDS_25M = {
 }
 
 
-# ========== ФУНКЦИИ ДЛЯ РАБОТЫ С БД ==========
 
 async def get_qualification_running_from_db(distance_km: float, time_seconds: float, gender: str) -> Optional[str]:
     """
@@ -694,7 +678,6 @@ async def get_qualification_running_from_db(distance_km: float, time_seconds: fl
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
 
-            # Ищем ближайшую дистанцию с допуском ±0.5 км (для марафона 42.2 vs 42.195)
             async with db.execute(
                 """
                 SELECT rs.rank, rs.time_seconds
@@ -710,12 +693,10 @@ async def get_qualification_running_from_db(distance_km: float, time_seconds: fl
             if not standards:
                 return "Нет разряда"
 
-            # Проверяем от лучшего к худшему
             for standard in standards:
                 if time_seconds <= standard['time_seconds']:
                     return standard['rank']
 
-            # Если результат медленнее всех нормативов
             return 'Б/р'
 
     except Exception as e:
@@ -740,7 +721,6 @@ async def get_qualification_swimming_from_db(distance_km: float, time_seconds: f
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
 
-            # Ищем ближайшую дистанцию с допуском ±0.01 км (для точности поиска)
             async with db.execute(
                 """
                 SELECT ss.rank, ss.time_seconds
@@ -759,12 +739,10 @@ async def get_qualification_swimming_from_db(distance_km: float, time_seconds: f
             if not standards:
                 return None
 
-            # Проверяем от лучшего к худшему
             for standard in standards:
                 if time_seconds <= standard['time_seconds']:
                     return standard['rank']
 
-            # Если результат медленнее всех нормативов
             return 'Б/р'
 
     except Exception as e:
@@ -792,7 +770,6 @@ async def get_qualification_cycling_from_db(distance_km: float, time_seconds: fl
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
 
-            # Ищем ближайшую дистанцию (допуск ±0.5 км)
             async with db.execute(
                 """
                 SELECT cs.rank, cs.time_seconds
@@ -823,8 +800,6 @@ async def get_qualification_cycling_from_db(distance_km: float, time_seconds: fl
             if not standards:
                 return None
 
-            # Проверяем от высшего разряда к низшему
-            # Результат должен быть ЛУЧШЕ (меньше) или равен нормативу
             for standard in standards:
                 if time_seconds <= standard['time_seconds']:
                     return standard['rank']
@@ -836,7 +811,6 @@ async def get_qualification_cycling_from_db(distance_km: float, time_seconds: fl
         return None
 
 
-# ========== LEGACY: СТАТИЧЕСКИЕ ФУНКЦИИ (FALLBACK) ==========
 
 def get_qualification_running(distance_km: float, time_seconds: float, gender: str) -> Optional[str]:
     """
@@ -853,18 +827,15 @@ def get_qualification_running(distance_km: float, time_seconds: float, gender: s
     """
     gender_key = 'men' if gender.lower() in ['male', 'м', 'мужской'] else 'women'
 
-    # Проверяем, есть ли нормативы для данной дистанции
     if distance_km not in RUNNING_STANDARDS[gender_key]:
         return "Нет разряда"
 
     standards = RUNNING_STANDARDS[gender_key][distance_km]
 
-    # Проверяем от высшего разряда к низшему
     for rank in ['МСМК', 'МС', 'КМС', 'I', 'II', 'III', '1ю', '2ю', '3ю']:
         if rank in standards and time_seconds <= standards[rank]:
             return rank
 
-    # Если результат медленнее самого низкого разряда - без разряда
     return 'Б/р'
 
 
@@ -883,21 +854,17 @@ def get_qualification_swimming(distance_km: float, time_seconds: float, gender: 
     """
     gender_key = 'men' if gender.lower() in ['male', 'м', 'мужской'] else 'women'
 
-    # Выбираем нормативы в зависимости от длины бассейна
     standards_dict = SWIMMING_STANDARDS_50M if pool_length == 50 else SWIMMING_STANDARDS_25M
 
-    # Проверяем, есть ли нормативы для данной дистанции
     if distance_km not in standards_dict[gender_key]:
         return None
 
     standards = standards_dict[gender_key][distance_km]
 
-    # Проверяем от высшего разряда к низшему
     for rank in ['МСМК', 'МС', 'КМС', 'I', 'II', 'III', '1ю', '2ю', '3ю']:
         if rank in standards and time_seconds <= standards[rank]:
             return rank
 
-    # Если результат медленнее самого низкого разряда - без разряда
     return 'Б/р'
 
 
@@ -921,27 +888,22 @@ async def get_qualification_async(sport_type: str, distance_km: float = None, ti
     """
     try:
         if sport_type.lower() in ['running', 'бег', 'легкая атлетика', 'run'] or sport_type.lower().startswith('бе'):
-            # Пытаемся получить из БД
             result = await get_qualification_running_from_db(distance_km, time_seconds, gender)
             if result is None:
-                # Fallback на статические словари
                 logger.warning("Используется fallback на статические нормативы по бегу")
                 result = get_qualification_running(distance_km, time_seconds, gender)
             return result
 
         elif sport_type.lower() in ['swimming', 'плавание', 'swim'] or sport_type.lower().startswith('пла'):
             pool_length = kwargs.get('pool_length', 50)
-            # Получаем из БД (без fallback - плавание всегда только из БД)
             result = await get_qualification_swimming_from_db(distance_km, time_seconds, gender, pool_length)
             if result is None:
                 logger.info(f"Нет нормативов по плаванию в БД для дистанции {distance_km} км, бассейн {pool_length}м, пол {gender}")
             return result
 
         elif sport_type.lower() in ['cycling', 'велоспорт', 'bike'] or sport_type.lower().startswith('вело'):
-            # Для велоспорта разряды присваиваются по времени для индивидуальной гонки
             discipline = kwargs.get('discipline', 'индивидуальная гонка')
 
-            # Используем расчет по времени для индивидуальной гонки
             result = await get_qualification_cycling_from_db(distance_km, time_seconds, gender, discipline)
             if result is None:
                 logger.info(f"Нет нормативов по велоспорту в БД для дистанции {distance_km} км, дисциплина {discipline}")
@@ -949,7 +911,6 @@ async def get_qualification_async(sport_type: str, distance_km: float = None, ti
 
     except Exception as e:
         logger.error(f"Ошибка при определении разряда (async): {e}")
-        # Fallback на синхронную версию (только для бега и плавания)
         if sport_type.lower() in ['running', 'swimming', 'бег', 'плавание', 'легкая атлетика']:
             return get_qualification(sport_type, distance_km, time_seconds, gender, **kwargs)
         return None
@@ -980,8 +941,6 @@ def get_qualification(sport_type: str, distance_km: float, time_seconds: float, 
         pool_length = kwargs.get('pool_length', 50)
         return get_qualification_swimming(distance_km, time_seconds, gender, pool_length)
     elif sport_type.lower() in ['cycling', 'велоспорт']:
-        # Для велоспорта разряды присваиваются по занятым местам, а не по времени
-        # Здесь нужна другая логика
         return None
 
     return None

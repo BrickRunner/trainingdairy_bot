@@ -20,7 +20,6 @@ class RussiaRunningAPI:
     Клиент для работы с Russia Running API
     """
 
-    # API endpoints
     BASE_URL = "https://russiarunning.com/api"
     EVENTS_URL = f"{BASE_URL}/events"
 
@@ -100,11 +99,9 @@ class RussiaRunningAPI:
         """
         from datetime import datetime, timedelta
 
-        # Генерируем даты на следующие месяцы
         today = datetime.now().date()
 
         test_competitions = [
-            # Ноябрь 2025
             {
                 'name': 'Осенний забег Москва',
                 'date': (today + timedelta(days=2)).strftime('%Y-%m-%d'),
@@ -129,7 +126,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Декабрь 2025
             {
                 'name': 'Зимний забег Москва',
                 'date': (today + timedelta(days=32)).strftime('%Y-%m-%d'),
@@ -142,7 +138,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Январь 2026
             {
                 'name': 'Новогодний полумарафон',
                 'date': (today + timedelta(days=62)).strftime('%Y-%m-%d'),
@@ -155,7 +150,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Февраль 2026
             {
                 'name': 'Зимний марафон Казань',
                 'date': (today + timedelta(days=90)).strftime('%Y-%m-%d'),
@@ -168,7 +162,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Март 2026
             {
                 'name': 'Весенний забег Новосибирск',
                 'date': (today + timedelta(days=120)).strftime('%Y-%m-%d'),
@@ -181,7 +174,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Апрель 2026
             {
                 'name': 'Весенний полумарафон СПб',
                 'date': (today + timedelta(days=150)).strftime('%Y-%m-%d'),
@@ -194,7 +186,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Май 2026
             {
                 'name': 'Майский марафон Москва',
                 'date': (today + timedelta(days=180)).strftime('%Y-%m-%d'),
@@ -219,7 +210,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Июнь 2026
             {
                 'name': 'Летний забег Сочи',
                 'date': (today + timedelta(days=210)).strftime('%Y-%m-%d'),
@@ -244,7 +234,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Июль 2026
             {
                 'name': 'Летний марафон Москва',
                 'date': (today + timedelta(days=240)).strftime('%Y-%m-%d'),
@@ -257,7 +246,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Август 2026
             {
                 'name': 'Августовский забег Казань',
                 'date': (today + timedelta(days=270)).strftime('%Y-%m-%d'),
@@ -270,7 +258,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Сентябрь 2026
             {
                 'name': 'Московский осенний марафон',
                 'date': (today + timedelta(days=300)).strftime('%Y-%m-%d'),
@@ -295,7 +282,6 @@ class RussiaRunningAPI:
                 'organizer': 'Russia Running',
                 'registration_status': 'open'
             },
-            # Октябрь 2026
             {
                 'name': 'Осенний трейл Роза Хутор',
                 'date': (today + timedelta(days=330)).strftime('%Y-%m-%d'),
@@ -322,11 +308,9 @@ class RussiaRunningAPI:
             }
         ]
 
-        # Фильтруем по городу
         if city:
             test_competitions = [c for c in test_competitions if c['city'] == city]
 
-        # Фильтруем по году и месяцу
         if year and month:
             test_competitions = [
                 c for c in test_competitions
@@ -345,7 +329,6 @@ class RussiaRunningAPI:
         Returns:
             Словарь в формате competitions таблицы
         """
-        # Парсим дистанции
         distances = []
         if 'distances' in event:
             if isinstance(event['distances'], list):
@@ -354,10 +337,8 @@ class RussiaRunningAPI:
                 try:
                     distances = json.loads(event['distances'])
                 except:
-                    # Если строка с числами через запятую
                     distances = [float(d.strip()) for d in event['distances'].split(',')]
 
-        # Определяем тип соревнования по дистанции
         competition_type = 'забег'
         if distances:
             max_distance = max(distances)
@@ -401,11 +382,9 @@ class RussiaRunningAPI:
         today = datetime.now().date()
 
         for event in events:
-            # Проверяем что есть дата
             if not event.get('date'):
                 continue
 
-            # Проверяем что дата в будущем
             try:
                 event_date = datetime.strptime(event['date'], '%Y-%m-%d').date()
                 if event_date < today:
@@ -414,7 +393,6 @@ class RussiaRunningAPI:
                 logger.warning(f"Invalid date format for event: {event.get('name')}")
                 continue
 
-            # Конвертируем в формат БД
             competition = self.convert_to_competition_format(event)
             competitions.append(competition)
 
@@ -446,7 +424,6 @@ class RussiaRunningAPI:
             if not event.get('date'):
                 continue
 
-            # Конвертируем в формат БД
             competition = self.convert_to_competition_format(event)
             competitions.append(competition)
 
@@ -506,18 +483,13 @@ class RunCRunParser:
         soup = BeautifulSoup(html, 'html.parser')
         competitions = []
 
-        # Ищем все блоки с соревнованиями
-        # Ищем элементы, содержащие даты и названия соревнований
-        # На основе анализа структуры сайта, информация о соревнованиях
-        # находится в текстовых блоках
 
-        # Структура данных из runc.run (обновлено на 2026 год)
         hardcoded_competitions = [
             {
                 'name': 'Соревнования "Скорость"',
                 'date': '2026-02-08',
                 'city': 'Москва',
-                'distances': [0.4, 0.8, 1.5],  # Sprint and middle distances
+                'distances': [0.4, 0.8, 1.5],  
                 'url': 'https://speedrace-winter25.runc.run/',
                 'type': 'забег'
             },
@@ -633,11 +605,9 @@ class RunCRunParser:
             try:
                 comp_date = datetime.strptime(comp['date'], '%Y-%m-%d').date()
 
-                # Пропускаем прошедшие соревнования
                 if comp_date < today:
                     continue
 
-                # Конвертируем в формат БД
                 competition = {
                     'name': comp['name'],
                     'date': comp['date'],
@@ -759,21 +729,16 @@ class RegPlaceParser:
         Returns:
             Список соревнований
         """
-        # soup = BeautifulSoup(html, 'html.parser')
-        # TODO: Implement actual HTML parsing when structure is stable
-        _ = html  # Suppress unused warning
+        _ = html  
         competitions = []
 
-        # Поиск всех карточек событий
-        # На основе анализа сайта, используем актуальные данные
-        # Так как структура HTML может меняться, используем хардкод актуальных беговых событий
 
         hardcoded_competitions = [
             {
                 'name': 'Буря - Open Band Trails 2025',
                 'date': '2025-11-02',
                 'city': 'Москва',
-                'distances': [5, 10, 15, 21.1],  # Trail categories
+                'distances': [5, 10, 15, 21.1],  
                 'url': 'https://reg.place/',
                 'type': 'трейл'
             },
@@ -797,7 +762,7 @@ class RegPlaceParser:
                 'name': 'Челлендж 21 ДЕНЬ БЕГА и ХОДЬБЫ 36-й поток',
                 'date': '2025-11-10',
                 'city': 'Москва',
-                'distances': [5, 10],  # Virtual challenge
+                'distances': [5, 10],  
                 'url': 'https://reg.place/',
                 'type': 'забег'
             },
@@ -805,7 +770,7 @@ class RegPlaceParser:
                 'name': 'Кубок Шри Чинмоя "Самопреодоление"',
                 'date': '2025-11-15',
                 'city': 'Москва',
-                'distances': [0.6, 0.8, 1.6],  # Track events (600m, 800m, 1 mile)
+                'distances': [0.6, 0.8, 1.6],  
                 'url': 'https://reg.place/',
                 'type': 'забег'
             },
@@ -825,11 +790,9 @@ class RegPlaceParser:
             try:
                 comp_date = datetime.strptime(comp['date'], '%Y-%m-%d').date()
 
-                # Пропускаем прошедшие соревнования
                 if comp_date < today:
                     continue
 
-                # Конвертируем в формат БД
                 competition = {
                     'name': comp['name'],
                     'date': comp['date'],
@@ -919,7 +882,6 @@ async def load_competitions_from_api(
     """
     all_competitions = []
 
-    # Russia Running API (единственный источник)
     try:
         api = RussiaRunningAPI()
 
@@ -928,7 +890,6 @@ async def load_competitions_from_api(
         elif city:
             russia_comps = await api.load_events_by_city(city)
         else:
-            # Загружаем все события
             events = await api.fetch_events()
             russia_comps = []
             today = datetime.now().date()
@@ -983,8 +944,6 @@ async def update_competitions_database_from_api(
 
     for comp_data in competitions:
         try:
-            # Проверяем есть ли уже такое соревнование
-            # TODO: Добавить проверку дубликатов по названию и дате
 
             comp_id = await add_competition(comp_data)
             added_count += 1
@@ -1002,7 +961,6 @@ async def update_competitions_database_from_api(
     }
 
 
-# Для обратной совместимости со старым кодом
 async def parse_all_sources() -> List[Dict[str, Any]]:
     """
     Загрузить соревнования (для обратной совместимости)
@@ -1014,25 +972,20 @@ async def parse_all_sources() -> List[Dict[str, Any]]:
 
 
 if __name__ == "__main__":
-    # Настройка логирования
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    # Пример использования
     async def test():
-        # Тест 1: Загрузка всех соревнований
         print("\n=== Загрузка всех соревнований ===")
         result = await update_competitions_database_from_api()
         print(f"Результат: {result['added']} добавлено, {result['skipped']} пропущено")
 
-        # Тест 2: Загрузка соревнований для Москвы
         print("\n=== Загрузка соревнований для Москвы ===")
         result = await update_competitions_database_from_api(city="Москва")
         print(f"Результат: {result['added']} добавлено, {result['skipped']} пропущено")
 
-        # Тест 3: Загрузка соревнований для Москвы на май 2026
         print("\n=== Загрузка соревнований для Москвы на май 2026 ===")
         result = await update_competitions_database_from_api(city="Москва", year=2026, month=5)
         print(f"Результат: {result['added']} добавлено, {result['skipped']} пропущено")

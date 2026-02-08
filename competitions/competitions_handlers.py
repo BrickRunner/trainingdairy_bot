@@ -41,7 +41,6 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-# ========== ГЛАВНОЕ МЕНЮ СОРЕВНОВАНИЙ ==========
 
 @router.callback_query(F.data == "competitions")
 async def show_competitions_menu(callback: CallbackQuery, state: FSMContext):
@@ -73,7 +72,6 @@ async def return_to_comp_menu(callback: CallbackQuery, state: FSMContext):
     await show_competitions_menu(callback, state)
 
 
-# ========== ПРЕДСТОЯЩИЕ СОРЕВНОВАНИЯ ==========
 
 @router.callback_query(F.data == "comp:upcoming")
 async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext):
@@ -114,7 +112,6 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
         from utils.date_formatter import DateFormatter
 
         for i, comp in enumerate(competitions[:5], 1):
-            # Форматируем дату
             try:
                 date_str = DateFormatter.format_date(comp['date'], user_date_format)
             except:
@@ -122,7 +119,6 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
 
             time_until = format_time_until_competition(comp['date'])
 
-            # Форматируем дистанции
             try:
                 import json
                 from competitions.competitions_utils import format_competition_distance as format_dist_with_units
@@ -139,7 +135,6 @@ async def show_upcoming_competitions(callback: CallbackQuery, state: FSMContext)
                 f"   🏃 {distances_str}\n\n"
             )
 
-        # Создаём inline клавиатуру с соревнованиями
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         builder = InlineKeyboardBuilder()
 
@@ -178,13 +173,10 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Проверяем зарегистрирован ли пользователь
     is_registered = await is_user_registered(user_id, competition_id)
 
-    # Получаем количество участников
     participants_count = await get_competition_participants_count(competition_id)
 
-    # Форматируем дату
     try:
         comp_date = datetime.strptime(comp['date'], '%Y-%m-%d')
         date_str = comp_date.strftime('%d %B %Y')
@@ -199,7 +191,6 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
 
     time_until = format_time_until_competition(comp['date'])
 
-    # Форматируем дистанции
     try:
         from competitions.competitions_utils import format_competition_distance as format_dist_with_units
         distances = comp.get('distances', [])
@@ -216,7 +207,6 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
         logger.error(f"Error parsing distances: {e}")
         distances_str = '  Дистанции уточняются'
 
-    # Формируем текст карточки
     text = (
         f"🏃 <b>{comp['name']}</b>\n"
         f"{'=' * 40}\n\n"
@@ -238,7 +228,6 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
     else:
         text += "ℹ️ Вы можете зарегистрироваться на это соревнование"
 
-    # Создаём клавиатуру
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
@@ -293,7 +282,6 @@ async def view_competition(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ========== РЕГИСТРАЦИЯ НА СОРЕВНОВАНИЕ ==========
 
 @router.callback_query(F.data.startswith("comp:select_distance:"))
 async def select_distance(callback: CallbackQuery, state: FSMContext):
@@ -322,7 +310,6 @@ async def select_distance(callback: CallbackQuery, state: FSMContext):
         "Выберите дистанцию, на которую хотите зарегистрироваться:"
     )
 
-    # Создаём клавиатуру с дистанциями
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units
     builder = InlineKeyboardBuilder()
@@ -377,18 +364,16 @@ async def register_user_for_competition(callback: CallbackQuery, state: FSMConte
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Получаем distance_name из данных соревнования
-    distance_name = str(distance)  # Значение по умолчанию
+    distance_name = str(distance)  
     try:
         distances_json = comp.get('distances', '[]')
         import json
         distances = json.loads(distances_json) if isinstance(distances_json, str) else distances_json
 
-        # Ищем соответствующую дистанцию
         for dist in distances:
             if isinstance(dist, dict):
                 dist_val = dist.get('distance', 0)
-                if abs(float(dist_val) - float(distance)) < 0.01:  # Сравнение с погрешностью
+                if abs(float(dist_val) - float(distance)) < 0.01:  
                     distance_name = dist.get('name', str(distance))
                     break
     except Exception as e:
@@ -396,11 +381,9 @@ async def register_user_for_competition(callback: CallbackQuery, state: FSMConte
         logger = logging.getLogger(__name__)
         logger.warning(f"Could not parse distance_name from competition: {e}")
 
-    # Регистрируем пользователя
     try:
         await register_for_competition(user_id, competition_id, distance, distance_name=distance_name)
 
-        # Создаём напоминания о соревновании
         from competitions.reminder_scheduler import create_reminders_for_competition
         from competitions.competitions_utils import format_competition_distance as format_dist_with_units
         await create_reminders_for_competition(user_id, competition_id, comp['date'])
@@ -442,7 +425,6 @@ async def register_user_for_competition(callback: CallbackQuery, state: FSMConte
         await callback.answer("❌ Ошибка регистрации. Возможно, вы уже зарегистрированы.", show_alert=True)
 
 
-# ========== МОИ СОРЕВНОВАНИЯ ==========
 
 @router.callback_query(F.data == "comp:my")
 async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page: int = 1):
@@ -453,15 +435,12 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
     user_id = callback.from_user.id
     logger.info(f"show_my_competitions called for user_id={user_id}, page={page}")
 
-    # Используем get_user_competitions для показа только зарегистрированных соревнований
-    # (исключая pending и rejected proposals)
     all_competitions = await get_user_competitions(user_id, status_filter='upcoming')
     logger.info(f"Got {len(all_competitions)} upcoming competitions for user {user_id}")
 
-    # Pagination - 10 competitions per page
     ITEMS_PER_PAGE = 10
     total_pages = (len(all_competitions) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE if all_competitions else 1
-    page = max(1, min(page, total_pages))  # Ensure page is within valid range
+    page = max(1, min(page, total_pages))  
 
     start_idx = (page - 1) * ITEMS_PER_PAGE
     end_idx = start_idx + ITEMS_PER_PAGE
@@ -498,48 +477,37 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
             logger.info("Successfully showed 'no competitions' message")
         except Exception as e:
             logger.error(f"Error editing message (no competitions): {e}")
-            # Fallback: send new message
             await callback.message.answer(
                 text,
                 reply_markup=builder.as_markup(),
                 parse_mode="HTML"
             )
     else:
-        # Show pagination info if there are multiple pages
         if total_pages > 1:
             text = f"✅ <b>МОИ СОРЕВНОВАНИЯ</b> (стр. {page}/{total_pages})\n\n"
         else:
             text = "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
 
-        # Импортируем утилиты для форматирования с учетом настроек пользователя
         from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
         from database.queries import get_user_settings
         from utils.unit_converter import safe_convert_distance_name
 
-        # Получаем настройки пользователя один раз
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км')
 
-        # Показываем соревнования текущей страницы
         for i, comp in enumerate(competitions, start_idx + 1):
             time_until = format_time_until_competition(comp['date'])
 
-            # Получаем название дистанции и конвертируем его
             distance_value = comp.get('distance', 0)
-            distance_name = comp.get('distance_name')  # Сначала пробуем получить из БД
+            distance_name = comp.get('distance_name')  
 
-            # Нормализуем distance_name - убираем "None", пустые строки, и значения вроде "0"
             if distance_name and isinstance(distance_name, str):
                 distance_name = distance_name.strip()
-                # Убираем явные "None", "null", "0" и пустые строки
                 if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
                     distance_name = None
-                # ВАЖНО: Если distance_name это просто число без единиц измерения,
-                # и у нас есть массив distances - ищем правильное название там
                 elif comp.get('distances') and isinstance(comp['distances'], list):
                     import re
                     if re.match(r'^\d+(\.\d+)?$', distance_name):
-                        # Это просто число - попробуем найти в массиве distances
                         logger.debug(f"  distance_name '{distance_name}' is just a number, searching in distances...")
                         try:
                             num_value = float(distance_name)
@@ -553,21 +521,17 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
                         except ValueError:
                             pass
 
-            # DEBUG: Логируем что пришло из БД
             logger.info(f"Competition '{comp.get('name')}': distance_value={distance_value}, distance_name='{distance_name}', service={comp.get('service')}, has_distances={bool(comp.get('distances'))}")
 
-            # Если distance_name нет в БД (None), ищем в массиве distances
             if not distance_name and comp.get('distances') and isinstance(comp['distances'], list):
                 logger.debug(f"  Searching in distances array (distance_value={distance_value})...")
                 for dist_obj in comp['distances']:
-                    # Проверяем, что dist_obj - это словарь
                     if isinstance(dist_obj, dict):
                         if dist_obj.get('distance') == distance_value:
                             distance_name = dist_obj.get('name', '')
                             logger.info(f"  Found in array by value: '{distance_name}'")
                             break
 
-                # Если не нашли по значению и distance_value = 0, берем первую дистанцию
                 if not distance_name and (distance_value == 0 or distance_value is None):
                     for dist_obj in comp['distances']:
                         if isinstance(dist_obj, dict):
@@ -576,38 +540,29 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
                             logger.info(f"  Took first from array: '{distance_name}' ({distance_value} km)")
                             break
 
-            # Если название найдено и содержит сложную дистанцию, конвертируем его
             if distance_name:
-                # Проверяем, не является ли distance_name просто числом без единиц
                 import re
                 if re.match(r'^\d+(\.\d+)?$', distance_name):
-                    # Это просто число - добавляем единицы измерения
                     dist_str = f"{distance_name} {distance_unit}"
                 else:
                     dist_str = safe_convert_distance_name(distance_name, distance_unit)
                 logger.info(f"  ✓ Using distance_name: '{distance_name}' -> '{dist_str}'")
             elif distance_value is not None and distance_value > 0:
-                # Если есть числовое значение, форматируем его
                 dist_str = await format_dist_with_units(distance_value, user_id)
                 logger.debug(f"  Using distance_value: {distance_value} -> '{dist_str}'")
             else:
-                # Если ничего нет, показываем "Не указана"
                 dist_str = "Не указана"
                 logger.warning(f"  No distance found for competition '{comp.get('name')}' (distance_value={distance_value}, distance_name='{distance_name}')")
 
-            # Форматируем дату с учетом настроек пользователя
             date_str = await format_competition_date(comp['date'], user_id)
 
-            # Форматируем целевое время
             target_time = comp.get('target_time')
             if target_time is None or target_time == 'None' or target_time == '':
                 target_time_str = 'Нет цели'
                 target_pace_str = ''
             else:
                 target_time_str = target_time
-                # Рассчитываем темп для целевого времени
                 from utils.time_formatter import calculate_pace_with_unit
-                # Проверяем, что distance валидна перед вычислением темпа
                 if comp.get('distance') and comp['distance'] > 0:
                     target_pace = await calculate_pace_with_unit(target_time, comp['distance'], user_id)
                     target_pace_str = f" ({target_pace})" if target_pace else ''
@@ -624,9 +579,7 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         builder = InlineKeyboardBuilder()
 
-        # Создаем кнопки для соревнований на текущей странице
         for comp in competitions:
-            # Используем 0 если distance = None
             distance_for_callback = comp.get('distance') or 0
             builder.row(
                 InlineKeyboardButton(
@@ -635,7 +588,6 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
                 )
             )
 
-        # Pagination buttons
         if total_pages > 1:
             pagination_buttons = []
             if page > 1:
@@ -665,7 +617,6 @@ async def show_my_competitions(callback: CallbackQuery, state: FSMContext, page:
         except Exception as e:
             logger.error(f"Error editing message (with competitions): {e}")
             logger.error(f"Message text length: {len(text)}, competitions count: {len(competitions)}")
-            # Fallback: send new message
             await callback.message.answer(
                 text,
                 reply_markup=builder.as_markup(),
@@ -701,33 +652,25 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
     distance = float(parts[3])
     logger.warning(f"🔴 view_my_competition: competition_id={competition_id}, distance={distance}")
 
-    # Получаем информацию о соревновании
     competition = await get_competition(competition_id)
 
     if not competition:
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Получаем данные участия пользователя
     from competitions.competitions_queries import get_user_competitions
     user_comps = await get_user_competitions(user_id)
 
-    # Находим нужную регистрацию
-    # Для HeroLeague distance может быть None или 0, поэтому ищем более гибко
     registration = None
     for comp in user_comps:
         comp_distance = comp.get('distance')
-        # Сравниваем ID и дистанцию, учитывая что оба могут быть None/0
         if comp['id'] == competition_id:
-            # Если обе дистанции None или 0, считаем совпадением
             if (comp_distance == distance) or \
                (comp_distance in (None, 0) and distance in (None, 0)):
                 registration = comp
                 break
 
     if not registration:
-        # Если не нашли с точным совпадением дистанции, попробуем найти по ID
-        # (для случаев когда у соревнования только одна регистрация)
         registrations_for_comp = [c for c in user_comps if c['id'] == competition_id]
         if len(registrations_for_comp) == 1:
             registration = registrations_for_comp[0]
@@ -735,17 +678,14 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
             await callback.answer("❌ Регистрация не найдена", show_alert=True)
             return
 
-    # Форматируем информацию с учетом настроек пользователя
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
     from database.queries import get_user_settings
     from utils.unit_converter import safe_convert_distance_name
 
     time_until = format_time_until_competition(competition['date'])
 
-    # Получаем distance_name из регистрации (для мультиспортивных событий)
     distance_name = registration.get('distance_name')
 
-    # Нормализация distance_name (этап 1: убираем "None", "null", "0")
     import logging
     logger = logging.getLogger(__name__)
 
@@ -754,7 +694,6 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
         if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
             logger.info(f"  Normalized '{distance_name}' to None")
             distance_name = None
-        # Этап 2: Заменяем просто числа на полные названия из массива distances
         elif competition.get('distances') and isinstance(competition['distances'], list):
             import re
             if re.match(r'^\d+(\.\d+)?$', distance_name):
@@ -770,7 +709,6 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
                 except ValueError:
                     pass
 
-    # Если distance_name все еще None, пытаемся найти в массиве distances по distance_value
     if (not distance_name or not distance_name.strip()) and competition.get('distances'):
         for dist_obj in competition['distances']:
             if isinstance(dist_obj, dict) and dist_obj.get('distance') == distance:
@@ -780,33 +718,26 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
                     break
 
     if distance_name and distance_name.strip():
-        # Если есть название дистанции (для мультиспортивных), конвертируем его
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-        # Проверяем, не является ли distance_name просто числом без единиц
         import re
         if re.match(r'^\d+(\.\d+)?$', distance_name):
-            # Это просто число - добавляем единицы измерения
             dist_str = f"{distance_name} {distance_unit}"
         else:
             dist_str = safe_convert_distance_name(distance_name, distance_unit)
         logger.info(f"  ✓ Using distance_name: '{distance_name}' -> '{dist_str}'")
     elif distance is not None and distance > 0:
-        # Если только числовое значение, форматируем его
         dist_str = await format_dist_with_units(distance, user_id)
         logger.info(f"  ✓ Using distance_value: {distance} -> '{dist_str}'")
     else:
-        # Если дистанция не указана
         dist_str = 'Не указана'
         logger.warning(f"  No distance found (distance_value={distance}, distance_name='{registration.get('distance_name')}')")
 
     date_str = await format_competition_date(competition['date'], user_id)
 
-    # Форматируем целевое время
     target_time = registration.get('target_time')
 
-    # DEBUG: Логируем для отладки
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"DEBUG: target_time = {target_time}, type = {type(target_time)}")
@@ -816,9 +747,7 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
         target_pace_str = ''
     else:
         target_time_str = target_time
-        # Рассчитываем темп для целевого времени
         from utils.time_formatter import calculate_pace_with_unit
-        # Проверяем, что distance валидна перед вычислением темпа
         if distance and distance > 0:
             target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
             logger.info(f"DEBUG: target_pace calculated = {target_pace}")
@@ -840,12 +769,10 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
     if competition.get('description'):
         text += f"ℹ️ {competition['description']}\n\n"
 
-    # Создаём клавиатуру
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     from datetime import datetime
     builder = InlineKeyboardBuilder()
 
-    # Проверяем, прошло ли соревнование
     try:
         comp_date = datetime.strptime(competition['date'], '%Y-%m-%d').date()
         today = datetime.now().date()
@@ -853,7 +780,6 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
     except:
         is_finished = False
 
-    # Если соревнование прошло и результата нет - показываем кнопку добавления
     has_result = registration.get('finish_time') is not None
 
     if is_finished:
@@ -878,7 +804,6 @@ async def view_my_competition(callback: CallbackQuery, state: FSMContext):
                 )
             )
     else:
-        # Для предстоящих соревнований
         builder.row(
             InlineKeyboardButton(
                 text="✏️ Изменить целевое время",
@@ -919,7 +844,6 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
     competition_id = int(callback.data.split(":")[-1])
     user_id = callback.from_user.id
 
-    # Получаем информацию о соревновании и результате
     from competitions.competitions_queries import get_user_competitions
     user_comps = await get_user_competitions(user_id, competition_id=competition_id)
 
@@ -934,7 +858,6 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Форматируем результат
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
     from utils.date_formatter import get_user_date_format, DateFormatter
     from database.queries import get_user_settings
@@ -942,23 +865,18 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
 
     user_date_format = await get_user_date_format(user_id)
 
-    # Получаем distance_name из результата (для мультиспортивных событий)
     distance_name = comp.get('distance_name')
 
     if distance_name:
-        # Если есть название дистанции (для мультиспортивных), конвертируем его
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
         dist_str = safe_convert_distance_name(distance_name, distance_unit)
     else:
-        # Если только числовое значение, форматируем его
         dist_str = await format_dist_with_units(comp['distance'], user_id)
 
     date_str = await format_competition_date(comp['date'], user_id)
 
-    # Рассчитываем темп
     from utils.time_formatter import calculate_pace_with_unit
-    # Проверяем, что distance валидна перед вычислением темпа
     if comp.get('distance') and comp['distance'] > 0:
         pace = await calculate_pace_with_unit(comp['finish_time'], comp['distance'], user_id)
     else:
@@ -979,7 +897,6 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
     if comp.get('place_age_category'):
         text += f"🏅 Место в категории: {comp['place_age_category']}\n"
 
-    # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
     qual = comp.get('qualification')
     if qual and qual not in [None, '', 'Нет разряда', 'Б/р']:
         text += f"🎖️ Разряд: {format_qualification(qual)}\n"
@@ -987,7 +904,6 @@ async def view_competition_result(callback: CallbackQuery, state: FSMContext):
     if comp.get('heart_rate'):
         text += f"❤️ Средний пульс: {comp['heart_rate']} уд/мин\n"
 
-    # Кнопка возврата к карточке соревнования
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
     builder.row(
@@ -1008,16 +924,13 @@ async def edit_competition_result(callback: CallbackQuery, state: FSMContext):
     competition_id = int(callback.data.split(":")[-1])
     user_id = callback.from_user.id
 
-    # Получаем информацию о соревновании
     competition = await get_competition(competition_id)
     if not competition:
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Сохраняем ID соревнования в состоянии для редактирования
     await state.update_data(edit_result_competition_id=competition_id)
 
-    # Запрашиваем новое время
     text = (
         f"🏆 <b>{competition['name']}</b>\n\n"
         "✏️ Введите новое финишное время в формате ЧЧ:ММ:СС или ММ:СС или Ч:М:С\n"
@@ -1049,7 +962,6 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
             "❌ Изменение результата отменено",
             reply_markup=ReplyKeyboardRemove()
         )
-        # Возврат в меню соревнований
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
             "Выберите раздел:",
@@ -1060,7 +972,6 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
 
     time_text = message.text.strip()
 
-    # Валидация формата
     if not validate_time_format(time_text):
         await message.answer(
             "❌ Некорректный формат времени.\n"
@@ -1069,13 +980,11 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
         )
         return
 
-    # Нормализуем и обновляем время
     normalized_time = normalize_time(time_text)
     data = await state.get_data()
     competition_id = data['edit_result_competition_id']
     user_id = message.from_user.id
 
-    # Обновляем результат
     from competitions.competitions_queries import update_competition_result
     success = await update_competition_result(
         user_id=user_id,
@@ -1083,7 +992,6 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
         finish_time=normalized_time
     )
 
-    # Обновляем уровень пользователя после обновления результата соревнования
     if success:
         try:
             from database.level_queries import calculate_and_update_user_level
@@ -1094,7 +1002,6 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
     await state.clear()
 
     if success:
-        # Получаем дистанцию для редиректа
         from competitions.competitions_queries import get_user_competition_registration
         registration = await get_user_competition_registration(user_id, competition_id)
 
@@ -1106,7 +1013,6 @@ async def process_edited_finish_time(message: Message, state: FSMContext):
                 reply_markup=ReplyKeyboardRemove()
             )
 
-            # Автоматический редирект к карточке соревнования
             from types import SimpleNamespace
             new_callback = SimpleNamespace(
                 message=message,
@@ -1141,34 +1047,26 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
     distance = float(parts[3])
     logger.warning(f"🟢 Parsed: competition_id={competition_id}, distance={distance}")
 
-    # Получаем информацию о соревновании
     competition = await get_competition(competition_id)
 
     if not competition:
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Получаем регистрацию пользователя для получения distance_name
     user_id = callback.from_user.id
     from competitions.competitions_queries import get_user_competitions
     user_comps = await get_user_competitions(user_id)
 
-    # Находим нужную регистрацию
-    # Для HeroLeague/reg.place distance может быть None или 0, поэтому ищем более гибко
     registration = None
     for comp in user_comps:
         comp_distance = comp.get('distance')
-        # Сравниваем ID и дистанцию, учитывая что оба могут быть None/0
         if comp['id'] == competition_id:
-            # Если обе дистанции None или 0, считаем совпадением
             if (comp_distance == distance) or \
                (comp_distance in (None, 0) and distance in (None, 0)):
                 registration = comp
                 break
 
     if not registration:
-        # Если не нашли с точным совпадением дистанции, попробуем найти по ID
-        # (для случаев когда у соревнования только одна регистрация)
         registrations_for_comp = [c for c in user_comps if c['id'] == competition_id]
         if len(registrations_for_comp) == 1:
             registration = registrations_for_comp[0]
@@ -1176,7 +1074,6 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
             await callback.answer("❌ Регистрация не найдена", show_alert=True)
             return
 
-    # Сохраняем данные в состоянии
     await state.update_data(
         edit_target_comp_id=competition_id,
         edit_target_distance=distance
@@ -1187,10 +1084,8 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
     from database.queries import get_user_settings
     from utils.unit_converter import safe_convert_distance_name
 
-    # Используем distance_name если есть, иначе форматируем числовое значение
     distance_name = registration.get('distance_name') if registration else None
 
-    # Нормализация distance_name
     if distance_name and isinstance(distance_name, str):
         distance_name = distance_name.strip()
         if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
@@ -1200,10 +1095,8 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-        # Проверяем, не является ли distance_name просто числом без единиц
         import re
         if re.match(r'^\d+(\.\d+)?$', distance_name):
-            # Это просто число - добавляем единицы измерения
             dist_str = f"{distance_name} {distance_unit}"
         else:
             dist_str = safe_convert_distance_name(distance_name, distance_unit)
@@ -1220,7 +1113,6 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
         f"• 1:30:15 (1 час 30 минут 15 секунд)</i>"
     )
 
-    # НОВЫЙ ПОДХОД: Используем Inline-клавиатуру вместо Reply
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     cancel_builder = InlineKeyboardBuilder()
     cancel_builder.row(
@@ -1235,11 +1127,9 @@ async def edit_target_time(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CompetitionStates.user_editing_target_time)
     logger.warning(f"🟢 State set to CompetitionStates.user_editing_target_time")
 
-    # Проверяем, что состояние установлено
     current_state = await state.get_state()
     logger.warning(f"🟢 Current state after setting: {current_state}")
 
-    # ВАЖНО: Проверяем данные в состоянии после установки
     check_data = await state.get_data()
     logger.warning(f"🟢 State data verification: {check_data}")
 
@@ -1253,7 +1143,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
     logger = logging.getLogger(__name__)
     logger.warning(f"🟡 cancel_edit_target_callback called!")
 
-    # Получаем данные из состояния
     data = await state.get_data()
     competition_id = data.get('edit_target_comp_id')
     distance = data.get('edit_target_distance')
@@ -1265,17 +1154,13 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
 
     await callback.answer("❌ Изменение целевого времени отменено")
 
-    # Возврат к детальной информации о событии
     if competition_id is not None:
-        # Получаем информацию о соревновании
         competition = await get_competition(competition_id)
 
         if competition:
-            # Получаем данные участия пользователя
             from competitions.competitions_queries import get_user_competitions
             user_comps = await get_user_competitions(user_id)
 
-            # Находим нужную регистрацию
             registration = None
             for user_comp in user_comps:
                 comp_distance = user_comp.get('distance')
@@ -1291,17 +1176,14 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
                     registration = registrations_for_comp[0]
 
             if registration:
-                # Форматируем информацию с учетом настроек пользователя
                 from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
                 from database.queries import get_user_settings
                 from utils.unit_converter import safe_convert_distance_name
 
                 time_until = format_time_until_competition(competition['date'])
 
-                # Получаем distance_name из регистрации
                 distance_name = registration.get('distance_name')
 
-                # Нормализация distance_name
                 if distance_name and isinstance(distance_name, str):
                     distance_name = distance_name.strip()
                     if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
@@ -1320,7 +1202,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
                             except ValueError:
                                 pass
 
-                # Если distance_name все еще None, пытаемся найти в массиве distances
                 if (not distance_name or not distance_name.strip()) and competition.get('distances'):
                     for dist_obj in competition['distances']:
                         if isinstance(dist_obj, dict) and dist_obj.get('distance') == distance:
@@ -1344,7 +1225,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
 
                 date_str = await format_competition_date(competition['date'], user_id)
 
-                # Форматируем целевое время
                 target_time = registration.get('target_time')
 
                 if target_time is None or target_time == 'None' or target_time == '':
@@ -1353,7 +1233,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
                 else:
                     target_time_str = target_time
                     from utils.time_formatter import calculate_pace_with_unit
-                    # Проверяем, что distance валидна перед вычислением темпа
                     if distance and distance > 0:
                         target_pace = await calculate_pace_with_unit(target_time, distance, user_id)
                         target_pace_str = f"⚡ Целевой темп: {target_pace}\n" if target_pace else ''
@@ -1373,12 +1252,10 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
                 if competition.get('description'):
                     text += f"ℹ️ {competition['description']}\n\n"
 
-                # Создаём клавиатуру
                 from aiogram.utils.keyboard import InlineKeyboardBuilder
                 from datetime import datetime
                 builder = InlineKeyboardBuilder()
 
-                # Проверяем, прошло ли соревнование
                 try:
                     comp_date = datetime.strptime(competition['date'], '%Y-%m-%d').date()
                     today = datetime.now().date()
@@ -1435,7 +1312,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
                     InlineKeyboardButton(text="◀️ Назад", callback_data="comp:my")
                 )
 
-                # Редактируем существующее сообщение (с кнопкой "Отменить")
                 try:
                     await callback.message.edit_text(
                         text,
@@ -1444,7 +1320,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
                     )
                 except Exception as e:
                     logger.error(f"Failed to edit message: {e}")
-                    # Если не удалось отредактировать, отправляем новое
                     await callback.message.answer(
                         text,
                         reply_markup=builder.as_markup(),
@@ -1452,7 +1327,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
                     )
                 return
 
-    # Если не удалось показать детали, возвращаемся в "Мои соревнования"
     is_coach = await is_user_coach(callback.from_user.id)
     try:
         await callback.message.edit_text(
@@ -1462,7 +1336,6 @@ async def cancel_edit_target_callback(callback: CallbackQuery, state: FSMContext
             ).as_markup()
         )
     except Exception:
-        # Если не удалось отредактировать, отправляем новое сообщение
         await callback.message.answer(
             "⚠️ Не удалось загрузить информацию о соревновании.\nВернитесь в раздел 'Мои соревнования' для просмотра событий.",
             reply_markup=InlineKeyboardBuilder().row(
@@ -1480,8 +1353,6 @@ async def process_target_time_edit(message: Message, state: FSMContext):
 
     from utils.time_formatter import validate_time_format
 
-    # Текстовая кнопка "❌ Отмена" больше не используется - теперь inline кнопка "cancel_edit_target"
-    # Проверяем, не была ли нажата старая текстовая кнопка (на случай если она осталась)
     if message.text == "❌ Отмена":
         logger.warning("🔵 Old text cancel button detected - redirecting to inline cancel")
         await message.answer(
@@ -1489,11 +1360,9 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         )
         return
 
-    # Обрабатываем ввод времени
     time_text = message.text.strip()
     logger.warning(f"🔵 Processing time input: '{time_text}'")
 
-    # Получаем данные из состояния ПЕРЕД валидацией
     data = await state.get_data()
     logger.warning(f"🔵 Full state data: {data}")
 
@@ -1503,7 +1372,6 @@ async def process_target_time_edit(message: Message, state: FSMContext):
 
     logger.warning(f"🔵 State data: competition_id={competition_id}, distance={distance}")
 
-    # Проверяем наличие данных в состоянии
     if competition_id is None:
         logger.error("❌ No competition_id in state!")
         await state.clear()
@@ -1515,7 +1383,6 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         )
         return
 
-    # Валидация формата
     if not validate_time_format(time_text):
         await message.answer(
             "❌ Некорректный формат времени.\n"
@@ -1524,24 +1391,20 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         )
         return
 
-    # Нормализуем время
     normalized_time = normalize_time(time_text)
     logger.warning(f"🔵 Normalized time: {normalized_time}")
 
-    # Обновляем целевое время
     from competitions.competitions_queries import update_target_time
     success = await update_target_time(user_id, competition_id, distance, normalized_time)
 
     await state.clear()
 
     if success:
-        # Проверяем, было ли соревнование предложено тренером
         import aiosqlite
         import os
         DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
         async with aiosqlite.connect(DB_PATH) as db:
-            # Используем гибкий поиск для distance=0/None (HeroLeague, reg.place)
             if distance in (0, 0.0, None):
                 async with db.execute(
                     """
@@ -1564,10 +1427,8 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                     result = await cursor.fetchone()
 
         if result and result[0]:
-            # Есть тренер - отправляем уведомление
             coach_id = result[0]
 
-            # Получаем данные ученика и соревнования
             from database.queries import get_user_settings
             student_settings = await get_user_settings(user_id)
             student_name = student_settings.get('name') if student_settings else None
@@ -1577,7 +1438,6 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                 student = await get_user(user_id)
                 student_name = student.get('name') or student.get('username') or 'Ученик'
 
-            # Получаем соревнование для отправки уведомления тренеру
             comp_for_coach = await get_competition(competition_id)
 
             if comp_for_coach:
@@ -1588,7 +1448,6 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                 formatted_date = DateFormatter.format_date(comp_for_coach['date'], coach_date_format)
                 formatted_distance = await format_competition_distance(distance, coach_id)
 
-                # Отправляем уведомление тренеру
                 try:
                     await message.bot.send_message(
                         coach_id,
@@ -1603,14 +1462,12 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                 except Exception as e:
                     logger.error(f"Failed to send notification to coach {coach_id}: {e}")
 
-        # Отправляем сообщение об успешном обновлении
         await message.answer(
             f"✅ <b>Целевое время обновлено!</b>\n\n"
             f"🎯 Новое целевое время: <b>{normalized_time}</b>",
             parse_mode="HTML"
         )
 
-        # Автоматически показываем "Мои соревнования"
         all_competitions = await get_user_competitions(user_id, status_filter='upcoming')
 
         if not all_competitions:
@@ -1636,20 +1493,16 @@ async def process_target_time_edit(message: Message, state: FSMContext):
         else:
             text = "✅ <b>МОИ СОРЕВНОВАНИЯ</b>\n\n"
 
-            # Импортируем утилиты для форматирования
             from competitions.competitions_utils import format_competition_distance as format_dist_with_units, format_competition_date
             from database.queries import get_user_settings
             from utils.unit_converter import safe_convert_distance_name
 
-            # Получаем настройки пользователя
             settings = await get_user_settings(user_id)
             distance_unit = settings.get('distance_unit', 'км')
 
-            # Показываем соревнования (первые 10)
             for i, comp in enumerate(all_competitions[:10], 1):
                 time_until = format_time_until_competition(comp['date'])
 
-                # Обработка дистанции
                 distance_value = comp.get('distance', 0)
                 distance_name = comp.get('distance_name')
 
@@ -1675,10 +1528,8 @@ async def process_target_time_edit(message: Message, state: FSMContext):
                 else:
                     dist_str = "Не указана"
 
-                # Форматируем дату
                 date_str = await format_competition_date(comp['date'], user_id)
 
-                # Форматируем целевое время
                 target_time = comp.get('target_time')
                 if target_time is None or target_time == 'None' or target_time == '':
                     target_time_str = 'Нет цели'
@@ -1702,7 +1553,6 @@ async def process_target_time_edit(message: Message, state: FSMContext):
             from aiogram.utils.keyboard import InlineKeyboardBuilder
             builder = InlineKeyboardBuilder()
 
-            # Создаем кнопки для соревнований
             for comp in all_competitions[:10]:
                 distance_for_callback = comp.get('distance') or 0
                 builder.row(
@@ -1740,29 +1590,23 @@ async def cancel_registration(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     logger.info(f"cancel_registration competition_id={competition_id}, distance={distance}, user_id={user_id}")
 
-    # Получаем информацию о соревновании
     competition = await get_competition(competition_id)
 
     if not competition:
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Получаем регистрацию пользователя для получения distance_name
     from competitions.competitions_queries import get_user_competitions
     user_comps = await get_user_competitions(user_id)
     logger.info(f"cancel_registration user_comps count: {len(user_comps)}")
     for comp in user_comps:
         logger.info(f"  comp: id={comp.get('id')}, distance={comp.get('distance')}, distance_name={comp.get('distance_name')}")
 
-    # Находим нужную регистрацию
-    # Для HeroLeague/reg.place distance может быть None или 0, поэтому ищем более гибко
     registration = None
     for comp in user_comps:
         comp_distance = comp.get('distance')
-        # Сравниваем ID и дистанцию, учитывая что оба могут быть None/0
         if comp['id'] == competition_id:
             logger.info(f"  Found comp with matching ID: comp_distance={comp_distance}, distance={distance}")
-            # Если обе дистанции None или 0, считаем совпадением
             if (comp_distance == distance) or \
                (comp_distance in (None, 0) and distance in (None, 0)):
                 registration = comp
@@ -1770,8 +1614,6 @@ async def cancel_registration(callback: CallbackQuery, state: FSMContext):
                 break
 
     if not registration:
-        # Если не нашли с точным совпадением дистанции, попробуем найти по ID
-        # (для случаев когда у соревнования только одна регистрация)
         registrations_for_comp = [c for c in user_comps if c['id'] == competition_id]
         logger.info(f"cancel_registration fallback: registrations_for_comp count={len(registrations_for_comp)}")
         if len(registrations_for_comp) == 1:
@@ -1788,10 +1630,8 @@ async def cancel_registration(callback: CallbackQuery, state: FSMContext):
     from database.queries import get_user_settings
     from utils.unit_converter import safe_convert_distance_name
 
-    # Используем distance_name если есть, иначе форматируем числовое значение
     distance_name = registration.get('distance_name') if registration else None
 
-    # Нормализация distance_name
     if distance_name and isinstance(distance_name, str):
         distance_name = distance_name.strip()
         if distance_name.lower() in ('none', 'null', '0', '0.0', ''):
@@ -1801,17 +1641,14 @@ async def cancel_registration(callback: CallbackQuery, state: FSMContext):
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-        # Проверяем, не является ли distance_name просто числом без единиц
         import re
         if re.match(r'^\d+(\.\d+)?$', distance_name):
-            # Это просто число - добавляем единицы измерения
             dist_str = f"{distance_name} {distance_unit}"
         else:
             dist_str = safe_convert_distance_name(distance_name, distance_unit)
     else:
         dist_str = await format_dist_with_units(distance, user_id)
 
-    # Показываем подтверждение
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
     builder.row(
@@ -1839,11 +1676,9 @@ async def cancel_registration(callback: CallbackQuery, state: FSMContext):
     logger.info(f"cancel_registration: Text to send:\n{text}")
     logger.info(f"cancel_registration: Keyboard buttons: {[[btn.text for btn in row] for row in builder.as_markup().inline_keyboard]}")
 
-    # ВАЖНО: Сначала отвечаем на callback, чтобы закрыть его
     await callback.answer()
     logger.info(f"cancel_registration: Callback answered")
 
-    # Теперь редактируем сообщение
     await callback.message.edit_text(
         text,
         reply_markup=builder.as_markup(),
@@ -1865,23 +1700,19 @@ async def confirm_cancel_registration(callback: CallbackQuery, state: FSMContext
     user_id = callback.from_user.id
     logger.warning(f"🔵 confirm_cancel_registration: competition_id={competition_id}, distance={distance}")
 
-    # ВАЖНО: Отвечаем на callback сразу, чтобы избежать повторных вызовов
     await callback.answer()
 
-    # Отменяем регистрацию
     from competitions.competitions_queries import unregister_from_competition_with_distance
     success = await unregister_from_competition_with_distance(user_id, competition_id, distance)
 
     if success:
         logger.info(f"confirm_cancel_registration: Registration cancelled successfully")
-        # Возвращаемся к списку соревнований
         from competitions.competitions_handlers import show_my_competitions
         await show_my_competitions(callback, state)
     else:
         logger.error(f"confirm_cancel_registration: Failed to cancel registration - ignoring (might be auto-generated callback)")
 
 
-# ========== МОИ РЕЗУЛЬТАТЫ ==========
 
 @router.callback_query(F.data == "comp:my_results")
 async def show_my_results(callback: CallbackQuery, state: FSMContext):
@@ -1932,19 +1763,16 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     from utils.time_formatter import calculate_pace
     from datetime import datetime, timedelta
 
-    # Определяем дату начала периода
     date_from = None
     period_name = "Всё время"
 
     if period == "month":
-        # Месяц - с 1-го числа текущего месяца
         now = datetime.now()
         date_from = datetime(now.year, now.month, 1)
         period_name = "За месяц"
     elif period == "6months":
-        # 6 месяцев - с 1-го числа 6 месяцев назад
         now = datetime.now()
-        month = now.month - 5  # -5 потому что текущий месяц + 5 назад = 6 месяцев
+        month = now.month - 5  
         year = now.year
         if month <= 0:
             month += 12
@@ -1952,13 +1780,11 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
         date_from = datetime(year, month, 1)
         period_name = "За полгода"
     elif period == "year":
-        # Год - с 1-го числа 12 месяцев назад
         now = datetime.now()
         year = now.year - 1
         date_from = datetime(year, now.month, 1)
         period_name = "За год"
 
-    # Получаем завершенные соревнования с учетом периода
     if period == "all":
         from competitions.competitions_queries import get_user_competitions
         finished_comps = await get_user_competitions(user_id, status_filter='finished')
@@ -1974,11 +1800,9 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     else:
         text = f"🏅 <b>МОИ РЕЗУЛЬТАТЫ - {period_name}</b>\n\n"
 
-        # Завершенные соревнования
         if finished_comps:
             text += f"🏁 <b>ЗАВЕРШЕННЫЕ СОРЕВНОВАНИЯ</b> ({len(finished_comps)})\n\n"
 
-            # Получаем формат даты пользователя
             from utils.date_formatter import get_user_date_format, DateFormatter
             from competitions.competitions_utils import format_competition_distance as format_dist_with_units
             from database.queries import get_user_settings
@@ -1989,9 +1813,7 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
             distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
             for i, comp in enumerate(finished_comps, 1):
-                # Используем distance_name если оно содержит буквы (не просто число), иначе форматируем числовое значение
                 distance_name = comp.get('distance_name')
-                # Проверяем, является ли distance_name просто числом (например, "50.0")
                 is_simple_number = False
                 if distance_name:
                     try:
@@ -2001,13 +1823,10 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                         is_simple_number = False
 
                 if distance_name and not is_simple_number:
-                    # distance_name содержит текст (например, "500м плавание + 3км бег")
                     dist_str = safe_convert_distance_name(distance_name, distance_unit)
                 else:
-                    # distance_name отсутствует или это просто число
                     dist_str = await format_dist_with_units(comp['distance'], user_id)
 
-                # Форматируем дату согласно настройкам пользователя
                 formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
 
                 text += f"{i}. <b>{comp['name']}</b>\n"
@@ -2018,21 +1837,17 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                     normalized_time = normalize_time(comp['finish_time'])
                     result_line = f"   ⏱️ {normalized_time}"
 
-                    # Добавляем темп с учетом единиц измерения
                     from utils.time_formatter import calculate_pace_with_unit
-                    # Проверяем, что distance валидна перед вычислением темпа
                     if comp.get('distance') and comp['distance'] > 0:
                         pace = await calculate_pace_with_unit(comp['finish_time'], comp['distance'], user_id)
                         if pace:
                             result_line += f" • 🏃 {pace}"
 
-                    # Добавляем места
                     if comp.get('place_overall'):
                         result_line += f"\n   🏆 Общее: {comp['place_overall']}"
                     if comp.get('place_age_category'):
                         result_line += f" • 🏅 Категория: {comp['place_age_category']}"
 
-                    # Добавляем разряд (рассчитываем если не сохранён)
                     qualification = comp.get('qualification')
                     if not qualification and comp.get('distance'):
                         try:
@@ -2048,7 +1863,6 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                                     gender = row[0] if row and row[0] else 'male'
                             time_sec = time_to_seconds(comp['finish_time'])
 
-                            # Параметры для разных видов спорта
                             kwargs = {}
                             if sport_type and sport_type.lower().startswith('пла'):
                                 kwargs['pool_length'] = 50
@@ -2059,11 +1873,9 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
                         except Exception:
                             pass
 
-                    # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
                     if qualification and qualification not in [None, '', 'Нет разряда', 'Б/р']:
                         result_line += f"\n   🎖️ Разряд: {format_qualification(qualification)}"
 
-                    # Добавляем пульс
                     if comp.get('heart_rate'):
                         result_line += f"\n   ❤️ Пульс: {comp['heart_rate']} уд/мин"
 
@@ -2074,12 +1886,10 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
-    # Кнопка добавления прошедшего соревнования с сохранением периода
     builder.row(
         InlineKeyboardButton(text="➕ Добавить прошедшее соревнование", callback_data=f"comp:add_past:{period}")
     )
 
-    # Если есть результаты, добавляем кнопку удаления
     if finished_comps:
         builder.row(
             InlineKeyboardButton(text="🗑️ Удалить результат", callback_data="comp:delete_result_menu")
@@ -2097,7 +1907,6 @@ async def show_my_results_with_period(callback: CallbackQuery, state: FSMContext
     await callback.answer()
 
 
-# ========== ЛИЧНЫЕ РЕКОРДЫ ==========
 
 @router.callback_query(F.data == "comp:personal_records")
 async def show_personal_records(callback: CallbackQuery, state: FSMContext):
@@ -2105,7 +1914,6 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     from utils.time_formatter import calculate_pace
 
-    # Получаем личные рекорды
     records = await get_user_personal_records(user_id)
 
     if not records:
@@ -2117,37 +1925,30 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
     else:
         text = "🏆 <b>ЛИЧНЫЕ РЕКОРДЫ</b>\n\n"
 
-        # Получаем формат даты пользователя
         from utils.date_formatter import get_user_date_format, DateFormatter
         from competitions.competitions_utils import format_competition_distance as format_dist_with_units
         user_date_format = await get_user_date_format(user_id)
 
-        # Сортируем по дистанции
         sorted_records = sorted(records.items(), key=lambda x: x[0])
 
         for distance, record in sorted_records:
-            # Форматируем дистанцию с учетом единиц измерения пользователя
             dist_name = await format_dist_with_units(distance, user_id)
             normalized_time = normalize_time(record['best_time'])
             text += f"🏃 <b>{dist_name}</b>\n"
             text += f"⏱️ Время: {normalized_time}\n"
 
-            # Добавляем темп с учетом единиц измерения
             from utils.time_formatter import calculate_pace_with_unit
-            # Проверяем, что distance валидна перед вычислением темпа
             if distance and distance > 0:
                 pace = await calculate_pace_with_unit(record['best_time'], distance, user_id)
                 if pace:
                     text += f"⚡ Темп: {pace}\n"
 
-            # Добавляем разряд только если он есть и это не "Нет разряда" или "Б/р"
             qual = record.get('qualification')
             if qual and qual not in [None, '', 'Нет разряда', 'Б/р']:
                 text += f"🎖️ Разряд: {format_qualification(qual)}\n"
 
             if record.get('competition_name'):
                 comp_name_short = record['competition_name'][:30] + "..." if len(record['competition_name']) > 30 else record['competition_name']
-                # Форматируем дату согласно настройкам пользователя
                 formatted_date = DateFormatter.format_date(record['date'], user_date_format)
                 text += f"📅 Дата: {formatted_date}\n"
                 text += f"🏆 Соревнование: {comp_name_short}\n"
@@ -2167,14 +1968,12 @@ async def show_personal_records(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ========== УДАЛЕНИЕ РЕЗУЛЬТАТА ==========
 
 @router.callback_query(F.data == "comp:delete_result_menu")
 async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
     """Показать меню для выбора результата для удаления"""
     user_id = callback.from_user.id
 
-    # Получаем завершенные соревнования
     from competitions.competitions_queries import get_user_competitions
     finished_comps = await get_user_competitions(user_id, status_filter='finished')
 
@@ -2187,7 +1986,6 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
         "Выберите соревнование для удаления результата:\n\n"
     )
 
-    # Получаем формат даты пользователя
     from utils.date_formatter import get_user_date_format, DateFormatter
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units
     from database.queries import get_user_settings
@@ -2200,9 +1998,7 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
 
-    # Кнопки для удаления - показываем название и дату
     for comp in finished_comps[:10]:
-        # Используем distance_name если есть, иначе форматируем числовое значение
         distance_name = comp.get('distance_name')
         if distance_name:
             dist_str = safe_convert_distance_name(distance_name, distance_unit)
@@ -2210,7 +2006,6 @@ async def show_delete_result_menu(callback: CallbackQuery, state: FSMContext):
             dist_str = await format_dist_with_units(comp['distance'], user_id)
         formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
 
-        # Формируем короткое название для кнопки
         short_name = comp['name'][:20] + "..." if len(comp['name']) > 20 else comp['name']
         button_text = f"{short_name} • {dist_str}"
 
@@ -2239,13 +2034,11 @@ async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
     competition_id = int(callback.data.split(":")[-1])
     user_id = callback.from_user.id
 
-    # Получаем информацию о соревновании
     comp = await get_competition(competition_id)
     if not comp:
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Получаем информацию об участнике
     from competitions.competitions_queries import get_user_competitions
     user_comps = await get_user_competitions(user_id, status_filter='finished')
     user_comp = next((c for c in user_comps if c['id'] == competition_id), None)
@@ -2268,7 +2061,6 @@ async def confirm_delete_result(callback: CallbackQuery, state: FSMContext):
     if user_comp.get('finish_time'):
         text += f"⏱️ Время: {normalize_time(user_comp['finish_time'])}\n"
 
-    # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
     qual = user_comp.get('qualification')
     if qual and qual not in [None, '', 'Нет разряда', 'Б/р']:
         text += f"🎖️ Разряд: {format_qualification(qual)}\n"
@@ -2300,18 +2092,15 @@ async def delete_result_confirmed(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
 
     try:
-        # Удаляем результат (очищаем поля времени и места)
         from competitions.competitions_queries import delete_competition_result, get_user_competition_registration
         success = await delete_competition_result(user_id, competition_id)
 
         if success:
             await callback.answer("✅ Результат удалён", show_alert=True)
 
-            # Получаем дистанцию из регистрации для редиректа
             registration = await get_user_competition_registration(user_id, competition_id)
             if registration:
                 distance = registration['distance']
-                # Имитируем callback для перехода к просмотру соревнования
                 from types import SimpleNamespace
                 new_callback = SimpleNamespace(
                     message=callback.message,
@@ -2321,7 +2110,6 @@ async def delete_result_confirmed(callback: CallbackQuery, state: FSMContext):
                 )
                 await view_my_competition(new_callback, None)
             else:
-                # Если регистрация не найдена, возвращаемся к списку
                 await show_my_competitions(callback)
         else:
             await callback.answer("❌ Ошибка при удалении", show_alert=True)
@@ -2331,7 +2119,6 @@ async def delete_result_confirmed(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Произошла ошибка", show_alert=True)
 
 
-# ========== ДОБАВЛЕНИЕ РЕЗУЛЬТАТА ==========
 
 @router.callback_query(F.data.startswith("comp:add_result:"))
 async def start_add_result(callback: CallbackQuery, state: FSMContext):
@@ -2339,18 +2126,15 @@ async def start_add_result(callback: CallbackQuery, state: FSMContext):
     competition_id = int(callback.data.split(":")[-1])
     user_id = callback.from_user.id
 
-    # Получаем информацию о соревновании
     comp = await get_competition(competition_id)
     if not comp:
         await callback.answer("❌ Соревнование не найдено", show_alert=True)
         return
 
-    # Сохраняем ID соревнования в состоянии (не очищаем return_period!)
     data = await state.get_data()
     return_period = data.get('return_period', 'all')
     await state.update_data(result_competition_id=competition_id, return_period=return_period)
 
-    # Запрашиваем время
     text = (
         f"🏆 <b>{comp['name']}</b>\n\n"
         "Введите ваше финишное время в формате ЧЧ:ММ:СС или ММ:СС или Ч:М:С\n"
@@ -2377,7 +2161,6 @@ async def process_finish_time(message: Message, state: FSMContext):
     from utils.time_formatter import validate_time_format
 
     if message.text == "❌ Отмена":
-        # Получаем сохраненный period для возврата
         data = await state.get_data()
         return_period = data.get('return_period', 'all')
 
@@ -2387,21 +2170,17 @@ async def process_finish_time(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
 
-        # Возврат к списку прошедших соревнований
         from competitions.competitions_queries import get_user_competitions
         from competitions.competitions_utils import format_competition_date, format_competition_distance
         from aiogram.utils.keyboard import InlineKeyboardBuilder
 
         user_id = message.from_user.id
 
-        # Получаем завершенные соревнования пользователя
         all_comps = await get_user_competitions(user_id, status_filter='finished')
 
-        # Фильтруем только те, где нет результата
         comps_without_results = [comp for comp in all_comps if not comp.get('finish_time')]
 
         if comps_without_results:
-            # Показываем список соревнований без результатов
             text = (
                 "🏁 <b>ДОБАВЛЕНИЕ РЕЗУЛЬТАТА</b>\n\n"
                 "У вас есть соревнования без результатов:\n\n"
@@ -2409,7 +2188,6 @@ async def process_finish_time(message: Message, state: FSMContext):
 
             builder = InlineKeyboardBuilder()
 
-            # Получаем настройки пользователя
             from database.queries import get_user_settings
             from utils.unit_converter import safe_convert_distance_name
             settings = await get_user_settings(user_id)
@@ -2418,7 +2196,6 @@ async def process_finish_time(message: Message, state: FSMContext):
             for i, comp in enumerate(comps_without_results[:10], 1):
                 formatted_date = await format_competition_date(comp['date'], user_id)
 
-                # Используем distance_name если есть, иначе форматируем числовое значение
                 distance_name = comp.get('distance_name')
                 if distance_name:
                     dist_str = safe_convert_distance_name(distance_name, distance_unit)
@@ -2437,7 +2214,6 @@ async def process_finish_time(message: Message, state: FSMContext):
                     )
                 )
 
-            # Кнопка для создания нового соревнования
             builder.row(
                 InlineKeyboardButton(text="➕ Добавить новое соревнование", callback_data="comp:add_past_manual")
             )
@@ -2447,7 +2223,6 @@ async def process_finish_time(message: Message, state: FSMContext):
 
             await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
         else:
-            # Если нет соревнований без результатов, показываем сообщение
             builder = InlineKeyboardBuilder()
             builder.row(
                 InlineKeyboardButton(text="➕ Добавить новое соревнование", callback_data="comp:add_past_manual")
@@ -2466,7 +2241,6 @@ async def process_finish_time(message: Message, state: FSMContext):
 
     time_text = message.text.strip()
 
-    # Валидация формата
     if not validate_time_format(time_text):
         await message.answer(
             "❌ Некорректный формат времени.\n"
@@ -2475,11 +2249,9 @@ async def process_finish_time(message: Message, state: FSMContext):
         )
         return
 
-    # Нормализуем и сохраняем время
     normalized_time = normalize_time(time_text)
     await state.update_data(result_finish_time=normalized_time)
 
-    # Запрашиваем место в общем зачёте
     await message.answer(
         "Введите ваше место в общем зачёте (число)\n"
         "Или нажмите \"Пропустить\" если не хотите указывать",
@@ -2498,7 +2270,6 @@ async def process_place_overall(message: Message, state: FSMContext):
             "❌ Добавление результата отменено",
             reply_markup=ReplyKeyboardRemove()
         )
-        # Возврат в меню соревнований
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
             "Выберите раздел:",
@@ -2522,7 +2293,6 @@ async def process_place_overall(message: Message, state: FSMContext):
             )
             return
 
-    # Запрашиваем место в категории
     await message.answer(
         "Введите ваше место в возрастной категории (число)\n"
         "Или нажмите \"Пропустить\" если не хотите указывать",
@@ -2541,7 +2311,6 @@ async def process_place_age_category(message: Message, state: FSMContext):
             "❌ Добавление результата отменено",
             reply_markup=ReplyKeyboardRemove()
         )
-        # Возврат в меню соревнований
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
             "Выберите раздел:",
@@ -2559,7 +2328,6 @@ async def process_place_age_category(message: Message, state: FSMContext):
                 await message.answer("❌ Место должно быть положительным числом")
                 return
 
-            # Проверяем, что место в категории не больше места в общем зачёте
             data = await state.get_data()
             place_overall = data.get('result_place_overall')
 
@@ -2578,7 +2346,6 @@ async def process_place_age_category(message: Message, state: FSMContext):
             )
             return
 
-    # Запрашиваем средний пульс
     await message.answer(
         "Введите ваш средний пульс за соревнование (уд/мин)\n"
         "Или нажмите \"Пропустить\" если не хотите указывать",
@@ -2597,7 +2364,6 @@ async def process_heart_rate(message: Message, state: FSMContext):
             "❌ Добавление результата отменено",
             reply_markup=ReplyKeyboardRemove()
         )
-        # Возврат в меню соревнований
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
             "Выберите раздел:",
@@ -2621,12 +2387,10 @@ async def process_heart_rate(message: Message, state: FSMContext):
             )
             return
 
-    # Сохраняем результат
     data = await state.get_data()
     user_id = message.from_user.id
     competition_id = data['result_competition_id']
 
-    # Получаем дистанцию из регистрации
     from competitions.competitions_queries import get_user_competition_registration
     registration = await get_user_competition_registration(user_id, competition_id)
     if not registration:
@@ -2640,7 +2404,6 @@ async def process_heart_rate(message: Message, state: FSMContext):
 
     distance = registration['distance']
 
-    # Добавляем результат
     success = await add_competition_result(
         user_id=user_id,
         competition_id=competition_id,
@@ -2651,7 +2414,6 @@ async def process_heart_rate(message: Message, state: FSMContext):
         heart_rate=data.get('result_heart_rate')
     )
 
-    # Обновляем уровень пользователя после добавления результата соревнования
     if success:
         try:
             from database.level_queries import calculate_and_update_user_level
@@ -2672,7 +2434,6 @@ async def process_heart_rate(message: Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Error updating level after competition result: {e}")
 
-        # Проверяем и присваиваем новые достижения
         try:
             from ratings.achievements_checker import check_and_award_achievements
             new_achievements = await check_and_award_achievements(user_id, callback.bot)
@@ -2681,7 +2442,6 @@ async def process_heart_rate(message: Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Ошибка при проверке достижений: {str(e)}")
 
-    # Рассчитываем разряд для отображения
     qualification = None
     if success:
         try:
@@ -2689,7 +2449,6 @@ async def process_heart_rate(message: Message, state: FSMContext):
             comp = await get_competition(competition_id)
             sport_type = comp.get('sport_type', 'бег')
 
-            # Получаем пол пользователя
             from database.queries import get_connection
             async with get_connection() as db:
                 async with db.execute(
@@ -2701,7 +2460,6 @@ async def process_heart_rate(message: Message, state: FSMContext):
 
             time_seconds = time_to_seconds(data['result_finish_time'])
 
-            # Параметры для разных видов спорта
             kwargs = {}
             if sport_type and sport_type.lower().startswith('пла'):
                 kwargs['pool_length'] = 50
@@ -2715,18 +2473,14 @@ async def process_heart_rate(message: Message, state: FSMContext):
     if success:
         comp = await get_competition(competition_id)
 
-        # Форматируем дистанцию с учетом единиц пользователя
         from competitions.competitions_utils import format_competition_distance as format_dist_with_units
         dist_text = await format_dist_with_units(distance, user_id)
 
-        # Форматируем дату
         from utils.date_formatter import get_user_date_format, DateFormatter
         user_date_format = await get_user_date_format(user_id)
         formatted_date = DateFormatter.format_date(comp['date'], user_date_format)
 
-        # Рассчитываем темп
         from utils.time_formatter import calculate_pace_with_unit
-        # Проверяем, что distance валидна перед вычислением темпа
         if distance and distance > 0:
             pace = await calculate_pace_with_unit(data['result_finish_time'], distance, user_id)
         else:
@@ -2748,36 +2502,30 @@ async def process_heart_rate(message: Message, state: FSMContext):
         if data.get('result_place_age'):
             text += f"🏅 Место в категории: {data['result_place_age']}\n"
 
-        # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
         if qualification and qualification not in [None, '', 'Нет разряда', 'Б/р']:
             text += f"🎖️ Разряд: {format_qualification(qualification)}\n"
 
         if data.get('result_heart_rate'):
             text += f"❤️ Средний пульс: {data['result_heart_rate']} уд/мин\n"
 
-        # Показываем сообщение об успехе
         from aiogram.types import ReplyKeyboardRemove
         await message.answer(text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
 
-        # Определяем период на основе даты соревнования
         from datetime import datetime, timedelta
         comp_date = datetime.strptime(comp['date'], '%Y-%m-%d')
         now = datetime.now()
 
-        # Определяем период
         if comp_date >= datetime(now.year, now.month, 1):
-            period = "month"  # Текущий месяц
+            period = "month"  
         elif comp_date >= datetime(now.year - 1 if now.month <= 6 else now.year, now.month - 5 if now.month > 6 else now.month + 7, 1):
-            period = "6months"  # Последние полгода
+            period = "6months"  
         elif comp_date >= datetime(now.year - 1, now.month, 1):
-            period = "year"  # Последний год
+            period = "year"  
         else:
-            period = "year"  # По умолчанию показываем год
+            period = "year"  
 
-        # Автоматически переходим к результатам с нужным периодом
         temp_msg = await message.answer("⏳ Загрузка результатов...")
 
-        # Создаем объект callback для show_my_results_with_period
         class CallbackProxy:
             def __init__(self, message, user):
                 self.message = message
@@ -2797,9 +2545,5 @@ async def process_heart_rate(message: Message, state: FSMContext):
     await state.clear()
 
 
-# Импортируем InlineKeyboardButton для использования в коде
 from aiogram.types import InlineKeyboardButton
 
-# Примечание: обработчик comp:search находится в search_competitions_handlers.py
-# Примечание: обработчик comp:statistics находится в custom_competitions_handlers.py
-# Примечание: обработчик comp:create_custom находится в custom_competitions_handlers.py

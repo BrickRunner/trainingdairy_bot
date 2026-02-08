@@ -17,11 +17,10 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Конфигурация
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 BACKUP_DIR = os.getenv('BACKUP_DIR', 'backups')
-BACKUP_KEEP_DAYS = int(os.getenv('BACKUP_KEEP_DAYS', '7'))  # Храним последние 7 дней
-BACKUP_INTERVAL_HOURS = int(os.getenv('BACKUP_INTERVAL_HOURS', '24'))  # Backup каждые 24 часа
+BACKUP_KEEP_DAYS = int(os.getenv('BACKUP_KEEP_DAYS', '7'))  
+BACKUP_INTERVAL_HOURS = int(os.getenv('BACKUP_INTERVAL_HOURS', '24'))  
 
 
 async def create_backup() -> Optional[str]:
@@ -32,42 +31,37 @@ async def create_backup() -> Optional[str]:
         Путь к созданному backup'у или None в случае ошибки
     """
     try:
-        # Создаем директорию для backup'ов если не существует
         backup_path = Path(BACKUP_DIR)
         backup_path.mkdir(parents=True, exist_ok=True)
 
-        # Проверяем что исходная БД существует
         db_file = Path(DB_PATH)
         if not db_file.exists():
             logger.warning(f"Database file not found: {DB_PATH}")
             return None
 
-        # Генерируем имя backup'а с timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         backup_filename = f'database_backup_{timestamp}.sqlite'
         backup_full_path = backup_path / backup_filename
 
-        # Копируем базу данных
-        # Используем copy2 для сохранения метаданных (время создания и т.д.)
         shutil.copy2(db_file, backup_full_path)
 
-        # Также копируем WAL файл если он существует (для полной целостности)
+        # Дополнительно копируем WAL файл (Write-Ahead Log) если он есть
+        # WAL хранит незафиксированные транзакции SQLite
         wal_file = Path(f"{DB_PATH}-wal")
         if wal_file.exists():
             wal_backup = backup_path / f'database_backup_{timestamp}.sqlite-wal'
             shutil.copy2(wal_file, wal_backup)
             logger.info(f"WAL file backed up: {wal_backup}")
 
-        # Проверяем размер backup'а (должен быть > 0)
+        # Проверяем что backup не пустой (защита от повреждения)
         backup_size = backup_full_path.stat().st_size
         if backup_size == 0:
             logger.error(f"Backup created but file size is 0: {backup_full_path}")
-            backup_full_path.unlink()  # Удаляем пустой файл
+            backup_full_path.unlink()
             return None
 
         logger.info(f"✅ Backup created successfully: {backup_full_path} ({backup_size:,} bytes)")
 
-        # Очищаем старые backup'ы
         await cleanup_old_backups()
 
         return str(backup_full_path)
@@ -95,24 +89,22 @@ async def cleanup_old_backups() -> int:
         if not backup_path.exists():
             return 0
 
+        # Определяем дату отсечки - backup'ы старше этой даты будут удалены
         cutoff_date = datetime.now() - timedelta(days=BACKUP_KEEP_DAYS)
         deleted_count = 0
 
-        # Находим все backup файлы
         backup_files = list(backup_path.glob('database_backup_*.sqlite'))
 
         for backup_file in backup_files:
-            # Получаем время создания файла
             file_mtime = datetime.fromtimestamp(backup_file.stat().st_mtime)
 
-            # Удаляем если старше cutoff_date
+            # Удаляем старые backup'ы
             if file_mtime < cutoff_date:
                 try:
                     backup_file.unlink()
                     deleted_count += 1
                     logger.info(f"Deleted old backup: {backup_file.name}")
 
-                    # Также удаляем соответствующий WAL файл если есть
                     wal_file = backup_file.with_suffix('.sqlite-wal')
                     if wal_file.exists():
                         wal_file.unlink()
@@ -155,7 +147,6 @@ async def get_backup_list() -> List[dict]:
                 'age_hours': (datetime.now() - datetime.fromtimestamp(stat.st_mtime)).total_seconds() / 3600
             })
 
-        # Сортируем по дате создания (новые первые)
         backups.sort(key=lambda x: x['created'], reverse=True)
 
         return backups
@@ -185,17 +176,15 @@ async def restore_from_backup(backup_path: str) -> bool:
 
         db_file = Path(DB_PATH)
 
-        # Создаем backup текущей БД перед восстановлением (на всякий случай)
+        # Создаем аварийную копию текущей БД перед восстановлением
         if db_file.exists():
             emergency_backup = f"{DB_PATH}.before_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             shutil.copy2(db_file, emergency_backup)
             logger.info(f"Emergency backup created: {emergency_backup}")
 
-        # Восстанавливаем из backup'а
         shutil.copy2(backup_file, db_file)
         logger.info(f"✅ Database restored from: {backup_path}")
 
-        # Восстанавливаем WAL файл если есть
         wal_backup = Path(f"{backup_path}-wal")
         if wal_backup.exists():
             shutil.copy2(wal_backup, f"{DB_PATH}-wal")
@@ -216,21 +205,16 @@ async def schedule_backups():
     """
     logger.info(f"📦 Backup scheduler started (interval: {BACKUP_INTERVAL_HOURS}h, keep: {BACKUP_KEEP_DAYS}d)")
 
-    # Создаем первый backup сразу при старте
     await create_backup()
 
-    # Затем создаем backup'ы по расписанию
     while True:
         try:
-            # Ждем указанный интервал
             await asyncio.sleep(BACKUP_INTERVAL_HOURS * 3600)
 
-            # Создаем backup
             logger.info(f"🕐 Scheduled backup started (interval: {BACKUP_INTERVAL_HOURS}h)")
             backup_path = await create_backup()
 
             if backup_path:
-                # Получаем статистику backup'ов
                 backups = await get_backup_list()
                 total_size = sum(b['size'] for b in backups)
                 logger.info(
@@ -245,8 +229,7 @@ async def schedule_backups():
             break
         except Exception as e:
             logger.error(f"Error in backup scheduler: {e}", exc_info=True)
-            # Продолжаем работу даже при ошибке
-            await asyncio.sleep(60)  # Ждем минуту перед повтором
+            await asyncio.sleep(60)  
 
 
 async def verify_backup_integrity(backup_path: str) -> bool:
@@ -267,14 +250,11 @@ async def verify_backup_integrity(backup_path: str) -> bool:
             logger.error(f"Backup file not found: {backup_path}")
             return False
 
-        # Проверяем что файл не пустой
         if backup_file.stat().st_size == 0:
             logger.error(f"Backup file is empty: {backup_path}")
             return False
 
-        # Пытаемся открыть БД и сделать простой запрос
         async with aiosqlite.connect(backup_path) as db:
-            # Проверяем что можем прочитать основные таблицы
             async with db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ) as cursor:
@@ -293,7 +273,6 @@ async def verify_backup_integrity(backup_path: str) -> bool:
 
 
 if __name__ == "__main__":
-    # Тестирование модуля
     import sys
 
     logging.basicConfig(

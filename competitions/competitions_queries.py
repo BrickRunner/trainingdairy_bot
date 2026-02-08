@@ -10,14 +10,11 @@ from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from utils.time_formatter import normalize_time
 
-# Логгер
 logger = logging.getLogger(__name__)
 
-# Путь к базе данных
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
-# ========== CRUD ДЛЯ СОРЕВНОВАНИЙ ==========
 
 async def add_competition(data: Dict[str, Any]) -> int:
     """
@@ -78,7 +75,6 @@ async def get_or_create_competition_from_api(api_comp: Dict[str, Any]) -> int:
     """
     source_url = api_comp.get('url', '')
 
-    # Проверяем существование соревнования по source_url
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -87,12 +83,10 @@ async def get_or_create_competition_from_api(api_comp: Dict[str, Any]) -> int:
         ) as cursor:
             row = await cursor.fetchone()
             if row:
-                # Соревнование уже существует - обновляем название если изменилось
                 existing_id = row['id']
                 existing_name = row['name']
                 new_name = api_comp.get('title', api_comp.get('name', existing_name))
 
-                # Обновляем название если оно изменилось
                 if new_name and new_name != existing_name:
                     await db.execute(
                         "UPDATE competitions SET name = ? WHERE id = ?",
@@ -103,19 +97,13 @@ async def get_or_create_competition_from_api(api_comp: Dict[str, Any]) -> int:
 
                 return existing_id
 
-    # Соревнование не найдено - создаем новое
-    # Преобразуем данные API в формат для add_competition
 
-    # Парсим дату (может быть в формате ISO с временем)
     comp_date = api_comp.get('date', '')
     if 'T' in comp_date:
         comp_date = comp_date.split('T')[0]
 
-    # Преобразуем distances в нужный формат
     distances_data = api_comp.get('distances', [])
     if isinstance(distances_data, list) and distances_data:
-        # API может возвращать [{"name": "5 км", "distance": 5.0}, ...]
-        # Извлекаем только числовые значения дистанций
         distances = []
         for d in distances_data:
             if isinstance(d, dict):
@@ -127,7 +115,6 @@ async def get_or_create_competition_from_api(api_comp: Dict[str, Any]) -> int:
     else:
         distances = []
 
-    # Определяем organizer по URL
     organizer = ''
     if 'russiarunning' in source_url.lower():
         organizer = 'Russia Running'
@@ -181,7 +168,6 @@ async def get_competition(competition_id: int) -> Optional[Dict[str, Any]]:
             row = await cursor.fetchone()
             if row:
                 competition = dict(row)
-                # Парсим JSON поля
                 if competition.get('distances'):
                     try:
                         competition['distances'] = json.loads(competition['distances'])
@@ -206,7 +192,6 @@ async def get_upcoming_competitions(limit: int = 50, offset: int = 0) -> List[Di
         db.row_factory = aiosqlite.Row
         today = date.today().strftime('%Y-%m-%d')
 
-        # Только официальные соревнования (is_official = 1)
         async with db.execute(
             """
             SELECT * FROM competitions
@@ -220,7 +205,6 @@ async def get_upcoming_competitions(limit: int = 50, offset: int = 0) -> List[Di
             competitions = []
             for row in rows:
                 comp = dict(row)
-                # Парсим JSON поля
                 if comp.get('distances'):
                     try:
                         comp['distances'] = json.loads(comp['distances'])
@@ -261,7 +245,6 @@ async def get_student_competitions_for_coach(
 
         logger.info(f"get_student_competitions_for_coach: student_id={student_id}, status_filter={status_filter}")
 
-        # Получаем ВСЕ соревнования ученика, включая pending и rejected proposals
         async with db.execute(
             f"""
             SELECT c.*, cp.distance, cp.distance_name, cp.target_time, cp.finish_time,

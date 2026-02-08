@@ -27,11 +27,8 @@ def normalize_sport_code(event_type_id: str) -> str:
     """
     event_type_lower = event_type_id.lower()
 
-    # ВАЖНО: Проверяем лыжи РАНЬШЕ, чем бег, так как "skirun" содержит "run"
-    # Маппинг типов событий HeroLeague на стандартные коды
     if any(keyword in event_type_lower for keyword in ["skirun", "snowrun", "ski", "лыж"]):
         return "ski"
-    # "Гонка Героев", "Гонка Героев Зима" и тренировочные лагеря относятся к "другим видам спорта"
     elif any(keyword in event_type_lower for keyword in ["gonka", "gonka_zima", "camp"]):
         return "other"
     elif any(keyword in event_type_lower for keyword in ["zabeg", "race", "run", "marathon", "doroga", "arctic", "trail"]):
@@ -43,7 +40,6 @@ def normalize_sport_code(event_type_id: str) -> str:
     elif any(keyword in event_type_lower for keyword in ["triathlon", "триатлон"]):
         return "triathlon"
     else:
-        # По умолчанию возвращаем "other" для неизвестных типов
         return "other"
 
 
@@ -58,14 +54,11 @@ def matches_sport_type(event_type_id: str, sport: Optional[str]) -> bool:
     Returns:
         bool: True если событие соответствует спорту, False иначе
     """
-    # Нормализуем код спорта
     normalized_code = normalize_sport_code(event_type_id)
 
-    # Если фильтр "все" - показываем ВСЕ события (включая camp)
     if not sport or sport == "all":
         return True
 
-    # Проверяем соответствие выбранному спорту
     return normalized_code == sport
 
 
@@ -109,36 +102,36 @@ async def fetch_competitions(
 
                 data = await response.json()
 
-                # Извлекаем события из ответа
                 events = data.get("values", [])
                 logger.info(f"Received {len(events)} event types from HeroLeague")
 
                 competitions = []
 
-                # Обрабатываем каждый тип события
+                # Обрабатываем каждое событие (тип соревнования) из API
                 for event in events:
                     event_type_id = event.get("event_type", {}).get("public_id", "")
 
-                    # Фильтр по спорту
+                    # Фильтруем по виду спорта (бег, велосипед и т.д.)
                     if not matches_sport_type(event_type_id, sport):
                         continue
 
-                    # Обрабатываем каждый город в событии
+                    # Каждое событие может проходить в нескольких городах
                     for city_event in event.get("event_city", []):
                         comp = parse_competition(event, city_event)
 
                         if not comp:
                             continue
 
-                        # Фильтр по городу
+                        # Фильтруем по городу если указан
                         if city and city.lower() not in comp.get("city", "").lower():
                             continue
 
-                        # Фильтр по периоду
+                        # Фильтруем по периоду времени если указан
                         if period_months:
                             begin_date_str = comp.get("begin_date")
                             if begin_date_str:
                                 try:
+                                    # Парсим дату начала соревнования и добавляем UTC если нет timezone
                                     begin_date = datetime.fromisoformat(begin_date_str.replace('Z', '+00:00'))
                                     if begin_date.tzinfo is None:
                                         begin_date = begin_date.replace(tzinfo=timezone.utc)
@@ -147,9 +140,9 @@ async def fetch_competitions(
                                     year = now.year
                                     month = now.month
 
-                                    # Вычисляем диапазон дат как в других парсерах
+                                    # Вычисляем диапазон дат в зависимости от периода
                                     if period_months == 1:
-                                        # 1 месяц - с 1-го до последнего дня текущего месяца
+                                        # Текущий месяц: с 1-го числа до конца месяца
                                         from datetime import timedelta
                                         start_date = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
                                         if month == 12:
@@ -159,24 +152,23 @@ async def fetch_competitions(
                                             end_date = next_month_first - timedelta(seconds=1)
 
                                     elif period_months == 12:
-                                        # 1 год - с 01.01 до 31.12 текущего года
+                                        # Текущий год: с 1 января до 31 декабря
                                         start_date = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
                                         end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
                                     else:
-                                        # 6 месяцев - от текущей даты + 180 дней
+                                        # По умолчанию: полгода вперед от текущей даты
                                         from datetime import timedelta
                                         start_date = now
                                         end_date = now + timedelta(days=180)
 
-                                    # Событие должно быть в диапазоне start_date <= begin_date <= end_date
+                                    # Пропускаем соревнования вне указанного диапазона
                                     if begin_date < start_date or begin_date > end_date:
                                         continue
 
-                                    # Дополнительная проверка: событие должно быть в будущем (>= сегодня)
+                                    # Дополнительная проверка: пропускаем прошедшие события
                                     from datetime import timezone as tz
                                     now_utc = datetime.now(tz.utc)
-                                    # Делаем begin_date timezone-aware если он naive
                                     if begin_date.tzinfo is None:
                                         begin_date = begin_date.replace(tzinfo=tz.utc)
                                     if begin_date < now_utc:
@@ -223,18 +215,15 @@ def parse_competition(event: Dict, city_event: Dict) -> Optional[Dict]:
         if not city_name or not start_time:
             return None
 
-        # Форматируем дату
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
             formatted_date = start_dt.strftime("%d.%m.%Y")
         except:
             formatted_date = start_time[:10] if len(start_time) >= 10 else start_time
 
-        # Получаем оригинальный sport_code и нормализуем его
         original_sport_code = event.get("event_type", {}).get("public_id", "run")
         normalized_sport_code = normalize_sport_code(original_sport_code)
 
-        # Для уникальной идентификации используем city_event ID в URL
         city_event_id = city_event.get("public_id", "")
 
         comp = {
@@ -243,22 +232,20 @@ def parse_competition(event: Dict, city_event: Dict) -> Optional[Dict]:
             "code": event.get("public_id", ""),
             "city": city_name,
             "place": city_event.get("address", city_name),
-            "sport_code": normalized_sport_code,  # Используем нормализованный код
+            "sport_code": normalized_sport_code,  
             "organizer": "Лига Героев",
             "service": "HeroLeague",
             "begin_date": start_time,
-            "end_date": start_time,  # Для HeroLeague используем start_time как end_date
+            "end_date": start_time,  
             "formatted_date": formatted_date,
             "description": event.get("description", ""),
             "event_type": event.get("event_type", {}).get("title", ""),
             "registration_open": city_event.get("registration_open"),
             "registration_close": city_event.get("registration_close"),
-            # ВАЖНО: используем city_event ID для уникальности URL
             "url": f"{BASE_URL}/city_event/{city_event_id}",
-            "distances": [],  # Пустой список дистанций (они не структурированы в API)
+            "distances": [],  
         }
 
-        # Добавляем информацию о дистанциях из описания
         description = event.get("description", "")
         if description:
             comp["distances_text"] = description
@@ -280,7 +267,5 @@ async def get_competition_details(competition_code: str) -> Optional[Dict]:
     Returns:
         Optional[Dict]: Детальная информация о соревновании или None
     """
-    # TODO: Реализовать получение детальной информации о дистанциях
-    # Возможно, потребуется дополнительный API запрос или парсинг страницы события
     logger.warning(f"get_competition_details not yet implemented for HeroLeague")
     return None

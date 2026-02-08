@@ -32,10 +32,10 @@ from database.queries import (
     add_user, add_training, get_user,
     get_trainings_by_period, get_training_statistics, get_training_by_id,
     get_trainings_by_custom_period, get_statistics_by_custom_period,
-    delete_training,  # НОВЫЙ КОД: Импортируем delete_training
-    get_user_settings,  # Импортируем get_user_settings для единиц измерения
-    get_main_training_types,  # Импортируем для получения основных типов тренировок
-    get_pulse_zone_for_value  # Импортируем для определения пульсовой зоны
+    delete_training,  
+    get_user_settings,  
+    get_main_training_types,  
+    get_pulse_zone_for_value  
 )
 from bot.graphs import generate_graphs
 from bot.pdf_export import create_training_pdf
@@ -49,7 +49,6 @@ from ai.ai_analyzer import analyze_training_statistics, is_ai_available
 
 router = Router()
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -61,25 +60,20 @@ async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
 
-    # Добавляем пользователя в БД, если его нет
     await add_user(user_id, username)
 
-    # Проверяем, есть ли параметр coach_XXXXXXXX
     args = message.text.split()
     if len(args) > 1 and args[1].startswith("coach_"):
         coach_code = args[1].replace("coach_", "").upper()
 
-        # Ищем тренера по коду
         coach_id = await find_coach_by_code(coach_code)
 
         if coach_id:
-            # Проверяем, что пользователь не пытается добавить себя
             if coach_id == user_id:
                 await message.answer(
                     "❌ Вы не можете добавить себя в качестве своего ученика.",
                     parse_mode="HTML"
                 )
-                # Показываем главное меню
                 is_coach_status = await is_user_coach(user_id)
                 settings = await get_user_settings(user_id)
                 name = settings.get('name', username) if settings else username
@@ -90,17 +84,14 @@ async def cmd_start(message: Message, state: FSMContext):
                 )
                 return
 
-            # Проверяем, заполнен ли профиль
             settings = await get_user_settings(user_id)
 
             if not settings or not settings.get('name') or not settings.get('birth_date'):
-                # Сохраняем код тренера для подключения после регистрации
                 await state.update_data(pending_coach_code=coach_code)
                 from registration.registration_handlers import start_registration
                 await start_registration(message, state)
                 return
 
-            # Добавляем связь с тренером
             success = await add_student_to_coach(coach_id, user_id)
 
             if success:
@@ -115,7 +106,6 @@ async def cmd_start(message: Message, state: FSMContext):
                     parse_mode="HTML"
                 )
 
-                # Уведомляем тренера
                 try:
                     student_name = message.from_user.full_name
                     await message.bot.send_message(
@@ -125,7 +115,6 @@ async def cmd_start(message: Message, state: FSMContext):
                         parse_mode="HTML"
                     )
 
-                    # Редирект тренера в главное меню
                     coach_settings = await get_user_settings(coach_id)
                     coach_is_coach = await is_user_coach(coach_id)
 
@@ -138,7 +127,6 @@ async def cmd_start(message: Message, state: FSMContext):
                 except Exception as e:
                     logger.error(f"Failed to notify coach: {e}")
 
-                # Редирект в главное меню
                 settings = await get_user_settings(user_id)
                 is_coach_status = await is_user_coach(user_id)
 
@@ -154,7 +142,6 @@ async def cmd_start(message: Message, state: FSMContext):
                     reply_markup=ReplyKeyboardRemove()
                 )
 
-                # Редирект в главное меню
                 settings = await get_user_settings(user_id)
                 is_coach_status = await is_user_coach(user_id)
 
@@ -170,19 +157,15 @@ async def cmd_start(message: Message, state: FSMContext):
                 "Проверьте правильность ссылки и попробуйте снова."
             )
 
-    # Проверяем, заполнен ли профиль
     settings = await get_user_settings(user_id)
 
-    # Если профиль не заполнен (нет имени или даты рождения) - запускаем регистрацию
     if not settings or not settings.get('name') or not settings.get('birth_date'):
         from registration.registration_handlers import start_registration
         await start_registration(message, state)
         return
 
-    # Проверяем статус тренера
     is_coach_status = await is_user_coach(user_id)
 
-    # Если профиль заполнен - показываем главное меню
     name = settings.get('name', username)
     welcome_text = (
         f"👋 Привет, {name}!\n\n"
@@ -230,10 +213,8 @@ async def start_add_training(message: Message, state: FSMContext):
     """Начало процесса добавления тренировки"""
     user_id = message.from_user.id
 
-    # Получаем основные типы тренировок из настроек пользователя
     main_types = await get_main_training_types(user_id)
 
-    # Проверяем, что есть хотя бы один тип
     if not main_types:
         await message.answer(
             "⚠️ **Настройка основных типов тренировок**\n\n"
@@ -244,7 +225,6 @@ async def start_add_training(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем, есть ли незавершенные запланированные тренировки (сегодня или раньше)
     from datetime import datetime
     today = datetime.now().date().isoformat()
 
@@ -266,12 +246,10 @@ async def start_add_training(message: Message, state: FSMContext):
             planned_trainings = await cursor.fetchall()
 
     if planned_trainings:
-        # Есть запланированные тренировки - показываем их
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         from aiogram.types import InlineKeyboardButton
         from utils.date_formatter import get_user_date_format, DateFormatter
 
-        # Получаем формат даты пользователя
         user_date_format = await get_user_date_format(user_id)
 
         text = "📋 <b>Запланированные тренировки</b>\n\n"
@@ -282,7 +260,6 @@ async def start_add_training(message: Message, state: FSMContext):
         for i, training in enumerate(planned_trainings, 1):
             training_dict = dict(training)
 
-            # Форматируем дату
             training_date_str = DateFormatter.format_date(training_dict['date'], user_date_format)
 
             desc = f"📅 {training_date_str} • 📝 {training_dict['type'].capitalize()}"
@@ -317,7 +294,6 @@ async def start_add_training(message: Message, state: FSMContext):
         await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
         return
 
-    # Нет запланированных тренировок - обычный flow
     await message.answer(
         "🏋️ **Добавление тренировки**\n\n"
         "Выберите тип тренировки:",
@@ -332,7 +308,6 @@ async def add_new_training_callback(callback: CallbackQuery, state: FSMContext):
     """Добавить новую тренировку (минуя запланированные)"""
     user_id = callback.from_user.id
 
-    # Получаем основные типы тренировок из настроек пользователя
     main_types = await get_main_training_types(user_id)
 
     await callback.message.edit_text(
@@ -351,7 +326,6 @@ async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
     training_id = int(callback.data.split(":")[1])
     user_id = callback.from_user.id
 
-    # Получаем данные запланированной тренировки
     import aiosqlite
     import os
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
@@ -373,28 +347,24 @@ async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
 
     planned_dict = dict(planned)
 
-    # Получаем настройки пользователя для правильного форматирования
     user_settings = await get_user_settings(user_id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
     user_date_format = await get_user_date_format(user_id)
 
-    # Форматируем дату
     date_str = DateFormatter.format_date(planned_dict['date'], user_date_format)
 
-    # Сохраняем данные в состояние
     await state.update_data(
         planned_training_id=training_id,
-        training_type=planned_dict['type'],  # используем training_type для согласованности
+        training_type=planned_dict['type'],  
         date=planned_dict['date'],
         planned_distance=planned_dict.get('distance'),
         planned_pace=planned_dict.get('avg_pace'),
         planned_exercises=planned_dict.get('exercises'),
         planned_intervals=planned_dict.get('intervals'),
         coach_comment=planned_dict.get('comment'),
-        user_id=user_id  # Сохраняем для дальнейшего использования
+        user_id=user_id  
     )
 
-    # Показываем план и запрашиваем время начала
     text = f"✅ <b>Выполнение тренировки</b>\n\n"
     text += f"📝 <b>Тип:</b> {planned_dict['type'].capitalize()}\n"
     text += f"📅 <b>Дата:</b> {date_str}\n\n"
@@ -403,7 +373,6 @@ async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
         text += f"📏 <b>Плановая дистанция:</b> {format_distance(planned_dict['distance'], distance_unit)}\n"
     if planned_dict.get('avg_pace'):
         pace_unit = planned_dict.get('pace_unit', 'мин/км')
-        # Если единицы пользователя в милях, нужно пересчитать темп
         if distance_unit == 'миль':
             pace_unit = 'мин/миля'
         text += f"⏱ <b>Желаемый темп:</b> {planned_dict['avg_pace']} {pace_unit}\n"
@@ -419,7 +388,6 @@ async def complete_planned_training(callback: CallbackQuery, state: FSMContext):
     text += "• <code>45:30</code> (45 минут 30 секунд)\n"
     text += "• <code>01:25:30</code> или <code>1:25:30</code> (1 час 25 минут)"
 
-    # edit_text не поддерживает ReplyKeyboardMarkup, поэтому без клавиатуры
     await callback.message.edit_text(text, parse_mode="HTML")
     await state.set_state(AddTrainingStates.waiting_for_time)
     await callback.answer()
@@ -430,10 +398,8 @@ async def quick_add_training_callback(callback: CallbackQuery, state: FSMContext
     """Обработчик быстрого добавления тренировки из напоминания"""
     user_id = callback.from_user.id
 
-    # Получаем основные типы тренировок из настроек пользователя
     main_types = await get_main_training_types(user_id)
 
-    # Проверяем, что есть хотя бы один тип
     if not main_types:
         await callback.message.answer(
             "⚠️ **Настройка основных типов тренировок**\n\n"
@@ -461,7 +427,6 @@ async def process_training_type(callback: CallbackQuery, state: FSMContext):
     training_type = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
-    # Проверяем, что выбранный тип входит в основные типы пользователя
     main_types = await get_main_training_types(user_id)
 
     if training_type not in main_types:
@@ -479,7 +444,6 @@ async def process_training_type(callback: CallbackQuery, state: FSMContext):
         parse_mode="Markdown"
     )
 
-    # Показываем календарь для выбора даты (ограничен текущей датой)
     calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal", max_date=datetime.now())
     await callback.message.answer(
         "📅 Когда была тренировка?\n\n"
@@ -487,7 +451,6 @@ async def process_training_type(callback: CallbackQuery, state: FSMContext):
         reply_markup=calendar
     )
 
-    # Также показываем быстрые кнопки
     await callback.message.answer(
         "Или выберите быстрый вариант:",
         reply_markup=get_date_keyboard()
@@ -503,24 +466,20 @@ async def process_date(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     
-    # Получаем формат даты пользователя
     user_id = message.from_user.id
     date_format = await get_user_date_format(user_id)
     
-    # Текущая дата в UTC+3 (Москва)
     from datetime import timedelta
     utc_now = datetime.utcnow()
     moscow_now = utc_now + timedelta(hours=3)
     today = moscow_now.date()
     yesterday = today - timedelta(days=1)
     
-    # Парсинг даты
     if message.text in ["сегодня", "📅 Сегодня"]:
         date = today
     elif message.text in ["вчера", "📅 Вчера"]:
         date = yesterday
     elif message.text == "📝 Ввести дату":
-        # Запрашиваем ввод даты вручную с учетом формата пользователя
         format_desc = DateFormatter.get_format_description(date_format)
         await message.answer(
             f"📅 Введите дату тренировки\n\n"
@@ -529,7 +488,6 @@ async def process_date(message: Message, state: FSMContext):
         )
         return
     else:
-        # Проверка формата согласно настройкам пользователя
         date_pattern = DateFormatter.get_validation_pattern(date_format)
         if not re.match(date_pattern, message.text):
             format_desc = DateFormatter.get_format_description(date_format)
@@ -540,7 +498,6 @@ async def process_date(message: Message, state: FSMContext):
             )
             return
         
-        # Парсим дату согласно формату пользователя
         date = DateFormatter.parse_date(message.text, date_format)
         if date is None:
             await message.answer(
@@ -549,7 +506,6 @@ async def process_date(message: Message, state: FSMContext):
             )
             return
     
-    # Проверка, что дата не в будущем
     if date > today:
         today_str = DateFormatter.format_date(today, date_format)
         date_str = DateFormatter.format_date(date, date_format)
@@ -584,7 +540,6 @@ async def process_time(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
 
-    # Гибкая проверка формата: ЧЧ:ММ:СС или ММ:СС (для тренировок < 1 часа)
     time_pattern = r'^\d{1,3}:\d{1,2}(:\d{1,2})?$'
     if not re.match(time_pattern, message.text):
         await message.answer(
@@ -597,20 +552,16 @@ async def process_time(message: Message, state: FSMContext):
         return
 
     try:
-        # Парсим время
         parts = message.text.split(':')
 
         if len(parts) == 2:
-            # Формат ММ:СС (без часов)
             minutes, seconds = map(int, parts)
             hours = 0
         elif len(parts) == 3:
-            # Формат ЧЧ:ММ:СС
             hours, minutes, seconds = map(int, parts)
         else:
             raise ValueError("Неверный формат")
 
-        # Проверяем корректность минут и секунд
         if minutes > 59 or seconds > 59:
             await message.answer(
                 "❌ Некорректное время!\n\n"
@@ -618,7 +569,6 @@ async def process_time(message: Message, state: FSMContext):
             )
             return
 
-        # Проверка на нулевое время
         if hours == 0 and minutes == 0 and seconds == 0:
             await message.answer(
                 "❌ Время тренировки не может быть 00:00:00!\n\n"
@@ -627,10 +577,8 @@ async def process_time(message: Message, state: FSMContext):
             )
             return
 
-        # Форматируем в красивый вид с ведущими нулями
         formatted_time = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-        # Переводим в минуты для совместимости с БД
         total_minutes = hours * 60 + minutes + (1 if seconds > 0 else 0)
 
     except ValueError:
@@ -642,12 +590,10 @@ async def process_time(message: Message, state: FSMContext):
     
     await state.update_data(time=formatted_time, duration=total_minutes)
     
-    # Получаем тип тренировки для выбора следующего шага
     data = await state.get_data()
     training_type = data.get('training_type', 'кросс')
     
     if training_type == 'силовая':
-        # Для силовой тренировки переходим к описанию упражнений
         await message.answer(
             f"✅ Время: {formatted_time}\n\n"
             "💪 Опишите выполненные упражнения\n\n"
@@ -660,7 +606,6 @@ async def process_time(message: Message, state: FSMContext):
         )
         await state.set_state(AddTrainingStates.waiting_for_exercises)
     elif training_type == 'интервальная':
-        # Для интервальной тренировки переходим к описанию
         await message.answer(
             f"✅ Время: {formatted_time}\n\n"
             "⚡ Опишите тренировку\n\n"
@@ -675,13 +620,10 @@ async def process_time(message: Message, state: FSMContext):
         )
         await state.set_state(AddTrainingStates.waiting_for_intervals)
     else:
-        # Для остальных типов переходим к дистанции
-        # Получаем единицы измерения пользователя
         user_id = message.from_user.id
         user_settings = await get_user_settings(user_id)
         distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
 
-        # Используем правильный падеж для "в километрах" / "в милях"
         unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
 
         await message.answer(
@@ -698,7 +640,6 @@ async def process_distance(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
 
-    # Получаем единицы измерения пользователя
     user_id = message.from_user.id
     user_settings = await get_user_settings(user_id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
@@ -715,7 +656,6 @@ async def process_distance(message: Message, state: FSMContext):
         )
         return
 
-    # Конвертируем в километры для хранения в БД
     if distance_unit == 'мили':
         from utils.unit_converter import miles_to_km
         distance_km = miles_to_km(distance_input)
@@ -724,15 +664,12 @@ async def process_distance(message: Message, state: FSMContext):
 
     await state.update_data(distance=distance_km)
 
-    # Получаем тип тренировки для адаптивного сообщения
     data = await state.get_data()
     training_type = data.get('training_type', 'кросс')
 
-    # Адаптивное сообщение в зависимости от типа с учетом единиц пользователя
     if training_type == 'плавание':
         distance_text = f"✅ Дистанция: {format_swimming_distance(distance_km, distance_unit)}"
 
-        # Для плавания переходим к выбору места
         from bot.keyboards import get_swimming_location_keyboard
         await message.answer(
             f"{distance_text}\n\n"
@@ -772,7 +709,6 @@ async def process_avg_pulse(message: Message, state: FSMContext):
 
     await state.update_data(avg_pulse=avg_pulse)
 
-    # Определяем пульсовую зону
     user_id = message.from_user.id
     pulse_zone = await get_pulse_zone_for_value(user_id, avg_pulse)
 
@@ -784,7 +720,6 @@ async def process_avg_pulse(message: Message, state: FSMContext):
         'zone5': '🔴 Зона 5 (Максимальная)'
     }
 
-    # Формируем сообщение с информацией о зоне
     zone_info = ""
     if pulse_zone:
         zone_info = f"\n{zone_names[pulse_zone]}"
@@ -822,17 +757,13 @@ async def process_intervals(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     
-    # Описание обязательно - не разрешаем пропустить
     intervals = message.text
     
-    # Рассчитываем объём тренировки
     from utils.interval_calculator import calculate_interval_volume, format_volume_message
     volume = calculate_interval_volume(intervals)
     
-    # Сохраняем описание и объём
     await state.update_data(intervals=intervals, calculated_volume=volume)
     
-    # Показываем рассчитанный объём
     if volume:
         volume_msg = f"\n\n{format_volume_message(volume)}"
         await message.answer(
@@ -854,7 +785,6 @@ async def process_intervals(message: Message, state: FSMContext):
     await state.set_state(AddTrainingStates.waiting_for_avg_pulse)
 
 
-# ===== ОБРАБОТЧИКИ ДЛЯ ПЛАВАНИЯ =====
 
 @router.callback_query(AddTrainingStates.waiting_for_swimming_location, F.data.startswith("swimming_location:"))
 async def process_swimming_location(callback: CallbackQuery, state: FSMContext):
@@ -865,7 +795,6 @@ async def process_swimming_location(callback: CallbackQuery, state: FSMContext):
     location_text = "🏊 Бассейн" if location == "pool" else "🌊 Открытая вода"
 
     if location == "pool":
-        # Если бассейн - спрашиваем длину
         from bot.keyboards import get_pool_length_keyboard
         await callback.message.edit_text(
             f"✅ Место: {location_text}\n\n"
@@ -874,14 +803,12 @@ async def process_swimming_location(callback: CallbackQuery, state: FSMContext):
         )
         await state.set_state(AddTrainingStates.waiting_for_pool_length)
     else:
-        # Если открытая вода - переходим к стилям
         from bot.keyboards import get_swimming_styles_keyboard
         await callback.message.edit_text(
             f"✅ Место: {location_text}\n\n"
             "🏊 Выберите стили плавания:",
             reply_markup=get_swimming_styles_keyboard()
         )
-        # Инициализируем пустой список стилей
         await state.update_data(selected_swimming_styles=[])
         await state.set_state(AddTrainingStates.waiting_for_swimming_styles)
 
@@ -894,7 +821,6 @@ async def process_pool_length(callback: CallbackQuery, state: FSMContext):
     pool_length = int(callback.data.split(":")[1])
     await state.update_data(pool_length=pool_length)
 
-    # Переходим к выбору стилей
     from bot.keyboards import get_swimming_styles_keyboard
     await callback.message.edit_text(
         f"✅ Бассейн {pool_length}м\n\n"
@@ -902,7 +828,6 @@ async def process_pool_length(callback: CallbackQuery, state: FSMContext):
         reply_markup=get_swimming_styles_keyboard()
     )
 
-    # Инициализируем пустой список стилей
     await state.update_data(selected_swimming_styles=[])
     await state.set_state(AddTrainingStates.waiting_for_swimming_styles)
     await callback.answer()
@@ -913,11 +838,9 @@ async def process_swimming_style_toggle(callback: CallbackQuery, state: FSMConte
     """Обработка переключения стилей плавания (множественный выбор)"""
     style = callback.data.split(":")[1]
 
-    # Получаем текущий список выбранных стилей
     data = await state.get_data()
     selected_styles = data.get('selected_swimming_styles', [])
 
-    # Переключаем стиль
     if style in selected_styles:
         selected_styles.remove(style)
     else:
@@ -925,7 +848,6 @@ async def process_swimming_style_toggle(callback: CallbackQuery, state: FSMConte
 
     await state.update_data(selected_swimming_styles=selected_styles)
 
-    # Обновляем клавиатуру с отметками
     from bot.keyboards import update_swimming_styles_keyboard
     await callback.message.edit_reply_markup(
         reply_markup=update_swimming_styles_keyboard(selected_styles)
@@ -944,7 +866,6 @@ async def process_swimming_styles_done(callback: CallbackQuery, state: FSMContex
         await callback.answer("⚠️ Выберите хотя бы один стиль!", show_alert=True)
         return
 
-    # Форматируем для отображения
     from utils.swimming_pace import format_swimming_styles
     styles_text = format_swimming_styles(selected_styles)
 
@@ -960,7 +881,6 @@ async def process_swimming_styles_done(callback: CallbackQuery, state: FSMContex
         "Или нажмите ⏭️ Пропустить"
     )
 
-    # Переключаемся на обычную клавиатуру
     await callback.message.answer(
         "Введите описание или пропустите:",
         reply_markup=get_skip_keyboard()
@@ -983,7 +903,6 @@ async def process_swimming_sets(message: Message, state: FSMContext):
     if swimming_sets:
         await message.answer("✅ Описание отрезков сохранено")
 
-    # Переходим к среднему пульсу
     await message.answer(
         "❤️ Введите средний пульс (уд/мин)\n\n"
         "Например: 130",
@@ -1012,7 +931,6 @@ async def process_max_pulse(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем, что максимальный пульс не меньше среднего
     data = await state.get_data()
     avg_pulse = data.get('avg_pulse', 0)
 
@@ -1026,7 +944,6 @@ async def process_max_pulse(message: Message, state: FSMContext):
 
     await state.update_data(max_pulse=max_pulse)
 
-    # Определяем пульсовую зону для максимального пульса
     user_id = message.from_user.id
     pulse_zone = await get_pulse_zone_for_value(user_id, max_pulse)
 
@@ -1038,7 +955,6 @@ async def process_max_pulse(message: Message, state: FSMContext):
         'zone5': '🔴 Зона 5 (Максимальная)'
     }
 
-    # Формируем сообщение с информацией о зоне
     zone_info = ""
     if pulse_zone:
         zone_info = f"\n{zone_names[pulse_zone]}"
@@ -1069,7 +985,6 @@ async def process_comment(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()
     )
 
-    # Отправляем inline-клавиатуру отдельным сообщением
     await message.answer(
         "Выберите уровень усилий:",
         reply_markup=get_fatigue_keyboard()
@@ -1082,17 +997,14 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     """Обработка уровня усилий и сохранение тренировки"""
     fatigue_level = int(callback.data.split(":")[1])
     
-    # Получаем все данные из состояния
     data = await state.get_data()
     data['fatigue_level'] = fatigue_level
     data['user_id'] = callback.from_user.id
     
-    # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
 
-    # Проверяем наличие обязательного поля training_type
     if 'training_type' not in data:
         await callback.message.edit_text("❌ Ошибка: не удалось определить тип тренировки. Попробуйте добавить тренировку заново.")
         await state.clear()
@@ -1101,18 +1013,15 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
 
     training_type = data['training_type']
 
-    # Рассчитываем средний темп только если есть время
     if 'time' in data and data['time']:
         time_str = data['time']
         hours, minutes, seconds = map(int, time_str.split(':'))
         total_seconds = hours * 3600 + minutes * 60 + seconds
         total_minutes = total_seconds / 60
 
-        # Расчет темпа только для тренировок с дистанцией
         if training_type not in ['силовая', 'интервальная'] and 'distance' in data:
             distance = data['distance']
 
-            # Используем утилиту для форматирования темпа
             avg_pace, pace_unit = format_pace(
                 distance,
                 total_seconds,
@@ -1120,21 +1029,15 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
                 training_type
             )
 
-            # Сохраняем темп в данные
             data['avg_pace'] = avg_pace
             data['pace_unit'] = pace_unit
     
-    # Для интервальной тренировки - calculated_volume уже должен быть в data
-    # (добавляется при обработке описания интервалов)
 
-    # Проверяем, это выполнение запланированной тренировки или новая тренировка
     if 'planned_training_id' in data and data['planned_training_id']:
-        # Обновляем существующую запланированную тренировку
         import aiosqlite
         import os
         DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
-        # Получаем ID тренера перед обновлением
         coach_id = None
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
@@ -1177,23 +1080,18 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
             )
             await db.commit()
 
-        # Отправляем отчет тренеру
         if coach_id:
             try:
                 from coach.coach_training_queries import get_student_display_name
 
-                # Получаем информацию об ученике
                 student_name = await get_student_display_name(coach_id, data['user_id'])
 
-                # Получаем настройки тренера для форматирования
                 coach_date_format = await get_user_date_format(coach_id)
                 coach_settings = await get_user_settings(coach_id)
                 distance_unit = coach_settings.get('distance_unit', 'км') if coach_settings else 'км'
 
-                # Форматируем дату
                 date_str = DateFormatter.format_date(data.get('date'), coach_date_format)
 
-                # Определяем эмодзи для типа
                 type_emoji = {
                     'кросс': '🏃',
                     'плавание': '🏊',
@@ -1203,7 +1101,6 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
                 }
                 emoji = type_emoji.get(data['training_type'], '📝')
 
-                # Формируем отчет
                 report = f"✅ <b>Тренировка выполнена!</b>\n\n"
                 report += f"Ученик: <b>{student_name}</b>\n\n"
                 report += f"{emoji} <b>Тип:</b> {data['training_type'].capitalize()}\n"
@@ -1227,7 +1124,6 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
                 if data.get('comment'):
                     report += f"\n💬 <b>Комментарий ученика:</b>\n<i>{data['comment']}</i>\n"
 
-                # Создаем кнопку для просмотра деталей тренировки
                 from aiogram.utils.keyboard import InlineKeyboardBuilder
                 from aiogram.types import InlineKeyboardButton
 
@@ -1246,7 +1142,6 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
                     parse_mode="HTML"
                 )
 
-                # Редирект тренера в главное меню
                 coach_is_coach = await is_user_coach(coach_id)
                 await callback.bot.send_message(
                     coach_id,
@@ -1258,22 +1153,18 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
             except Exception as e:
                 logger.error(f"Failed to send training report to coach: {e}")
     else:
-        # Создаем новую тренировку (обычный flow)
         await add_training(data)
 
-    # Обновляем рейтинг пользователя после добавления тренировки
     try:
         await update_single_user_rating(callback.from_user.id)
     except Exception as e:
         logger.error(f"Ошибка при обновлении рейтинга: {str(e)}")
 
-    # Обновляем уровень пользователя
     try:
         level_update = await calculate_and_update_user_level(callback.from_user.id)
         if level_update['level_changed']:
             logger.info(f"Уровень пользователя {callback.from_user.id} изменен: "
                        f"{level_update['old_level']} -> {level_update['new_level']}")
-            # Уведомляем пользователя об изменении уровня
             from ratings.user_levels import get_level_emoji
             new_emoji = get_level_emoji(level_update['new_level'])
             levels_order = ['новичок', 'любитель', 'профи', 'элитный']
@@ -1298,13 +1189,11 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка при обновлении уровня: {str(e)}")
 
-    # Проверяем достижение целей после сохранения тренировки
     try:
         await check_weekly_goals(callback.from_user.id, callback.bot, training_type)
     except Exception as e:
         logger.error(f"Ошибка при проверке целей: {str(e)}")
 
-    # Проверяем и присваиваем новые достижения
     try:
         from ratings.achievements_checker import check_and_award_achievements
         new_achievements = await check_and_award_achievements(callback.from_user.id, callback.bot)
@@ -1313,10 +1202,8 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка при проверке достижений: {str(e)}")
 
-    # Формируем итоговое сообщение
     training_type = data['training_type']
     
-    # Определяем эмодзи в зависимости от типа
     if training_type == 'плавание':
         training_emoji = "🏊"
     elif training_type == 'велотренировка':
@@ -1325,13 +1212,11 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
         training_emoji = "💪"
     elif training_type == 'интервальная':
         training_emoji = "⚡"
-    else:  # кросс
+    else:  
         training_emoji = "🏃"
     
-    # Форматируем дату согласно настройкам пользователя
     date_str = DateFormatter.format_date(data['date'], date_format)
     
-    # Базовая информация для всех типов
     summary = (
         "✅ **Тренировка успешно добавлена!**\n\n"
         f"📅 Дата: {date_str}\n"
@@ -1339,30 +1224,24 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
         f"⏰ Время: {data['time']}\n"
     )
     
-    # Специфичная информация в зависимости от типа
     if training_type == 'силовая':
-        # Для силовой - упражнения вместо дистанции и темпа
         if data.get('exercises'):
             summary += f"💪 Упражнения:\n{data['exercises']}\n"
     elif training_type == 'интервальная':
-        # Для интервальной - описание тренировки
         if data.get('intervals'):
             summary += f"⚡ Описание:\n{data['intervals']}\n"
             
-            # Показываем рассчитанный объём если есть
             if data.get('calculated_volume'):
                 from utils.interval_calculator import format_volume_message
                 volume_text = format_volume_message(data['calculated_volume'])
                 if volume_text:
                     summary += f"{volume_text}\n"
             
-            # Показываем средний темп отрезков если есть результаты
             from utils.interval_calculator import calculate_average_interval_pace
             avg_pace_intervals = calculate_average_interval_pace(data['intervals'])
             if avg_pace_intervals:
                 summary += f"⚡ Средний темп отрезков: {avg_pace_intervals}\n"
     else:
-        # Для остальных типов - дистанция и темп с учетом единиц измерения
         distance_km = data['distance']
         
         if training_type == 'плавание':
@@ -1381,30 +1260,24 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
             f"{pace_emoji} {pace_label}: {avg_pace} {pace_unit}\n"
         )
 
-        # Дополнительная информация для плавания
         if training_type == 'плавание':
-            # Место тренировки
             if data.get('swimming_location'):
                 from utils.swimming_pace import format_swimming_location
                 location_text = format_swimming_location(data['swimming_location'], data.get('pool_length'))
                 summary += f"📍 Место: {location_text}\n"
 
-            # Стили плавания
             if data.get('selected_swimming_styles'):
                 from utils.swimming_pace import format_swimming_styles
                 styles_text = format_swimming_styles(data['selected_swimming_styles'])
                 summary += f"🏊 Стили: {styles_text}\n"
 
-            # Описание отрезков
             if data.get('swimming_sets'):
                 summary += f"📝 Отрезки:\n{data['swimming_sets']}\n"
 
-    # Пульс для всех типов тренировок
     if data.get('avg_pulse') and data.get('max_pulse'):
         summary += f"❤️ Средний пульс: {data['avg_pulse']} уд/мин\n"
         summary += f"💓 Максимальный пульс: {data['max_pulse']} уд/мин\n"
     
-    # Комментарий если есть
     if data.get('comment'):
         summary += f"💬 Комментарий: {data['comment']}\n"
     
@@ -1412,14 +1285,12 @@ async def process_fatigue(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text(summary, parse_mode="Markdown")
 
-    # Проверяем статус тренера для правильного меню
     is_coach_status = await is_user_coach(callback.from_user.id)
     await callback.message.answer(
         "Что делаем дальше?",
         reply_markup=get_main_menu_keyboard(is_coach_status)
     )
 
-    # Очищаем состояние
     await state.clear()
     await callback.answer("Тренировка сохранена! ✅")
 
@@ -1440,13 +1311,10 @@ async def cancel_handler(message: Union[Message, CallbackQuery], state: FSMConte
             )
         return
 
-    # Получаем user_id для определения статуса тренера
     user_id = message.from_user.id if isinstance(message, Message) else message.from_user.id
 
     await state.clear()
 
-    # Контекстно-зависимые сообщения и навигация
-    # current_state имеет формат: "AddTrainingStates:waiting_for_type"
     if 'AddTrainingStates' in current_state:
         cancel_text = "❌ Добавление тренировки отменено"
     elif 'ExportPDFStates' in current_state:
@@ -1464,7 +1332,6 @@ async def cancel_handler(message: Union[Message, CallbackQuery], state: FSMConte
     else:
         cancel_text = "❌ Действие отменено"
 
-    # Проверяем, является ли пользователь тренером
     is_coach = await is_user_coach(user_id)
 
     menu_text = "Вы в главном меню"
@@ -1477,12 +1344,10 @@ async def cancel_handler(message: Union[Message, CallbackQuery], state: FSMConte
                 reply_markup=None
             )
         except Exception:
-            # Если не удалось отредактировать (сообщение удалено), отправляем новое
             await message.message.answer(
                 f"{cancel_text}\n\n{menu_text}"
             )
 
-        # Отправляем меню отдельным сообщением с клавиатурой
         await message.message.answer(
             "Главное меню:",
             reply_markup=keyboard
@@ -1497,14 +1362,12 @@ async def cancel_handler(message: Union[Message, CallbackQuery], state: FSMConte
 @router.message(F.text == "📊 Мои тренировки")
 async def show_my_trainings(message: Message):
     """Показать меню выбора периода для просмотра тренировок"""
-    # Скрываем reply-клавиатуру при показе inline-кнопок
     await message.answer(
         "📊 *Мои тренировки*\n\n"
         "Выберите период для просмотра:",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove()
     )
-    # Показываем inline-клавиатуру с периодами
     await message.answer(
         "Выберите период:",
         reply_markup=get_period_keyboard()
@@ -1515,7 +1378,6 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     """Показать тренировки за выбранный период с детальной статистикой"""
     period = callback.data.split(":")[1]
 
-    # Удаляем старые сообщения со статистикой, если они есть
     data = await state.get_data()
     old_message_ids = data.get('trainings_message_ids', [])
     for msg_id in old_message_ids:
@@ -1523,15 +1385,12 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
             await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
         except Exception:
             pass
-    # Очищаем список старых сообщений
     await state.update_data(trainings_message_ids=[])
 
-    # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
-    # Определяем количество дней для графиков
     period_days = {
         "week": 7,
         "2weeks": 14,
@@ -1547,7 +1406,6 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     days = period_days.get(period, 7)
     period_name = period_names.get(period, "период")
     
-    # Получаем статистику и тренировки по календарному периоду
     stats = await get_training_statistics(callback.from_user.id, period)
     trainings = await get_trainings_by_period(callback.from_user.id, period)
     
@@ -1562,14 +1420,12 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
     
-    # Определяем начальную дату периода для отображения
     from datetime import timedelta
     today = datetime.now().date()
     
     if period == 'week':
         start_date = today - timedelta(days=today.weekday())
         start_date_str = DateFormatter.format_date(start_date, date_format).split('.')[-1] if date_format == 'DD.MM.YYYY' else DateFormatter.format_date(start_date, date_format).rsplit('.', 1)[0] if '.' in DateFormatter.format_date(start_date, date_format) else DateFormatter.format_date(start_date, date_format).rsplit('/', 1)[0] if '/' in DateFormatter.format_date(start_date, date_format) else DateFormatter.format_date(start_date, date_format).rsplit('-', 1)[0]
-        # Короткий формат для отображения периода (без года)
         if date_format == 'DD.MM.YYYY':
             period_display = f"неделю (с {start_date.strftime('%d.%m')} по сегодня)"
         elif date_format == 'MM/DD/YYYY':
@@ -1595,30 +1451,24 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     else:
         period_display = period_name
     
-    # Формируем заголовок с общей статистикой
     message_text = f"📊 *Тренировки за {period_display}*\n\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n"
     message_text += "📈 *ОБЩАЯ СТАТИСТИКА*\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n\n"
     
-    # 1. Общее количество тренировок
     message_text += f"🏃 Всего тренировок: *{stats['total_count']}*\n"
     
-    # 2. Общий километраж (и средний за неделю для периодов > 1 недели)
     if stats['total_distance'] > 0:
         message_text += f"📏 Общий километраж: *{format_distance(stats['total_distance'], distance_unit)}*\n"
         
-        # Для периодов больше недели показываем средний км за неделю
         if period in ['2weeks', 'month']:
-            # Вычисляем количество полных недель в периоде
-            days_in_period = (today - start_date).days + 1  # +1 чтобы включить сегодня
+            days_in_period = (today - start_date).days + 1  
             weeks_count = days_in_period / 7
             
             if weeks_count > 0:
                 avg_per_week = stats['total_distance'] / weeks_count
                 message_text += f"   _(Средний за неделю: {format_distance(avg_per_week, distance_unit)})_\n"
     
-    # 3. Типы тренировок с процентами
     if stats['types_count']:
         message_text += f"\n📋 *Типы тренировок:*\n"
         
@@ -1630,7 +1480,6 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
             'интервальная': '⚡'
         }
         
-        # Сортируем по количеству (от большего к меньшему)
         sorted_types = sorted(stats['types_count'].items(), key=lambda x: x[1], reverse=True)
         
         for t_type, count in sorted_types:
@@ -1638,7 +1487,6 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
             percentage = (count / stats['total_count']) * 100
             message_text += f"  {emoji} {t_type.capitalize()}: {count} ({percentage:.1f}%)\n"
     
-    # 4. Средний уровень усилий
     if stats['avg_fatigue'] > 0:
         message_text += f"\n💪 Средний уровень усилий: *{stats['avg_fatigue']}/10*\n"
     
@@ -1646,7 +1494,6 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     message_text += "📝 *СПИСОК ТРЕНИРОВОК*\n"
     message_text += "━━━━━━━━━━━━━━━━━━\n\n"
     
-    # Эмодзи для типов
     type_emoji = {
         'кросс': '🏃',
         'плавание': '🏊',
@@ -1655,21 +1502,16 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
         'интервальная': '⚡'
     }
 
-    # Добавляем детали каждой тренировки
-    for idx, training in enumerate(trainings[:15], 1):  # Показываем максимум 15
-        # Парсим и форматируем дату согласно настройкам пользователя
+    for idx, training in enumerate(trainings[:15], 1):  
         date = DateFormatter.format_date(training['date'], date_format)
         t_type = training['type']
         emoji = type_emoji.get(t_type, '📝')
         
-        # 1. Дата и тип
         message_text += f"*{idx}.* {emoji} *{t_type.capitalize()}* • {date}\n"
         
-        # 2. Продолжительность в формате ЧЧ:ММ:СС
         if training.get('time'):
             message_text += f"   ⏰ Время: {training['time']}\n"
         
-        # 3. Общий километраж с учетом единиц измерения
         if t_type == 'интервальная':
             if training.get('calculated_volume'):
                 message_text += f"   📏 Дистанция: {format_distance(training['calculated_volume'], distance_unit)}\n"
@@ -1680,28 +1522,22 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
                 else:
                     message_text += f"   📏 Дистанция: {format_distance(training['distance'], distance_unit)}\n"
         
-        # 4. Средний темп/скорость/интервалов
         if t_type == 'интервальная':
-            # Показываем средний темп отрезков
             if training.get('intervals'):
                 from utils.interval_calculator import calculate_average_interval_pace
                 avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
                 if avg_pace_intervals:
                     message_text += f"   ⚡ Средний темп отрезков: {avg_pace_intervals}\n"
         elif t_type == 'велотренировка':
-            # Для велосипеда - скорость
             if training.get('avg_pace'):
                 message_text += f"   🚴 Средняя скорость: {training['avg_pace']} {training.get('pace_unit', '')}\n"
         elif t_type != 'силовая':
-            # Для остальных (кросс, плавание) - темп
             if training.get('avg_pace'):
                 message_text += f"   ⚡ Средний темп: {training['avg_pace']} {training.get('pace_unit', '')}\n"
         
-        # Дополнительно: пульс
         if training.get('avg_pulse'):
             message_text += f"   ❤️ Пульс: {training['avg_pulse']} уд/мин\n"
 
-        # Усилия
         if training.get('fatigue_level'):
             message_text += f"   💪 Усилия: {training['fatigue_level']}/10\n"
         
@@ -1717,14 +1553,12 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_period_keyboard(period)
         )
     except Exception as e:
-        # Если сообщение не изменилось - просто отвечаем на callback
         if "message is not modified" in str(e):
             await callback.answer("Данные актуальны", show_alert=False)
         else:
             logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
             raise
     
-    # Генерируем и отправляем графики для всех периодов (только если тренировок >= 2)
     new_message_ids = []
     if len(trainings) >= 2:
         try:
@@ -1757,7 +1591,6 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     else:
         logger.info(f"Недостаточно тренировок для графиков: {len(trainings)} (минимум 2)")
 
-    # Отправляем сообщение с кнопками для выбора тренировки
     menu_msg = await callback.message.answer(
         "📋 *Выберите тренировку для просмотра деталей:*\n\n"
         "Нажмите на номер тренировки или выберите другой период",
@@ -1766,20 +1599,17 @@ async def show_trainings_period(callback: CallbackQuery, state: FSMContext):
     )
     new_message_ids.append(menu_msg.message_id)
 
-    # Сохраняем ID новых сообщений в state
     await state.update_data(trainings_message_ids=new_message_ids)
 
     await callback.answer()
 
 
-# AI-анализ тренировок
 @router.callback_query(F.data.startswith("ai_analyze_trainings:"))
 async def ai_analyze_trainings(callback: CallbackQuery):
     """AI-анализ статистики тренировок за период"""
     period = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
-    # Проверяем доступность AI
     if not is_ai_available():
         await callback.answer(
             "❌ AI-анализ недоступен. Добавьте OPENROUTER_API_KEY в .env файл",
@@ -1787,14 +1617,11 @@ async def ai_analyze_trainings(callback: CallbackQuery):
         )
         return
 
-    # Показываем индикатор загрузки
     await callback.answer("🤖 Анализирую данные...", show_alert=False)
 
-    # Отправляем сообщение о процессе
     processing_msg = await callback.message.answer("🤖 AI анализирует ваши тренировки...")
 
     try:
-        # Получаем данные
         user_settings = await get_user_settings(user_id)
         distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
 
@@ -1807,7 +1634,6 @@ async def ai_analyze_trainings(callback: CallbackQuery):
             )
             return
 
-        # Получаем AI-анализ
         analysis = await analyze_training_statistics(
             statistics=statistics,
             trainings=trainings,
@@ -1817,7 +1643,6 @@ async def ai_analyze_trainings(callback: CallbackQuery):
 
         if analysis:
             import html
-            # Формируем сообщение
             period_names = {
                 "week": "неделю",
                 "2weeks": "2 недели",
@@ -1825,7 +1650,6 @@ async def ai_analyze_trainings(callback: CallbackQuery):
             }
             period_name = period_names.get(period, period)
 
-            # Экранируем HTML-специальные символы в тексте AI
             safe_analysis = html.escape(analysis)
 
             msg_text = (
@@ -1836,7 +1660,6 @@ async def ai_analyze_trainings(callback: CallbackQuery):
 
             await processing_msg.edit_text(msg_text, parse_mode="HTML")
 
-            # Редирект в главное меню
             from coach.coach_queries import is_user_coach
             is_coach_status = await is_user_coach(user_id)
             await processing_msg.answer(
@@ -1855,7 +1678,6 @@ async def ai_analyze_trainings(callback: CallbackQuery):
         )
 
 
-# НОВЫЙ КОД: Обработчик кнопки удаления
 @router.callback_query(F.data.startswith("delete_training:"))
 async def request_delete_confirmation(callback: CallbackQuery):
     """Запрос подтверждения удаления тренировки"""
@@ -1863,7 +1685,6 @@ async def request_delete_confirmation(callback: CallbackQuery):
     training_id = int(parts[1])
     period = parts[2]
     
-    # Создаём клавиатуру подтверждения
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete:{training_id}:{period}"),
@@ -1876,7 +1697,6 @@ async def request_delete_confirmation(callback: CallbackQuery):
     )
     await callback.answer()
 
-# НОВЫЙ КОД: Обработчик подтверждения удаления
 @router.callback_query(F.data.startswith("confirm_delete:"))
 async def confirm_delete(callback: CallbackQuery):
     """Подтверждение и выполнение удаления тренировки"""
@@ -1885,23 +1705,18 @@ async def confirm_delete(callback: CallbackQuery):
     period = parts[2]
     user_id = callback.from_user.id
     
-    # Получаем формат даты пользователя
     user_settings = await get_user_settings(user_id)
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
-    # Удаляем тренировку
     deleted = await delete_training(training_id, user_id)
     
     if deleted:
-        # Уведомляем об успешном удалении
         await callback.message.answer(f"✅ Тренировка удалена!")
         
-        # Перестраиваем список тренировок для текущего периода
         stats = await get_training_statistics(user_id, period)
         trainings = await get_trainings_by_period(user_id, period)
         
         if not trainings:
-            # ИСПРАВЛЕНО: Используем period_names для корректного отображения
             period_names = {"week": "неделю", "2weeks": "2 недели", "month": "месяц"}
             period_name = period_names.get(period, "период")
             await callback.message.answer(
@@ -1910,11 +1725,10 @@ async def confirm_delete(callback: CallbackQuery):
                 parse_mode="Markdown",
                 reply_markup=get_period_keyboard()
             )
-            await callback.message.delete()  # Удаляем сообщение с подтверждением
+            await callback.message.delete()  
             await callback.answer()
             return
         
-        # Формируем обновлённый список тренировок
         period_days = {"week": 7, "2weeks": 14, "month": 30}
         period_names = {"week": "неделю", "2weeks": "2 недели", "month": "месяц"}
         days = period_days.get(period, 7)
@@ -2010,7 +1824,6 @@ async def confirm_delete(callback: CallbackQuery):
                 logger.error(f"Ошибка при редактировании сообщения: {str(e)}")
                 raise
         
-        # Обновляем графики, если тренировок >= 2
         if len(trainings) >= 2:
             try:
                 period_captions = {'week': 'за неделю', '2weeks': 'за 2 недели', 'month': 'за месяц'}
@@ -2037,10 +1850,9 @@ async def confirm_delete(callback: CallbackQuery):
         )
     else:
         await callback.message.answer(f"❌ Тренировка не найдена или не ваша.")
-    await callback.message.delete()  # Удаляем сообщение с подтверждением
+    await callback.message.delete()  
     await callback.answer()
 
-# НОВЫЙ КОД: Обработчик отмены удаления
 @router.callback_query(F.data == "cancel_delete")
 async def cancel_delete(callback: CallbackQuery):
     """Отмена удаления тренировки"""
@@ -2051,29 +1863,23 @@ async def cancel_delete(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("training_detail:"))
 async def show_training_detail(callback: CallbackQuery):
     """Показать детальную информацию о конкретной тренировке"""
-    # Парсим callback_data: "training_detail:ID:period"
     parts = callback.data.split(":")
     training_id = int(parts[1])
     period = parts[2]
 
-    # Получаем данные тренировки с комментариями
     from coach.coach_training_queries import get_training_with_comments
     training = await get_training_with_comments(training_id)
 
-    # Проверяем что тренировка принадлежит пользователю
     if not training or training['user_id'] != callback.from_user.id:
         await callback.answer("❌ Тренировка не найдена", show_alert=True)
         return
     
-    # Получаем настройки пользователя для единиц измерения и формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
-    # Формируем детальное сообщение
     from datetime import datetime
     
-    # Эмодзи для типов
     type_emoji = {
         'кросс': '🏃',
         'плавание': '🏊',
@@ -2086,7 +1892,6 @@ async def show_training_detail(callback: CallbackQuery):
     emoji = type_emoji.get(t_type, '📝')
     date = DateFormatter.format_date(training['date'], date_format)
     
-    # Базовая информация
     detail_text = (
         f"{emoji} *Детальная информация о тренировке*\n\n"
         f"━━━━━━━━━━━━━━━━━\n"
@@ -2094,18 +1899,14 @@ async def show_training_detail(callback: CallbackQuery):
         f"🏋️ *Тип:* {t_type.capitalize()}\n"
     )
     
-    # Время тренировки
     if training.get('time'):
         detail_text += f"⏱ *Время:* {training['time']}\n"
     
-    # Специфичная информация в зависимости от типа
     if t_type == 'интервальная':
-        # Для интервальной - описание и объем
         if training.get('calculated_volume'):
             detail_text += f"📏 *Объем:* {format_distance(training['calculated_volume'], distance_unit)}\n"
         
         if training.get('intervals'):
-            # Показываем средний темп отрезков если есть результаты
             from utils.interval_calculator import calculate_average_interval_pace
             avg_pace_intervals = calculate_average_interval_pace(training['intervals'])
             if avg_pace_intervals:
@@ -2114,21 +1915,17 @@ async def show_training_detail(callback: CallbackQuery):
             detail_text += f"\n📋 *Описание тренировки:*\n```\n{training['intervals']}\n```\n"
     
     elif t_type == 'силовая':
-        # Для силовой - упражнения
         if training.get('exercises'):
             detail_text += f"\n💪 *Упражнения:*\n```\n{training['exercises']}\n```\n"
     
     else:
-        # Для кросса, плавания, велотренировки - дистанция и темп
         if training.get('distance'):
             if t_type == 'плавание':
                 detail_text += f"📏 *Дистанция:* {format_swimming_distance(training['distance'], distance_unit)}\n"
             else:
                 detail_text += f"📏 *Дистанция:* {format_distance(training['distance'], distance_unit)}\n"
 
-        # Для плавания - дополнительная информация
         if t_type == 'плавание':
-            # Место тренировки
             if training.get('swimming_location'):
                 from utils.swimming_pace import format_swimming_location
                 location_text = format_swimming_location(
@@ -2137,7 +1934,6 @@ async def show_training_detail(callback: CallbackQuery):
                 )
                 detail_text += f"📍 *Место:* {location_text}\n"
 
-            # Стили плавания
             if training.get('swimming_styles'):
                 import json
                 try:
@@ -2148,7 +1944,6 @@ async def show_training_detail(callback: CallbackQuery):
                 except:
                     pass
 
-            # Описание отрезков
             if training.get('swimming_sets'):
                 detail_text += f"\n📝 *Отрезки:*\n```\n{training['swimming_sets']}\n```\n"
 
@@ -2159,18 +1954,15 @@ async def show_training_detail(callback: CallbackQuery):
             else:
                 detail_text += f"⚡ *Средний темп:* {training['avg_pace']} {pace_unit}\n"
     
-    # Пульс (для всех типов)
     if training.get('avg_pulse'):
         detail_text += f"❤️ *Средний пульс:* {training['avg_pulse']} уд/мин\n"
     
     if training.get('max_pulse'):
         detail_text += f"💗 *Максимальный пульс:* {training['max_pulse']} уд/мин\n"
     
-    # Комментарий ученика
     if training.get('comment'):
         detail_text += f"\n💬 *Мой комментарий:*\n_{training['comment']}_\n"
 
-    # Комментарии тренера
     comments = training.get('comments', [])
     if comments:
         detail_text += f"\n💬 *Комментарий тренера:*\n"
@@ -2178,25 +1970,22 @@ async def show_training_detail(callback: CallbackQuery):
             author_name = comment.get('author_name') or comment.get('author_username')
             detail_text += f"_{author_name}:_ {comment['comment']}\n"
 
-    # Усилия
     if training.get('fatigue_level'):
         detail_text += f"\n💪 *Уровень усилий:* {training['fatigue_level']}/10\n"
     
     detail_text += "\n━━━━━━━━━━━━━━━━━"
     
-    # НОВЫЙ КОД: Передаем training_id в клавиатуру
     try:
         await callback.message.edit_text(
             detail_text,
             parse_mode="Markdown",
-            reply_markup=get_training_detail_keyboard(period, training_id=training_id)  # НОВЫЙ КОД: Добавляем training_id
+            reply_markup=get_training_detail_keyboard(period, training_id=training_id)  
         )
     except Exception as e:
-        # Если не удалось отредактировать, отправляем новое сообщение
         await callback.message.answer(
             detail_text,
             parse_mode="Markdown",
-            reply_markup=get_training_detail_keyboard(period, training_id=training_id)  # НОВЫЙ КОД: Добавляем training_id
+            reply_markup=get_training_detail_keyboard(period, training_id=training_id)  
         )
     
     await callback.answer()
@@ -2215,21 +2004,17 @@ async def back_to_periods(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("back_to_list:"))
 async def back_to_list(callback: CallbackQuery):
     """Вернуться к списку тренировок"""
-    # Получаем период из callback_data
     period = callback.data.split(":")[1]
 
-    # Получаем настройки пользователя для формата даты
     user_settings = await get_user_settings(callback.from_user.id)
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
 
-    # Получаем список тренировок для этого периода
     trainings = await get_trainings_by_period(callback.from_user.id, period)
 
     if not trainings:
         await callback.answer("❌ Тренировки не найдены", show_alert=True)
         return
 
-    # Редактируем сообщение - возвращаем список с кнопками
     try:
         await callback.message.edit_text(
             "📋 *Выберите тренировку для просмотра деталей:*\n\n"
@@ -2276,7 +2061,6 @@ async def show_graphs(message: Message):
     """Показать графики (заглушка)"""
     await message.answer("📈 Графики будут доступна позже!")
 
-# Обработчик достижений перенесен в ratings/ratings_handlers.py
 
 @router.message(F.text == "ℹ️ Помощь")
 async def show_help(message: Message):
@@ -2329,7 +2113,6 @@ async def show_competitions(message: Message):
         parse_mode="HTML"
     )
 
-# ==================== ЭКСПОРТ В PDF ====================
 
 @router.message(F.text == "📥 Экспорт в PDF")
 async def export_pdf_menu(message: Message):
@@ -2353,7 +2136,6 @@ async def process_export_type(callback: CallbackQuery):
     export_type = callback.data.split(":")[1]
 
     if export_type == "trainings":
-        # Показываем меню выбора периода для тренировок
         await callback.message.edit_text(
             "📊 <b>Экспорт тренировок в PDF</b>\n\n"
             "Выберите период для экспорта:",
@@ -2361,7 +2143,6 @@ async def process_export_type(callback: CallbackQuery):
             reply_markup=get_export_period_keyboard()
         )
     elif export_type == "health":
-        # Показываем меню выбора периода для здоровья
         from health.health_keyboards import get_export_period_keyboard as get_health_export_period_keyboard
         await callback.message.edit_text(
             "❤️ <b>Экспорт данных здоровья в PDF</b>\n\n"
@@ -2370,7 +2151,6 @@ async def process_export_type(callback: CallbackQuery):
             reply_markup=get_health_export_period_keyboard()
         )
     elif export_type == "competitions":
-        # Показываем меню выбора периода для соревнований
         from competitions.competitions_keyboards import get_export_period_menu
         await callback.message.edit_text(
             "🏃 <b>Экспорт соревнований в PDF</b>\n\n"
@@ -2401,22 +2181,18 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
     
     from datetime import datetime, timedelta
     
-    # Получаем формат даты пользователя
     user_settings = await get_user_settings(callback.from_user.id)
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
     
     today = datetime.now().date()
     
     if period == "6months":
-        # Полгода назад
         start_date = today - timedelta(days=180)
         end_date = today
         period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
 
-        # Показываем всплывающее окно
         await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
-        # Генерируем PDF
         await generate_and_send_pdf(
             callback.message,
             callback.from_user.id,
@@ -2426,15 +2202,12 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         )
         
     elif period == "year":
-        # Год назад
         start_date = today - timedelta(days=365)
         end_date = today
         period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
 
-        # Показываем всплывающее окно
         await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
-        # Генерируем PDF
         await generate_and_send_pdf(
             callback.message,
             callback.from_user.id,
@@ -2444,12 +2217,10 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
         )
         
     elif period == "custom":
-        # Получаем формат даты пользователя
         user_settings = await get_user_settings(callback.from_user.id)
         date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
         format_desc = DateFormatter.get_format_description(date_format)
 
-        # Показываем календарь с inline кнопкой отмены (ограничен текущей датой)
         calendar = CalendarKeyboard.create_calendar(
             calendar_format=1,
             current_date=datetime.now(),
@@ -2472,7 +2243,6 @@ async def process_export_period(callback: CallbackQuery, state: FSMContext):
 @router.message(ExportPDFStates.waiting_for_start_date)
 async def process_export_start_date(message: Message, state: FSMContext):
     """Обработка начальной даты для произвольного периода"""
-    # Проверка на None для message.text
     if not message.text:
         await message.answer(
             "❌ Пожалуйста, отправьте текстовое сообщение с датой",
@@ -2480,11 +2250,9 @@ async def process_export_start_date(message: Message, state: FSMContext):
         )
         return
 
-    # Получаем формат даты пользователя
     user_settings = await get_user_settings(message.from_user.id)
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
 
-    # Проверяем формат даты согласно настройкам пользователя
     date_pattern = DateFormatter.get_validation_pattern(date_format)
     match = re.match(date_pattern, message.text.strip())
     
@@ -2496,7 +2264,6 @@ async def process_export_start_date(message: Message, state: FSMContext):
         )
         return
     
-    # Парсим дату согласно формату пользователя
     start_date = DateFormatter.parse_date(message.text.strip(), date_format)
     
     if start_date is None:
@@ -2506,7 +2273,6 @@ async def process_export_start_date(message: Message, state: FSMContext):
         )
         return
     
-    # Проверяем, что дата не из будущего
     if start_date > datetime.now().date():
         await message.answer(
             "❌ Дата не может быть из будущего!\n\n"
@@ -2514,13 +2280,11 @@ async def process_export_start_date(message: Message, state: FSMContext):
         )
         return
     
-    # Сохраняем начальную дату
     await state.update_data(start_date=start_date.strftime('%Y-%m-%d'))
 
     format_desc = DateFormatter.get_format_description(date_format)
     start_date_str = DateFormatter.format_date(start_date, date_format)
 
-    # Показываем календарь для конечной даты с inline кнопкой отмены
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
@@ -2541,7 +2305,6 @@ async def process_export_start_date(message: Message, state: FSMContext):
 @router.message(ExportPDFStates.waiting_for_end_date)
 async def process_export_end_date(message: Message, state: FSMContext):
     """Обработка конечной даты для произвольного периода"""
-    # Проверка на None для message.text
     if not message.text:
         await message.answer(
             "❌ Пожалуйста, отправьте текстовое сообщение с датой",
@@ -2549,11 +2312,9 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
         return
 
-    # Получаем формат даты пользователя
     user_settings = await get_user_settings(message.from_user.id)
     date_format = user_settings.get('date_format', 'DD.MM.YYYY') if user_settings else 'DD.MM.YYYY'
 
-    # Проверяем формат даты согласно настройкам пользователя
     date_pattern = DateFormatter.get_validation_pattern(date_format)
     match = re.match(date_pattern, message.text.strip())
     
@@ -2565,7 +2326,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
         return
     
-    # Парсим дату согласно формату пользователя
     end_date = DateFormatter.parse_date(message.text.strip(), date_format)
     
     if end_date is None:
@@ -2575,7 +2335,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
         return
     
-    # Проверяем, что дата не из будущего
     if end_date > datetime.now().date():
         await message.answer(
             "❌ Дата не может быть из будущего!\n\n"
@@ -2583,12 +2342,10 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
         return
     
-    # Получаем начальную дату из state
     data = await state.get_data()
     start_date_str = data['start_date']
     start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
     
-    # Проверяем, что конечная дата >= начальной
     if end_date < start_date:
         start_date_formatted = DateFormatter.format_date(start_date, date_format)
         await message.answer(
@@ -2598,10 +2355,8 @@ async def process_export_end_date(message: Message, state: FSMContext):
         )
         return
     
-    # Формируем текстовое описание периода
     period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
 
-    # Генерируем PDF без отображения сообщения ожидания
     await generate_and_send_pdf(
         message,
         message.from_user.id,
@@ -2610,7 +2365,6 @@ async def process_export_end_date(message: Message, state: FSMContext):
         period_text
     )
         
-    # Очищаем состояние
     await state.clear()
         
     
@@ -2627,7 +2381,6 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
         period_text: Текстовое описание периода для отображения
     """
     try:
-        # Получаем тренировки
         trainings = await get_trainings_by_custom_period(user_id, start_date, end_date)
         
         if not trainings:
@@ -2638,25 +2391,19 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
             )
             return
         
-        # Получаем статистику
         stats = await get_statistics_by_custom_period(user_id, start_date, end_date)
         
-        # Генерируем PDF
         logger.info(f"Генерация PDF для пользователя {user_id}: {len(trainings)} тренировок")
         pdf_buffer = await create_training_pdf(trainings, period_text, stats, user_id)
         
-        # Получаем настройки для правильного отображения в caption
         user_settings = await get_user_settings(user_id)
         distance_unit = user_settings.get('distance_unit', 'км') if user_settings else 'км'
         
-        # Формируем имя файла
         filename = f"trainings_{start_date}_{end_date}.pdf"
         
-        # Формируем текст distance с проверкой
         total_distance = stats.get('total_distance', 0)
         distance_text = format_distance(total_distance, distance_unit) if total_distance else f"0 {distance_unit}"
 
-        # Отправляем PDF
         await message.answer_document(
             BufferedInputFile(pdf_buffer.read(), filename=filename),
             caption=f"📥 *Экспорт тренировок*\n\n"
@@ -2668,11 +2415,9 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
         
         logger.info(f"PDF успешно отправлен пользователю {user_id}")
 
-        # Получаем статус тренера для клавиатуры
         from coach.coach_queries import is_user_coach
         is_coach_status = await is_user_coach(user_id)
 
-        # Возвращаем в главное меню
         await message.answer(
             "✅ PDF успешно создан!",
             reply_markup=get_main_menu_keyboard(is_coach_status)
@@ -2681,7 +2426,6 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
     except Exception as e:
         logger.error(f"Ошибка при генерации PDF: {str(e)}", exc_info=True)
 
-        # Получаем статус тренера для клавиатуры
         from coach.coach_queries import is_user_coach
         is_coach_status = await is_user_coach(user_id)
 
@@ -2692,16 +2436,12 @@ async def generate_and_send_pdf(message: Message, user_id: int, start_date: str,
         )
 
 
-# ==================== ОБРАБОТЧИКИ КАЛЕНДАРЯ ====================
-# ВАЖНО: Порядок регистрации имеет значение! Более специфичные обработчики должны быть первыми.
 
-# 1. Обработчики для cal_end_ (конечная дата для экспорта PDF)
 @router.callback_query(F.data.startswith("cal_end_1_select_"))
 async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора конечной даты из календаря"""
     logger.info(f"Обработчик cal_end_1_select_: {callback.data}")
 
-    # Парсим выбранную дату
     parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_end_", "cal_"))
     selected_date = parsed.get("date")
 
@@ -2709,7 +2449,6 @@ async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSM
         await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
         return
 
-    # Проверяем, что дата не из будущего
     from datetime import timedelta
     utc_now = datetime.utcnow()
     moscow_now = utc_now + timedelta(hours=3)
@@ -2719,7 +2458,6 @@ async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSM
         await callback.answer("❌ Нельзя выбрать дату из будущего!", show_alert=True)
         return
 
-    # Получаем начальную дату из state
     data = await state.get_data()
     start_date_str = data.get('start_date')
 
@@ -2730,11 +2468,9 @@ async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSM
     start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
     end_date = selected_date.date()
 
-    # Получаем формат даты пользователя
     user_id = callback.from_user.id
     date_format = await get_user_date_format(user_id)
 
-    # Проверяем, что конечная дата >= начальной
     if end_date < start_date:
         start_date_formatted = DateFormatter.format_date(start_date, date_format)
         await callback.answer(
@@ -2743,14 +2479,11 @@ async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSM
         )
         return
 
-    # Формируем текстовое описание периода
     period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
     date_str = DateFormatter.format_date(end_date, date_format)
 
-    # Показываем всплывающее окно
     await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
-    # Генерируем PDF
     await generate_and_send_pdf(
         callback.message,
         callback.from_user.id,
@@ -2759,7 +2492,6 @@ async def handle_calendar_end_date_selection(callback: CallbackQuery, state: FSM
         period_text
     )
 
-    # Очищаем состояние
     await state.clear()
     await callback.answer()
 
@@ -2769,38 +2501,31 @@ async def handle_calendar_end_date_navigation(callback: CallbackQuery, state: FS
     """Обработчик навигации по календарю для конечной даты"""
     logger.info(f"Обработчик cal_end_ навигация: {callback.data}")
 
-    # Исключаем обработку выбора даты (она обрабатывается в handle_calendar_end_date_selection)
     if callback.data.startswith("cal_end_1_select_"):
         return
 
-    # Обрабатываем пустые ячейки
     if callback.data == "cal_end_empty":
         await callback.answer()
         return
 
-    # Это навигация по календарю (ограничен текущей датой для выбора периода тренировок)
     callback_data_normalized = callback.data.replace("cal_end_", "cal_")
     new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal", max_date=datetime.now(), show_cancel=True, cancel_callback="trainings:export:cancel")
 
     if new_keyboard:
-        # Меняем префикс обратно на cal_end для конечной даты
         final_keyboard = CalendarKeyboard.replace_prefix_in_keyboard(new_keyboard, "cal", "cal_end")
 
         try:
             await callback.message.edit_reply_markup(reply_markup=final_keyboard)
         except Exception as e:
-            # Игнорируем ошибку "message is not modified" - это нормально, если пользователь нажал на ту же кнопку
             if "message is not modified" not in str(e).lower():
                 logger.error(f"Ошибка при обновлении календаря: {str(e)}")
 
     await callback.answer()
 
 
-# 2. Обработчики для cal_1_select_ (выбор финальной даты в обычном календаре)
 @router.callback_query(F.data.startswith("cal_1_select_"))
 async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора даты из календаря"""
-    # Парсим выбранную дату
     parsed = CalendarKeyboard.parse_callback_data(callback.data)
     selected_date = parsed.get("date")
 
@@ -2808,10 +2533,8 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
         return
 
-    # Получаем текущее состояние
     current_state = await state.get_state()
 
-    # Проверяем, что дата не из будущего
     from datetime import timedelta
     utc_now = datetime.utcnow()
     moscow_now = utc_now + timedelta(hours=3)
@@ -2821,21 +2544,17 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         await callback.answer("❌ Нельзя выбрать дату из будущего!", show_alert=True)
         return
 
-    # Получаем формат даты пользователя
     user_id = callback.from_user.id
     date_format = await get_user_date_format(user_id)
     date_str = DateFormatter.format_date(selected_date.date(), date_format)
 
-    # В зависимости от состояния сохраняем дату
     if current_state == AddTrainingStates.waiting_for_date:
-        # Добавление тренировки
         await state.update_data(date=selected_date.date())
 
-        # Удаляем сообщение с календарем
         try:
             await callback.message.delete()
         except Exception:
-            pass  # Игнорируем ошибки при удалении
+            pass  
 
         await callback.message.answer(
             f"✅ Дата: {date_str}\n\n"
@@ -2851,7 +2570,6 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         await state.set_state(AddTrainingStates.waiting_for_time)
 
     elif current_state == ExportPDFStates.waiting_for_start_date:
-        # Экспорт PDF - начальная дата
         await state.update_data(start_date=selected_date.date().strftime('%Y-%m-%d'))
 
         format_desc = DateFormatter.get_format_description(date_format)
@@ -2861,7 +2579,6 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
             f"Теперь выберите конечную дату"
         )
 
-        # Показываем календарь для выбора конечной даты с inline кнопкой отмены (ограничен текущей датой)
         calendar = CalendarKeyboard.create_calendar(
             calendar_format=1,
             current_date=selected_date,
@@ -2878,8 +2595,6 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         await state.set_state(ExportPDFStates.waiting_for_end_date)
 
     elif current_state == ExportPDFStates.waiting_for_end_date:
-        # Экспорт PDF - конечная дата
-        # Получаем начальную дату из state
         data = await state.get_data()
         start_date_str = data.get('start_date')
 
@@ -2890,7 +2605,6 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = selected_date.date()
 
-        # Проверяем, что конечная дата >= начальной
         if end_date < start_date:
             start_date_formatted = DateFormatter.format_date(start_date, date_format)
             await callback.answer(
@@ -2899,13 +2613,10 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
             )
             return
 
-        # Формируем текстовое описание периода
         period_text = DateFormatter.format_date_range(start_date, end_date, date_format)
 
-        # Показываем всплывающее окно
         await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
-        # Генерируем PDF
         await generate_and_send_pdf(
             callback.message,
             callback.from_user.id,
@@ -2914,37 +2625,30 @@ async def handle_calendar_date_selection(callback: CallbackQuery, state: FSMCont
             period_text
         )
 
-        # Очищаем состояние
         await state.clear()
 
     await callback.answer()
 
 
-# 3. Общий обработчик навигации по календарю (ловит все остальные cal_*)
 @router.callback_query(F.data.startswith("cal_"))
 async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext):
     """Обработчик навигации по календарю"""
-    # Исключаем обработку cal_end_ и cal_birth_ (они обрабатываются в своих обработчиках)
     if callback.data.startswith("cal_end_") or callback.data.startswith("cal_birth_"):
         return
 
-    # Исключаем обработку выбора даты (она обрабатывается в handle_calendar_date_selection)
     if callback.data.startswith("cal_1_select_"):
         return
 
-    # Обрабатываем пустые ячейки
     if callback.data == "cal_empty":
         await callback.answer()
         return
 
-    # Получаем новую клавиатуру для навигации (ограничен текущей датой)
     new_keyboard = CalendarKeyboard.handle_navigation(callback.data, prefix="cal", max_date=datetime.now(), show_cancel=True, cancel_callback="trainings:export:cancel")
 
     if new_keyboard:
         try:
             await callback.message.edit_reply_markup(reply_markup=new_keyboard)
         except Exception as e:
-            # Игнорируем ошибку "message is not modified" - это нормально, если пользователь нажал на ту же кнопку
             if "message is not modified" not in str(e).lower():
                 logger.error(f"Ошибка при обновлении календаря: {str(e)}")
     else:
@@ -2959,7 +2663,6 @@ async def cancel_trainings_export_inline(callback: CallbackQuery, state: FSMCont
     await state.clear()
     from bot.keyboards import get_export_type_keyboard
 
-    # Возвращаем пользователя в меню экспорта
     await callback.message.edit_text(
         "📥 <b>Экспорт в PDF</b>\n\n"
         "Выберите, что вы хотите экспортировать:",
@@ -2969,7 +2672,6 @@ async def cancel_trainings_export_inline(callback: CallbackQuery, state: FSMCont
     await callback.answer("Экспорт отменен")
 
 
-# ============== ОБРАБОТЧИК КНОПКИ "КАБИНЕТ ТРЕНЕРА" ==============
 
 @router.message(F.text == "👨‍🏫 Кабинет тренера")
 async def show_coach_section(message: Message):
@@ -2979,7 +2681,6 @@ async def show_coach_section(message: Message):
 
     user_id = message.from_user.id
 
-    # Проверяем что пользователь тренер
     if not await is_user_coach(user_id):
         await message.answer(
             "У вас нет доступа к этому разделу.\n\n"

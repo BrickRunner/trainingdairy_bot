@@ -38,7 +38,6 @@ def get_back_to_export_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-# Helper функции для форматирования дат
 async def format_date_for_user(date_obj: date, user_id: int) -> str:
     """Форматировать дату согласно настройкам пользователя"""
     user_format = await get_user_date_format(user_id)
@@ -69,7 +68,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
 
     await callback.answer("⏳ Рассчитываю статистику...")
 
-    # Удаляем старые сообщения со статистикой, если они есть
     if state:
         data = await state.get_data()
         old_message_ids = data.get('statistics_message_ids', [])
@@ -78,33 +76,27 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
                 await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
             except Exception:
                 pass
-        # Очищаем список старых сообщений
         await state.update_data(statistics_message_ids=[])
 
     try:
-        # Получаем соревнования пользователя с фильтром по периоду
         from datetime import datetime, timedelta
 
         today = datetime.now().date()
         if period == 'month':
-            # С первого числа текущего месяца
             start_date = today.replace(day=1)
             period_text = "за текущий месяц"
         elif period == 'halfyear':
-            # Последние 6 месяцев
             start_date = today - timedelta(days=180)
             period_text = "за последние полгода"
         elif period == 'year':
-            # С 01.01 текущего года до конца года (или до сегодня)
             start_date = today.replace(month=1, day=1)
             period_text = "за текущий год"
-        else:  # 'all'
+        else:  
             start_date = None
             period_text = "весь период"
 
         end_date = today
 
-        # Получаем все соревнования и фильтруем по дате
         all_participants = await get_user_competitions_with_details(user_id)
 
         if start_date:
@@ -125,7 +117,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
             except Exception:
                 pass
 
-            # Возврат в главное меню соревнований
             menu_msg = await callback.message.answer(
                 "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
                 "Выберите раздел:",
@@ -133,19 +124,15 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
                 reply_markup=get_competitions_main_menu()
             )
 
-            # Сохраняем ID сообщения с меню
             if state:
                 await state.update_data(statistics_message_ids=[menu_msg.message_id])
             return
 
-        # Рассчитываем статистику
         stats = calculate_competitions_statistics(participants)
 
-        # Получаем настройки единиц измерения
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-        # Форматируем сообщение с учетом единиц измерения
         message_text = format_statistics_message(stats, distance_unit)
         message_text = f"📊 <b>СТАТИСТИКА {period_text.upper()}</b>\n\n" + message_text.split('\n\n', 1)[1]
 
@@ -158,7 +145,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
         except Exception:
             pass
 
-        # Генерируем и отправляем графики
         new_message_ids = []
         try:
             settings = await get_user_settings(user_id)
@@ -171,7 +157,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
                 distance_unit
             )
 
-            # Отправляем графики без нумерации и сохраняем их ID
             for i, buf in enumerate(graph_buffers):
                 caption = f"📊 Графики статистики соревнований {period_text}" if i == 0 else None
                 sent_msg = await callback.message.answer_photo(
@@ -184,7 +169,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
         except Exception as graph_error:
             logger.error(f"Ошибка при генерации графиков: {graph_error}")
 
-        # Возврат в главное меню соревнований
         menu_msg = await callback.message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
             "Выберите раздел:",
@@ -193,7 +177,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
         )
         new_message_ids.append(menu_msg.message_id)
 
-        # Сохраняем ID новых сообщений в state
         if state:
             await state.update_data(statistics_message_ids=new_message_ids)
 
@@ -208,7 +191,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
         except Exception:
             pass
 
-        # Возврат в главное меню соревнований при ошибке
         menu_msg = await callback.message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
             "Выберите раздел:",
@@ -216,7 +198,6 @@ async def show_statistics_for_period(callback: CallbackQuery, period: str = 'all
             reply_markup=get_competitions_main_menu()
         )
 
-        # Сохраняем ID сообщения с меню
         if state:
             await state.update_data(statistics_message_ids=[menu_msg.message_id])
 
@@ -262,13 +243,10 @@ async def export_halfyear(callback: CallbackQuery):
     await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
     try:
-        # Генерируем PDF
         pdf_buffer = await create_competitions_pdf(user_id, "halfyear")
 
-        # Формируем имя файла
         filename = f"competitions_halfyear_{date.today().strftime('%Y%m%d')}.pdf"
 
-        # Отправляем PDF
         document = BufferedInputFile(pdf_buffer.read(), filename=filename)
 
         await callback.message.answer_document(
@@ -276,7 +254,6 @@ async def export_halfyear(callback: CallbackQuery):
             caption="📄 Экспорт соревнований за последние полгода"
         )
 
-        # Автоматически возвращаемся в меню экспорта
         from bot.keyboards import get_export_type_keyboard
         await callback.message.answer(
             "📥 <b>Экспорт в PDF</b>\n\n"
@@ -288,7 +265,6 @@ async def export_halfyear(callback: CallbackQuery):
     except ValueError as e:
         logger.error(f"Ошибка при экспорте PDF: {e}")
         await callback.answer()
-        # Возвращаем в меню выбора периода
         await callback.message.edit_text(
             f"❌ {str(e)}\n\n"
             "🏃 <b>Экспорт соревнований в PDF</b>\n\n"
@@ -314,13 +290,10 @@ async def export_year(callback: CallbackQuery):
     await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
     try:
-        # Генерируем PDF
         pdf_buffer = await create_competitions_pdf(user_id, "year")
 
-        # Формируем имя файла
         filename = f"competitions_year_{date.today().strftime('%Y%m%d')}.pdf"
 
-        # Отправляем PDF
         document = BufferedInputFile(pdf_buffer.read(), filename=filename)
 
         await callback.message.answer_document(
@@ -328,7 +301,6 @@ async def export_year(callback: CallbackQuery):
             caption="📄 Экспорт соревнований за последний год"
         )
 
-        # Автоматически возвращаемся в меню экспорта
         from bot.keyboards import get_export_type_keyboard
         await callback.message.answer(
             "📥 <b>Экспорт в PDF</b>\n\n"
@@ -340,7 +312,6 @@ async def export_year(callback: CallbackQuery):
     except ValueError as e:
         logger.error(f"Ошибка при экспорте PDF: {e}")
         await callback.answer()
-        # Возвращаем в меню выбора периода
         await callback.message.edit_text(
             f"❌ {str(e)}\n\n"
             "🏃 <b>Экспорт соревнований в PDF</b>\n\n"
@@ -364,7 +335,6 @@ async def export_custom(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     date_format_desc = await get_date_format_description(user_id)
 
-    # Отправляем календарь с inline кнопкой отмены
     calendar_keyboard = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
@@ -385,16 +355,13 @@ async def export_custom(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# Обработчики календаря для начальной даты
 @router.callback_query(F.data.startswith("comp_export_start_"))
 async def process_export_start_calendar(callback: CallbackQuery, state: FSMContext):
     """Обработка навигации и выбора даты начала экспорта в календаре"""
     callback_data = callback.data
     logger.info(f"=== COMP EXPORT START CALENDAR CALLBACK: {callback_data} ===")
 
-    # Проверка на выбор даты
     if "_select_" in callback_data:
-        # Парсим выбранную дату используя parse_callback_data
         parsed = CalendarKeyboard.parse_callback_data(callback_data, prefix="comp_export_start")
         try:
             if not parsed or not parsed.get("date"):
@@ -403,15 +370,12 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
 
             logger.info(f"Selected start date: {selected_date}")
 
-            # Сохраняем дату начала
             await state.update_data(export_start_date=selected_date)
 
-            # Запрашиваем дату окончания
             user_id = callback.from_user.id
             date_format_desc = await get_date_format_description(user_id)
             formatted_start = await format_date_for_user(selected_date, user_id)
 
-            # Отправляем календарь для даты окончания с inline кнопкой отмены
             calendar_keyboard = CalendarKeyboard.create_calendar(
                 calendar_format=1,
                 current_date=datetime.now(),
@@ -438,7 +402,6 @@ async def process_export_start_calendar(callback: CallbackQuery, state: FSMConte
             await callback.answer("Ошибка при выборе даты")
             return
 
-    # Обработка навигации
     new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="comp_export_start", max_date=datetime.now(), show_cancel=True, cancel_callback="comp:export:cancel")
 
     if new_keyboard:
@@ -455,7 +418,6 @@ async def cancel_export_inline(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     from bot.keyboards import get_export_type_keyboard
 
-    # Возвращаем пользователя в меню экспорта
     await callback.message.edit_text(
         "📥 <b>Экспорт в PDF</b>\n\n"
         "Выберите, что вы хотите экспортировать:",
@@ -465,16 +427,13 @@ async def cancel_export_inline(callback: CallbackQuery, state: FSMContext):
     await callback.answer("Экспорт отменен")
 
 
-# Обработчики календаря для конечной даты
 @router.callback_query(F.data.startswith("comp_export_end_"))
 async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext):
     """Обработка навигации и выбора даты окончания экспорта в календаре"""
     callback_data = callback.data
     logger.info(f"=== COMP EXPORT END CALENDAR CALLBACK: {callback_data} ===")
 
-    # Проверка на выбор даты
     if "_select_" in callback_data:
-        # Парсим выбранную дату используя parse_callback_data
         parsed = CalendarKeyboard.parse_callback_data(callback_data, prefix="comp_export_end")
         try:
             if not parsed or not parsed.get("date"):
@@ -483,12 +442,10 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
 
             logger.info(f"Selected end date: {selected_date}")
 
-            # Получаем дату начала
             data = await state.get_data()
             start_date = data.get('export_start_date')
             user_id = callback.from_user.id
 
-            # Проверяем, что start_date существует и дата окончания не раньше даты начала
             if not start_date:
                 await callback.answer("Ошибка: не найдена дата начала. Попробуйте снова.")
                 await state.clear()
@@ -502,29 +459,22 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
                 )
                 return
 
-            # Очищаем состояние
             await state.clear()
 
-            # Показываем всплывающее окно о генерации
             await callback.answer("⏳ Генерирую PDF...", show_alert=True)
 
             try:
-                # Формируем параметр периода в формате custom_YYYYMMDD_YYYYMMDD
                 period_param = f"custom_{start_date.strftime('%Y%m%d')}_{selected_date.strftime('%Y%m%d')}"
 
-                # Генерируем PDF
                 pdf_buffer = await create_competitions_pdf(user_id, period_param)
 
-                # Формируем имя файла
                 filename = f"competitions_custom_{start_date.strftime('%Y%m%d')}_{selected_date.strftime('%Y%m%d')}.pdf"
 
-                # Отправляем PDF
                 document = BufferedInputFile(pdf_buffer.read(), filename=filename)
 
                 formatted_start = await format_date_for_user(start_date, user_id)
                 formatted_end = await format_date_for_user(selected_date, user_id)
 
-                # Убираем клавиатуру при отправке документа
                 from aiogram.types import ReplyKeyboardRemove
                 await callback.message.answer_document(
                     document=document,
@@ -534,7 +484,6 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
 
                 logger.info(f"PDF экспорт соревнований успешно создан для пользователя {user_id}, период: {start_date} - {selected_date}")
 
-                # Автоматически возвращаемся в меню экспорта
                 from bot.keyboards import get_export_type_keyboard
                 await callback.message.answer(
                     "📥 <b>Экспорт в PDF</b>\n\n"
@@ -545,7 +494,6 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
 
             except ValueError as e:
                 logger.error(f"Ошибка при экспорте PDF: {e}")
-                # Возвращаем в меню выбора периода
                 await callback.message.answer(
                     f"❌ {str(e)}\n\n"
                     "🏃 <b>Экспорт соревнований в PDF</b>\n\n"
@@ -560,7 +508,6 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
             await callback.answer("Ошибка при выборе даты")
             return
 
-    # Обработка навигации
     new_keyboard = CalendarKeyboard.handle_navigation(callback_data, prefix="comp_export_end", max_date=datetime.now(), show_cancel=True, cancel_callback="comp:export:cancel")
 
     if new_keyboard:
@@ -571,7 +518,6 @@ async def process_export_end_calendar(callback: CallbackQuery, state: FSMContext
     await callback.answer()
 
 
-# ============== Обработчики ручного ввода даты ==============
 
 @router.message(CompetitionsExportStates.waiting_for_start_date)
 async def process_export_start_date_manual(message: Message, state: FSMContext):
@@ -579,10 +525,8 @@ async def process_export_start_date_manual(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
     try:
-        # Парсим дату с использованием пользовательского формата
         start_date = await parse_user_date(message.text, user_id)
 
-        # Проверяем, что дата не в будущем
         if start_date > date.today():
             await message.answer(
                 "❌ Дата начала не может быть в будущем!\n\n"
@@ -590,14 +534,11 @@ async def process_export_start_date_manual(message: Message, state: FSMContext):
             )
             return
 
-        # Сохраняем дату начала
         await state.update_data(export_start_date=start_date)
 
-        # Запрашиваем дату окончания
         date_format_desc = await get_date_format_description(user_id)
         formatted_start = await format_date_for_user(start_date, user_id)
 
-        # Отправляем календарь с inline кнопкой отмены
         calendar_keyboard = CalendarKeyboard.create_calendar(
             calendar_format=1,
             current_date=datetime.now(),
@@ -630,10 +571,8 @@ async def process_export_end_date_manual(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
     try:
-        # Парсим дату с использованием пользовательского формата
         end_date = await parse_user_date(message.text, user_id)
 
-        # Проверяем, что дата не в будущем
         if end_date > date.today():
             await message.answer(
                 "❌ Дата окончания не может быть в будущем!\n\n"
@@ -641,11 +580,9 @@ async def process_export_end_date_manual(message: Message, state: FSMContext):
             )
             return
 
-        # Получаем дату начала
         data = await state.get_data()
         start_date = data.get('export_start_date')
 
-        # Проверяем, что дата окончания не раньше даты начала
         if end_date < start_date:
             formatted_start = await format_date_for_user(start_date, user_id)
             await message.answer(
@@ -654,20 +591,15 @@ async def process_export_end_date_manual(message: Message, state: FSMContext):
             )
             return
 
-        # Очищаем состояние
         await state.clear()
 
         try:
-            # Формируем параметр периода в формате custom_YYYYMMDD_YYYYMMDD
             period_param = f"custom_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
 
-            # Генерируем PDF
             pdf_buffer = await create_competitions_pdf(user_id, period_param)
 
-            # Формируем имя файла
             filename = f"competitions_custom_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.pdf"
 
-            # Отправляем PDF
             document = BufferedInputFile(pdf_buffer.read(), filename=filename)
 
             formatted_start = await format_date_for_user(start_date, user_id)
@@ -680,7 +612,6 @@ async def process_export_end_date_manual(message: Message, state: FSMContext):
 
             logger.info(f"PDF экспорт соревнований успешно создан для пользователя {user_id}, период: {start_date} - {end_date}")
 
-            # Автоматически возвращаемся в меню экспорта
             from bot.keyboards import get_export_type_keyboard
             await message.answer(
                 "📥 <b>Экспорт в PDF</b>\n\n"
@@ -691,7 +622,6 @@ async def process_export_end_date_manual(message: Message, state: FSMContext):
 
         except ValueError as e:
             logger.error(f"Ошибка при экспорте PDF: {e}")
-            # Возвращаем в меню выбора периода
             await message.answer(
                 f"❌ {str(e)}\n\n"
                 "🏃 <b>Экспорт соревнований в PDF</b>\n\n"

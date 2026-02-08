@@ -53,7 +53,6 @@ def get_achievements_categories_keyboard() -> InlineKeyboardMarkup:
 
     builder = InlineKeyboardBuilder()
 
-    # Сортируем категории по порядку
     categories = sorted(ACHIEVEMENT_CATEGORIES.items(), key=lambda x: x[1]['order'])
 
     for cat_id, cat_data in categories:

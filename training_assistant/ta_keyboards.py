@@ -5,7 +5,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
-# Disclaimer для всех ответов
 DISCLAIMER_TEXT = "\n\n⚠️ <i>Рекомендации носят исключительно информационный характер и не заменяют консультацию с врачом или профессиональным тренером. Перед началом тренировок проконсультируйтесь со специалистами.</i>"
 
 
@@ -60,7 +59,6 @@ def get_available_days_keyboard(selected_days: list = None) -> InlineKeyboardMar
 
     keyboard = []
     for full_name, short_name in days:
-        # Добавляем галочку если день выбран
         prefix = "✅ " if short_name in selected_days else ""
         keyboard.append([
             InlineKeyboardButton(
@@ -69,7 +67,6 @@ def get_available_days_keyboard(selected_days: list = None) -> InlineKeyboardMar
             )
         ])
 
-    # Кнопка "Готово" (активна только если выбран хотя бы 1 день)
     if selected_days:
         keyboard.append([
             InlineKeyboardButton(text="✅ Готово", callback_data="ta:days:done")
@@ -165,8 +162,7 @@ async def get_user_competitions_keyboard(competitions: list, context: str, user_
     """
     keyboard = []
 
-    # Получаем формат даты пользователя
-    date_format = 'ДД.ММ.ГГГГ'  # По умолчанию
+    date_format = 'ДД.ММ.ГГГГ'  
     if user_id:
         try:
             from utils.date_formatter import get_user_date_format
@@ -174,13 +170,11 @@ async def get_user_competitions_keyboard(competitions: list, context: str, user_
         except:
             pass
 
-    for comp in competitions[:10]:  # Максимум 10 соревнований
-        # Проверяем оба варианта полей для совместимости
+    for comp in competitions[:10]:  
         comp_id = comp.get('id') or comp.get('competition_id')
         title = comp.get('name') or comp.get('title', 'Без названия')
         date = comp.get('date') or comp.get('begin_date', '')
 
-        # Форматируем дату согласно настройкам пользователя
         if date:
             try:
                 from utils.date_formatter import DateFormatter

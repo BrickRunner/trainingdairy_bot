@@ -39,7 +39,6 @@ async def format_competition_distance(distance_km: float, user_id: int, case: st
     """
     distance_unit = await get_user_distance_unit(user_id)
 
-    # Словари с падежами для специальных дистанций
     marathon_cases = {
         'nominative': 'Марафон',
         'genitive': 'марафона',
@@ -52,42 +51,31 @@ async def format_competition_distance(distance_km: float, user_id: int, case: st
         'accusative': 'полумарафон'
     }
 
-    # Специальные названия дистанций
     if distance_unit == 'км':
-        # Для дистанций менее 1 км показываем в метрах
         if distance_km < 1.0:
             distance_meters = int(distance_km * 1000)
             return f"{distance_meters} м"
-        # Марафон: 42.0 - 42.3 км
         elif 42.0 <= distance_km <= 42.3:
             return f"{marathon_cases.get(case, 'Марафон')} (42.2 км)"
-        # Полумарафон: 21.0 - 21.2 км
         elif 21.0 <= distance_km <= 21.2:
             return f"{half_marathon_cases.get(case, 'Полумарафон')} (21.1 км)"
-        # Точно 10 км (с учетом погрешности)
         elif 9.9 <= distance_km <= 10.1:
             return "10 км"
-        # Точно 5 км (с учетом погрешности)
         elif 4.9 <= distance_km <= 5.1:
             return "5 км"
         else:
             return f"{distance_km:.1f} км"
     else:
         distance_miles = km_to_miles(distance_km)
-        # Для дистанций менее 1 мили показываем в ярдах
         if distance_miles < 1.0:
             distance_yards = int(distance_miles * 1760)
             return f"{distance_yards} ярдов"
-        # Марафон: 42.0 - 42.3 км (26.2 мили)
         elif 42.0 <= distance_km <= 42.3:
             return f"{marathon_cases.get(case, 'Марафон')} (26.2 миль)"
-        # Полумарафон: 21.0 - 21.2 км (13.1 миль)
         elif 21.0 <= distance_km <= 21.2:
             return f"{half_marathon_cases.get(case, 'Полумарафон')} (13.1 миль)"
-        # Точно 10 км -> 6.2 мили
         elif 9.9 <= distance_km <= 10.1:
             return "6.2 миль"
-        # Точно 5 км -> 3.1 мили
         elif 4.9 <= distance_km <= 5.1:
             return "3.1 миль"
         else:
@@ -110,7 +98,6 @@ async def parse_user_distance_input(distance_text: str, user_id: int) -> Optiona
     try:
         distance_value = float(distance_text.replace(',', '.'))
 
-        # Конвертируем в км если нужно
         if distance_unit == 'мили':
             distance_km = miles_to_km(distance_value)
         else:
@@ -195,7 +182,6 @@ def determine_competition_type(distance_km: float) -> str:
     Returns:
         Тип соревнования
     """
-    # Проверяем на None перед сравнением
     if distance_km is None or distance_km <= 0:
         return "забег"
 
@@ -221,5 +207,4 @@ async def safe_edit_message(message, text: str, **kwargs):
     try:
         await message.edit_text(text, **kwargs)
     except Exception:
-        # Игнорируем ошибку если сообщение не изменилось
         pass

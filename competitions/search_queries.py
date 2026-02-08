@@ -29,8 +29,6 @@ async def search_competitions_by_city_and_month(
         db.row_factory = aiosqlite.Row
 
         if period == 'all':
-            # Поиск по всем месяцам (начиная с текущей даты)
-            # Только официальные соревнования (is_official = 1)
             query = """
                 SELECT * FROM competitions
                 WHERE city = ?

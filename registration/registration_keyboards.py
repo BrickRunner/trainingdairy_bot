@@ -25,7 +25,6 @@ def get_training_types_keyboard(selected_types: list) -> InlineKeyboardMarkup:
     """
     builder = InlineKeyboardBuilder()
 
-    # Все доступные типы тренировок
     all_types = [
         ("🏃 Кросс", "кросс"),
         ("🏊 Плавание", "плавание"),
@@ -35,13 +34,11 @@ def get_training_types_keyboard(selected_types: list) -> InlineKeyboardMarkup:
     ]
 
     for display_name, type_value in all_types:
-        # Добавляем галочку для выбранных типов
         text = f"✅ {display_name}" if type_value in selected_types else display_name
         builder.button(text=text, callback_data=f"reg_toggle_type:{type_value}")
 
-    builder.adjust(2)  # По 2 кнопки в ряд
+    builder.adjust(2)  
 
-    # Кнопка подтверждения (активна только если выбран хотя бы один тип)
     if selected_types:
         builder.row(
             InlineKeyboardButton(text="✅ Продолжить", callback_data="reg_confirm_types")

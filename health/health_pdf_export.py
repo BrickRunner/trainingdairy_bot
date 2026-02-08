@@ -26,11 +26,9 @@ from database.queries import get_user_settings
 
 logger = logging.getLogger(__name__)
 
-# Используем те же шрифты, что и для тренировок
 def get_font_paths():
     """Получить пути к шрифтам DejaVu в зависимости от ОС"""
 
-    # Сначала проверяем локальную папку fonts в проекте
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     local_fonts = os.path.join(project_root, 'fonts')
@@ -46,7 +44,6 @@ def get_font_paths():
                 'bold': dejavu_bold if os.path.exists(dejavu_bold) else dejavu_regular
             }
 
-    # Если нет локальных, ищем системные
     if sys.platform.startswith('win'):
         possible_paths = [
             r'C:\Windows\Fonts\DejaVuSans.ttf',
@@ -72,7 +69,6 @@ def get_font_paths():
 
     return None
 
-# Регистрируем шрифты
 font_paths = get_font_paths()
 FONT_NAME = 'DejaVuSans'
 FONT_NAME_BOLD = 'DejaVuSans-Bold'
@@ -117,12 +113,10 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
     Returns:
         BytesIO объект с PDF документом
     """
-    # Получаем формат даты и единицы измерения пользователя
     user_format = await get_user_date_format(user_id)
     settings = await get_user_settings(user_id)
     weight_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
 
-    # Получаем метрики за период
     if period_param == "week":
         from .health_queries import get_current_week_metrics
         metrics = await get_current_week_metrics(user_id)
@@ -132,8 +126,6 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         metrics = await get_current_month_metrics(user_id)
         period_name = "Этот месяц"
     elif period_param.startswith("custom_"):
-        # Обработка произвольного периода
-        # Формат: custom_YYYYMMDD_YYYYMMDD
         parts = period_param.split("_")
         if len(parts) == 3:
             start_date_str = parts[1]
@@ -160,7 +152,6 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
 
     buffer = BytesIO()
 
-    # Создаем документ
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
@@ -170,10 +161,8 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         bottomMargin=2*cm
     )
 
-    # Получаем стили
     styles = getSampleStyleSheet()
 
-    # Создаем кастомные стили
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
@@ -208,17 +197,14 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         textColor=colors.grey
     )
 
-    # Элементы документа
     story = []
 
-    # === ТИТУЛЬНАЯ СТРАНИЦА ===
     story.append(Spacer(1, 3*cm))
     story.append(Paragraph("Дневник здоровья и метрик", title_style))
     story.append(Spacer(1, 0.5*cm))
     story.append(Paragraph(f"Период: {period_name}", heading_style))
     story.append(Spacer(1, 0.5*cm))
 
-    # Форматируем даты периода
     if metrics:
         first_date = datetime.strptime(metrics[0]['date'], '%Y-%m-%d').date()
         last_date = datetime.strptime(metrics[-1]['date'], '%Y-%m-%d').date()
@@ -228,7 +214,6 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
 
     story.append(Spacer(1, 1*cm))
 
-    # === ОБЩАЯ СТАТИСТИКА ===
     pulse_values = [m['morning_pulse'] for m in metrics if m.get('morning_pulse')]
     weight_values = [m['weight'] for m in metrics if m.get('weight')]
     sleep_values = [m['sleep_duration'] for m in metrics if m.get('sleep_duration')]
@@ -247,7 +232,6 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
         first_weight = weight_values[0]
         weight_change = current_weight - first_weight
 
-        # Конвертируем вес если нужно
         if weight_unit == 'фунты':
             current_weight_display = kg_to_lbs(current_weight)
             weight_change_display = kg_to_lbs(weight_change)
@@ -277,43 +261,36 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
     story.append(stats_table)
 
     story.append(Spacer(1, 2*cm))
-    # Форматируем дату генерации согласно настройкам пользователя
     generated_date = DateFormatter.format_date(datetime.now().date(), user_format)
     generated_time = datetime.now().strftime('%H:%M')
     story.append(Paragraph(f"Сгенерировано: {generated_date} {generated_time}", small_style))
 
     story.append(PageBreak())
 
-    # === ГРАФИКИ ===
     try:
         story.append(Paragraph("Графики метрик здоровья", heading_style))
         story.append(Spacer(1, 0.5*cm))
 
-        # Получаем целевой вес из настроек пользователя
         weight_goal = settings.get('weight_goal') if settings else None
 
-        # Генерируем график с учётом формата даты и единиц измерения
         graph_buffer = await generate_health_graphs(metrics, period_name, weight_goal, user_format, weight_unit)
 
-        # Добавляем график как изображение
         img = Image(graph_buffer, width=17*cm, height=14*cm)
         story.append(img)
         story.append(PageBreak())
     except Exception as e:
         logger.error(f"Ошибка при создании графиков для PDF: {str(e)}", exc_info=True)
 
-    # === ДЕТАЛЬНАЯ ТАБЛИЦА ДАННЫХ ===
     story.append(Paragraph("Детальные данные", heading_style))
     story.append(Spacer(1, 0.5*cm))
 
     table_data = [["Дата", "Пульс", "Вес", "Сон", "Качество сна"]]
 
-    for metric in reversed(metrics):  # Сначала новые
+    for metric in reversed(metrics):  
         metric_date_obj = datetime.strptime(metric['date'], '%Y-%m-%d').date()
         metric_date = DateFormatter.format_date(metric_date_obj, user_format)
         pulse = f"{metric['morning_pulse']}" if metric.get('morning_pulse') else "-"
 
-        # Форматируем вес с учетом единиц измерения
         if metric.get('weight'):
             if weight_unit == 'фунты':
                 weight_display = kg_to_lbs(metric['weight'])
@@ -344,23 +321,19 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
     ]))
     story.append(detail_table)
 
-    # === АНАЛИЗ СНА (если есть данные) ===
     if sleep_values and len(sleep_values) >= 3:
         story.append(PageBreak())
         story.append(Paragraph("Анализ сна", heading_style))
         story.append(Spacer(1, 0.5*cm))
 
-        # Выполняем анализ сна
         analyzer = SleepAnalyzer(metrics)
         analysis = analyzer.get_full_analysis()
 
         if analysis['status'] == 'ok':
-            # Общая оценка
             score = analysis['overall_score']
             story.append(Paragraph(f"Общая оценка: {score['score']}/100 ({score['category']})", normal_style))
             story.append(Spacer(1, 0.3*cm))
 
-            # Длительность
             duration = analysis['duration_analysis']
             duration_data = [
                 ["Среднее:", f"{duration['average']} ч"],
@@ -382,23 +355,18 @@ async def create_health_pdf(user_id: int, period_param: str) -> BytesIO:
             ]))
             story.append(duration_table)
 
-            # Стабильность
             story.append(Spacer(1, 0.5*cm))
             consistency = analysis['consistency_analysis']
             story.append(Paragraph(f"Стабильность режима: {consistency['status']} (±{consistency['std_dev']} ч)", normal_style))
 
-            # Рекомендации
             story.append(Spacer(1, 0.5*cm))
             story.append(Paragraph("Рекомендации:", heading_style))
 
             for rec in analysis['recommendations']:
-                # Убираем HTML теги для PDF
                 clean_rec = rec.replace('<b>', '').replace('</b>', '')
-                # Убираем emoji (они отображаются как пустые квадраты в DejaVu Sans)
                 clean_rec = re.sub(r'[^\w\s\-.,;:!?()/\u0400-\u04FF%+]', '', clean_rec)
                 story.append(Paragraph(f"• {clean_rec}", normal_style))
 
-    # Генерируем PDF
     doc.build(story)
     buffer.seek(0)
 

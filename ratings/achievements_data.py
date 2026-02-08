@@ -9,7 +9,6 @@
 - Специальные (11)
 """
 
-# Категории достижений
 ACHIEVEMENT_CATEGORIES = {
     'competitions': {
         'name': 'Соревнования',
@@ -38,7 +37,6 @@ ACHIEVEMENT_CATEGORIES = {
     }
 }
 
-# Уровни сложности достижений
 ACHIEVEMENT_LEVELS = {
     'white': {'name': 'Белый', 'emoji': '⚪', 'order': 1},
     'green': {'name': 'Зеленый', 'emoji': '🟢', 'order': 2},
@@ -47,9 +45,7 @@ ACHIEVEMENT_LEVELS = {
     'gold': {'name': 'Золотой', 'emoji': '🟡', 'order': 5}
 }
 
-# Все достижения (55 штук)
 ACHIEVEMENTS = {
-    # ============== СОРЕВНОВАНИЯ (20) ==============
     'first_competition': {
         'id': 'first_competition',
         'category': 'competitions',
@@ -251,7 +247,6 @@ ACHIEVEMENTS = {
         'order': 20
     },
 
-    # ============== РЕЗУЛЬТАТЫ (6) ==============
     'first_podium': {
         'id': 'first_podium',
         'category': 'results',
@@ -313,7 +308,6 @@ ACHIEVEMENTS = {
         'order': 6
     },
 
-    # ============== АКТИВНОСТЬ (12) ==============
     'first_result': {
         'id': 'first_result',
         'category': 'activity',
@@ -435,7 +429,6 @@ ACHIEVEMENTS = {
         'order': 12
     },
 
-    # ============== ГЕОГРАФИЯ (6) ==============
     'traveler': {
         'id': 'traveler',
         'category': 'geography',
@@ -497,7 +490,6 @@ ACHIEVEMENTS = {
         'order': 6
     },
 
-    # ============== СПЕЦИАЛЬНЫЕ (11) ==============
     'bot_1_year': {
         'id': 'bot_1_year',
         'category': 'special',
@@ -628,7 +620,6 @@ def get_all_achievements() -> list:
     """Получить все достижения, отсортированные по категориям и порядку"""
     achievements = list(ACHIEVEMENTS.values())
 
-    # Сортируем по категории и порядку
     achievements.sort(key=lambda x: (
         ACHIEVEMENT_CATEGORIES[x['category']]['order'],
         x['order']

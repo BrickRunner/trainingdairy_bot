@@ -1,4 +1,3 @@
-# notification_scheduler.py (добавил форматирование дат в сообщениях, если нужно; но здесь даты в отчётах не отображаются явно, так что без изменений)
 """
 Система уведомлений для ежедневных напоминаний, 
 поздравлений с днём рождения и недельных отчетов
@@ -26,12 +25,11 @@ async def check_birthdays(bot: Bot):
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
     
     today = datetime.now()
-    today_str = today.strftime('%m-%d')  # Формат ММ-ДД
+    today_str = today.strftime('%m-%d')  
     
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         
-        # Находим всех пользователей с днём рождения сегодня
         async with db.execute(
             """
             SELECT user_id, name, birth_date 
@@ -77,13 +75,11 @@ async def send_daily_reminders(bot: Bot):
 
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
-    # Получаем текущее UTC время
     utc_now = datetime.now(pytz.UTC)
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Получаем всех пользователей с установленным временем напоминания
         async with db.execute(
             """
             SELECT user_id, name, daily_pulse_weight_time, timezone
@@ -100,15 +96,12 @@ async def send_daily_reminders(bot: Bot):
                 user_timezone_str = row['timezone'] or 'Europe/Moscow'
 
                 try:
-                    # Получаем часовой пояс пользователя
                     user_tz = pytz.timezone(user_timezone_str)
 
-                    # Конвертируем UTC время в часовой пояс пользователя
                     user_now = utc_now.astimezone(user_tz)
                     current_time = user_now.strftime('%H:%M')
                     today = user_now.date()
 
-                    # Проверяем, совпадает ли текущее время с временем напоминания
                     if current_time != reminder_time:
                         continue
 
@@ -116,7 +109,6 @@ async def send_daily_reminders(bot: Bot):
                     print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
                     continue
 
-                # Проверяем, какие метрики уже заполнены сегодня
                 async with db.execute(
                     """
                     SELECT morning_pulse, weight, sleep_duration
@@ -127,7 +119,6 @@ async def send_daily_reminders(bot: Bot):
                 ) as metrics_cursor:
                     metrics = await metrics_cursor.fetchone()
 
-                # Определяем, что нужно внести
                 missing_metrics = []
                 if not metrics or not metrics['morning_pulse']:
                     missing_metrics.append("💗 Утренний пульс")
@@ -136,7 +127,6 @@ async def send_daily_reminders(bot: Bot):
                 if not metrics or not metrics['sleep_duration']:
                     missing_metrics.append("😴 Длительность сна")
 
-                # Отправляем напоминание только если есть незаполненные метрики
                 if missing_metrics:
                     reminder_message = (
                         f"⏰ <b>Доброе утро, {name}!</b> 👋\n\n"
@@ -169,10 +159,8 @@ async def send_weekly_reports(bot: Bot):
 
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
-    # Получаем текущее UTC время
     utc_now = datetime.now(pytz.UTC)
 
-    # Маппинг дней недели
     weekday_map = {
         'Monday': 'Понедельник',
         'Tuesday': 'Вторник',
@@ -186,7 +174,6 @@ async def send_weekly_reports(bot: Bot):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Получаем всех пользователей с настроенными недельными отчётами
         async with db.execute(
             """
             SELECT user_id, name, weekly_report_day, weekly_report_time, timezone
@@ -204,16 +191,13 @@ async def send_weekly_reports(bot: Bot):
                 user_timezone_str = row['timezone'] or 'Europe/Moscow'
 
                 try:
-                    # Получаем часовой пояс пользователя
                     user_tz = pytz.timezone(user_timezone_str)
 
-                    # Конвертируем UTC время в часовой пояс пользователя
                     user_now = utc_now.astimezone(user_tz)
-                    current_weekday = user_now.strftime('%A')  # Английское название дня
+                    current_weekday = user_now.strftime('%A')  
                     current_time = user_now.strftime('%H:%M')
                     current_weekday_ru = weekday_map.get(current_weekday, 'Понедельник')
 
-                    # Проверяем, совпадает ли текущий день и время с настройками отчёта
                     if current_weekday_ru != report_day or current_time != report_time:
                         continue
 
@@ -221,37 +205,29 @@ async def send_weekly_reports(bot: Bot):
                     print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
                     continue
 
-                # Генерируем PDF отчёт за последнюю неделю
                 try:
-                    # Получаем тренировки за последние 7 дней
                     end_date = user_now.date()
                     start_date = end_date - timedelta(days=7)
 
                     trainings = await get_trainings_by_period(user_id, start_date, end_date)
 
-                    # Если нет тренировок, не отправляем отчёт
                     if not trainings:
                         print(f"Пользователь {user_id}: нет тренировок за неделю, отчёт не отправлен")
                         continue
 
-                    # Получаем статистику
                     stats = await get_training_statistics(user_id, start_date, end_date)
 
-                    # Формируем текст периода
                     from utils.date_formatter import DateFormatter, get_user_date_format
                     user_date_format = await get_user_date_format(user_id)
                     start_str = DateFormatter.format_date(start_date.strftime('%Y-%m-%d'), user_date_format)
                     end_str = DateFormatter.format_date(end_date.strftime('%Y-%m-%d'), user_date_format)
                     period_text = f"{start_str} - {end_str}"
 
-                    # Генерируем PDF
                     pdf_buffer = await create_training_pdf(trainings, period_text, stats, user_id)
 
-                    # Формируем имя файла
                     today = user_now.strftime('%Y-%m-%d')
                     filename = f"weekly_report_{today}.pdf"
 
-                    # Отправляем PDF файл
                     pdf_file = BufferedInputFile(
                         pdf_buffer.read(),
                         filename=filename
@@ -283,10 +259,8 @@ async def send_training_reminders(bot: Bot):
 
     DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
-    # Получаем текущее UTC время
     utc_now = datetime.now(pytz.UTC)
 
-    # Маппинг дней недели
     weekday_map = {
         'Monday': 'Понедельник',
         'Tuesday': 'Вторник',
@@ -300,7 +274,6 @@ async def send_training_reminders(bot: Bot):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Получаем всех пользователей с включенными напоминаниями
         async with db.execute(
             """
             SELECT user_id, name, training_reminder_days, training_reminder_time, timezone
@@ -317,7 +290,6 @@ async def send_training_reminders(bot: Bot):
                 reminder_time = row['training_reminder_time']
                 user_timezone_str = row['timezone'] or 'Europe/Moscow'
 
-                # Парсим дни недели
                 try:
                     reminder_days = json.loads(reminder_days_json) if reminder_days_json else []
                 except:
@@ -327,20 +299,16 @@ async def send_training_reminders(bot: Bot):
                     continue
 
                 try:
-                    # Получаем часовой пояс пользователя
                     user_tz = pytz.timezone(user_timezone_str)
 
-                    # Конвертируем UTC время в часовой пояс пользователя
                     user_now = utc_now.astimezone(user_tz)
-                    current_weekday = user_now.strftime('%A')  # Английское название дня
+                    current_weekday = user_now.strftime('%A')  
                     current_time = user_now.strftime('%H:%M')
                     current_weekday_ru = weekday_map.get(current_weekday, 'Понедельник')
 
-                    # Проверяем, совпадает ли текущий день с настройками напоминаний
                     if current_weekday_ru not in reminder_days:
                         continue
 
-                    # Проверяем, совпадает ли текущее время с временем напоминания
                     if current_time != reminder_time:
                         continue
 
@@ -348,7 +316,6 @@ async def send_training_reminders(bot: Bot):
                     print(f"Ошибка обработки часового пояса для пользователя {user_id}: {e}")
                     continue
 
-                # Проверяем, есть ли уже тренировки за сегодня
                 today_date = user_now.date()
                 async with db.execute(
                     """
@@ -361,18 +328,15 @@ async def send_training_reminders(bot: Bot):
                     training_row = await training_cursor.fetchone()
                     trainings_today = training_row['count'] if training_row else 0
 
-                # Если есть тренировки за сегодня - не отправляем напоминание
                 if trainings_today > 0:
                     continue
 
-                # Отправляем напоминание
                 reminder_message = (
                     f"🔔 <b>Напоминание, {name}!</b> 👋\n\n"
                     "Не забудь добавить тренировку за сегодня!\n\n"
                     "💪 Каждая тренировка приближает тебя к цели!"
                 )
 
-                # Создаем inline-кнопку для быстрого добавления тренировки
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="➕ Добавить тренировку", callback_data="quick_add_training")]
                 ])
@@ -397,23 +361,18 @@ async def notification_scheduler(bot: Bot):
         try:
             now = datetime.now()
 
-            # Проверяем дни рождения в 00:00
             if now.hour == 0 and now.minute == 0:
                 await check_birthdays(bot)
 
-            # Проверяем ежедневные напоминания каждую минуту
             await send_daily_reminders(bot)
 
-            # Проверяем недельные отчёты каждую минуту
             await send_weekly_reports(bot)
 
-            # Проверяем напоминания о тренировках каждую минуту
             await send_training_reminders(bot)
 
         except Exception as e:
             print(f"Ошибка в планировщике уведомлений: {e}")
 
-        # Ждём 60 секунд до следующей проверки
         await asyncio.sleep(60)
 
 

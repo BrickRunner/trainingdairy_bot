@@ -10,9 +10,8 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://timerman.org"
-API_ENDPOINT = "/api/events/list/ru"  # Реальный endpoint для получения списка событий
+API_ENDPOINT = "/api/events/list/ru"  
 
-# Функции для проверки соответствия виду спорта (аналогично parser.py)
 def check_sport_match(sport_code: str, sport_name: str, target_sport: str) -> bool:
     """
     Проверяет, соответствует ли одна дисциплина указанному виду спорта
@@ -32,17 +31,14 @@ def check_sport_match(sport_code: str, sport_name: str, target_sport: str) -> bo
     sport_name_lower = (sport_name or "").lower()
 
     if target_sport == "run":
-        # Бег: все что содержит run, бег, trail, трейл
         return any(keyword in sport_code_lower or keyword in sport_name_lower
                    for keyword in ["run", "бег", "trail", "трейл", "трал", "running", "забег"])
 
     elif target_sport == "swim":
-        # Плавание: все что содержит swim или плав
         return any(keyword in sport_code_lower or keyword in sport_name_lower
                    for keyword in ["swim", "плав", "swimming", "заплыв", "open-water"])
 
     elif target_sport == "bike":
-        # Велоспорт: все что содержит bike, cycle, велос
         return any(keyword in sport_code_lower or keyword in sport_name_lower
                    for keyword in ["bike", "cycle", "cycling", "велосипед", "велоспорт", "велогонка"])
 
@@ -63,14 +59,12 @@ def matches_sport_type(event: Dict, target_sport: str) -> bool:
     if target_sport == "all":
         return True
 
-    # Проверяем основную дисциплину события (dc = disciplineCode, dn = disciplineName)
     event_sport_code = event.get('dc', '') or event.get('disciplineCode', '')
     event_sport_name = event.get('dn', '') or event.get('disciplineName', '')
 
     if check_sport_match(event_sport_code, event_sport_name, target_sport):
         return True
 
-    # Проверяем название события (t = title)
     event_title = event.get('t', '') or event.get('title', '')
     event_title_lower = event_title.lower()
     if target_sport == "swim" and any(keyword in event_title_lower for keyword in ["плав", "swim", "заплыв"]):
@@ -80,7 +74,6 @@ def matches_sport_type(event: Dict, target_sport: str) -> bool:
     elif target_sport == "run" and any(keyword in event_title_lower for keyword in ["бег", "run", "trail", "трейл", "забег"]):
         return True
 
-    # Проверяем дисциплины в дистанциях (ri = raceItems)
     race_items = event.get('ri', []) or event.get('raceItems', []) or event.get('distances', [])
     for race in race_items:
         race_code = race.get('dc', '') or race.get('disciplineCode', '')
@@ -89,7 +82,6 @@ def matches_sport_type(event: Dict, target_sport: str) -> bool:
         if check_sport_match(race_code, race_name, target_sport):
             return True
 
-        # Проверяем название дистанции (n = name)
         race_title = race.get('n', '') or race.get('name', '')
         race_title_lower = race_title.lower()
         if target_sport == "swim" and any(keyword in race_title_lower for keyword in ["плав", "swim", "заплыв"]):
@@ -146,9 +138,8 @@ class TimmermanParser:
 
         url = BASE_URL + API_ENDPOINT
 
-        # Структура payload согласно реальному API Timerman
         payload = {
-            "EventsLoaderType": 0,  # 0 = предстоящие события
+            "EventsLoaderType": 0,  
             "UseTenantBeneficiaryCode": True,
             "Skip": skip,
             "Take": min(take, 100),
@@ -179,10 +170,8 @@ class TimmermanParser:
             ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # API возвращает массив событий напрямую
                     if isinstance(data, list):
                         return {"list": data, "totalCount": len(data)}
-                    # Или объект с полем Items/TotalCount (с заглавными буквами!)
                     elif isinstance(data, dict):
                         events = data.get("Items") or data.get("events") or data.get("items") or data.get("list") or []
                         total = data.get("TotalCount") or data.get("totalCount") or data.get("total") or len(events)
@@ -219,7 +208,6 @@ class TimmermanParser:
         Returns:
             Список словарей с информацией о соревнованиях
         """
-        # Вычисляем период если указан
         start_date = None
         end_date = None
         if period_months:
@@ -249,7 +237,6 @@ class TimmermanParser:
                 start_date = now
                 end_date = now + timedelta(days=180)
 
-        # Получаем события
         all_events = []
         skip = 0
         batch_size = 100
@@ -284,56 +271,50 @@ class TimmermanParser:
 
         for event in all_events:
             try:
-                # Извлекаем базовую информацию (структура API Timerman)
                 comp = {
-                    "id": event.get("c", ""),  # c = code
-                    "title": event.get("t", ""),  # t = title
+                    "id": event.get("c", ""),  
+                    "title": event.get("t", ""),  
                     "code": event.get("c", ""),
-                    "city": event.get("p", ""),  # p = place
+                    "city": event.get("p", ""),  
                     "place": event.get("p", ""),
                     "address": event.get("address", ""),
-                    "sport_code": event.get("dc", "run"),  # dc = disciplineCode
+                    "sport_code": event.get("dc", "run"),  
                     "image_url": event.get("ImageUrl", ""),
-                    "participants_count": event.get("pc", 0),  # pc = participantsCount
-                    "organizer": event.get("on", "Timerman"),  # on = organizerName
-                    "service": "Timerman",  # Сервис регистрации
+                    "participants_count": event.get("pc", 0),  
+                    "organizer": event.get("on", "Timerman"),  
+                    "service": "Timerman",  
                 }
 
-                # Даты
-                comp["begin_date"] = event.get("d")  # d = date
-                comp["end_date"] = event.get("ed") or event.get("d")  # ed = endDate
+                comp["begin_date"] = event.get("d")  
+                comp["end_date"] = event.get("ed") or event.get("d")  
 
-                # URL события
                 code = event.get("c", "")
                 if code:
                     comp["url"] = f"https://timerman.org/event/{code}"
                 else:
                     comp["url"] = ""
 
-                # Дистанции (ri = raceItems)
                 distances = []
                 race_items = event.get("ri", [])
                 for race in race_items:
                     distances.append({
                         "id": race.get("id", ""),
-                        "name": race.get("n", ""),  # n = name
-                        "distance": race.get("d", 0),  # d = distance
-                        "sport": race.get("dn", ""),  # dn = disciplineName
-                        "sport_code": race.get("dc", ""),  # dc = disciplineCode
-                        "participants_count": race.get("pc", 0),  # pc = participantsCount
-                        "race_date": race.get("sd")  # sd = startDate
+                        "name": race.get("n", ""),  
+                        "distance": race.get("d", 0),  
+                        "sport": race.get("dn", ""),  
+                        "sport_code": race.get("dc", ""),  
+                        "participants_count": race.get("pc", 0),  
+                        "race_date": race.get("sd")  
                     })
 
                 comp["distances"] = distances
 
-                # Фильтрация по периоду
                 if (start_date or end_date) and comp["begin_date"]:
                     try:
                         from datetime import timezone
                         begin_date_str = comp["begin_date"].replace('Z', '+00:00')
                         begin_date_obj = datetime.fromisoformat(begin_date_str)
 
-                        # Если дата не имеет timezone, добавляем UTC
                         if begin_date_obj.tzinfo is None:
                             begin_date_obj = begin_date_obj.replace(tzinfo=timezone.utc)
 
@@ -346,7 +327,6 @@ class TimmermanParser:
                             filtered_by_period += 1
                             continue
 
-                        # Дополнительная проверка: событие должно быть в будущем (>= сегодня)
                         now_utc = datetime.now(timezone.utc)
                         if begin_date_obj < now_utc:
                             filtered_count += 1
@@ -356,7 +336,6 @@ class TimmermanParser:
                     except Exception as e:
                         logger.error(f"Error parsing date for event {comp['id']}: {e}")
 
-                # Фильтрация по городу
                 if city:
                     event_city = event.get('cityName') or event.get('city') or ''
                     event_place = event.get('place') or ''
@@ -380,7 +359,6 @@ class TimmermanParser:
                         filtered_by_city += 1
                         continue
 
-                # Фильтрация по виду спорта
                 if sport:
                     sport_matches = matches_sport_type(event, sport)
 
@@ -408,7 +386,6 @@ class TimmermanParser:
         return competitions
 
 
-# Вспомогательные функции для использования в handlers
 
 async def fetch_competitions(
     city: Optional[str] = None,

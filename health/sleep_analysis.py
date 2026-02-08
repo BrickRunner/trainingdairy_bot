@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 class SleepAnalyzer:
     """Класс для анализа данных сна"""
 
-    # Рекомендуемые нормы
     RECOMMENDED_SLEEP_MIN = 7.0
     RECOMMENDED_SLEEP_MAX = 9.0
     OPTIMAL_SLEEP = 8.0
@@ -74,22 +73,18 @@ class SleepAnalyzer:
         """Рассчитывает общий балл качества сна (0-100)"""
         scores = []
 
-        # Балл за длительность
         duration_score = self._score_duration()
         scores.append(duration_score)
 
-        # Балл за качество
         quality_score = self._score_quality()
         if quality_score is not None:
             scores.append(quality_score)
 
-        # Балл за стабильность
         consistency_score = self._score_consistency()
         scores.append(consistency_score)
 
         overall = sum(scores) / len(scores) if scores else 0
 
-        # Определение категории
         if overall >= 85:
             category = 'Отличный'
             emoji = '🌟'
@@ -117,11 +112,9 @@ class SleepAnalyzer:
         if self.RECOMMENDED_SLEEP_MIN <= avg_duration <= self.RECOMMENDED_SLEEP_MAX:
             score = 100
         elif avg_duration < self.RECOMMENDED_SLEEP_MIN:
-            # Недостаток сна
             diff = self.RECOMMENDED_SLEEP_MIN - avg_duration
             score = max(0, 100 - (diff * 20))
         else:
-            # Избыток сна
             diff = avg_duration - self.RECOMMENDED_SLEEP_MAX
             score = max(60, 100 - (diff * 10))
 
@@ -134,7 +127,6 @@ class SleepAnalyzer:
             return None
 
         avg_quality = statistics.mean(qualities)
-        # Качество от 1 до 5, переводим в 0-100
         score = (avg_quality / 5) * 100
         return score
 
@@ -145,9 +137,6 @@ class SleepAnalyzer:
             return 100
 
         std_dev = statistics.stdev(durations)
-        # Чем меньше отклонение, тем лучше
-        # 0.5 часа отклонение = 100 баллов
-        # 2 часа отклонение = 0 баллов
         score = max(0, 100 - (std_dev * 50))
         return score
 
@@ -159,14 +148,12 @@ class SleepAnalyzer:
         min_duration = min(durations)
         max_duration = max(durations)
 
-        # Процент ночей с достаточным сном
         sufficient_nights = sum(
             1 for d in durations
             if self.RECOMMENDED_SLEEP_MIN <= d <= self.RECOMMENDED_SLEEP_MAX
         )
         sufficient_percentage = (sufficient_nights / len(durations)) * 100
 
-        # Дефицит/избыток сна
         sleep_debt = (self.OPTIMAL_SLEEP - avg) * len(durations)
 
         status = 'В норме'
@@ -192,14 +179,12 @@ class SleepAnalyzer:
 
         avg = statistics.mean(qualities)
 
-        # Распределение по категориям
         distribution = {
             'poor': sum(1 for q in qualities if q <= 2),
             'fair': sum(1 for q in qualities if q == 3),
             'good': sum(1 for q in qualities if q >= 4)
         }
 
-        # Тренд качества
         if len(qualities) >= 3:
             recent = statistics.mean(qualities[-3:])
             earlier = statistics.mean(qualities[:3])
@@ -259,7 +244,6 @@ class SleepAnalyzer:
         if not recovery_data:
             return None
 
-        # Анализ корреляции сна и восстановления
         good_recovery_nights = sum(
             1 for r in recovery_data
             if r['energy'] >= 4 and r['duration'] >= self.RECOMMENDED_SLEEP_MIN
@@ -280,7 +264,6 @@ class SleepAnalyzer:
         if len(durations) < 4:
             return {'status': 'Недостаточно данных'}
 
-        # Сравнение первой и второй половины периода
         mid = len(durations) // 2
         first_half_avg = statistics.mean(durations[:mid])
         second_half_avg = statistics.mean(durations[mid:])
@@ -310,7 +293,6 @@ class SleepAnalyzer:
         duration_analysis = self._analyze_duration()
         consistency = self._analyze_consistency()
 
-        # Рекомендации по длительности
         if duration_analysis['average'] < self.RECOMMENDED_SLEEP_MIN:
             deficit = self.RECOMMENDED_SLEEP_MIN - duration_analysis['average']
             recommendations.append(
@@ -322,14 +304,12 @@ class SleepAnalyzer:
                 "⚠️ Вы спите слишком много. Это может указывать на проблемы со здоровьем или качеством сна."
             )
 
-        # Рекомендации по стабильности
         if consistency['std_dev'] > 1.0:
             recommendations.append(
                 "🕐 Установите постоянный режим сна. "
                 "Ложитесь и просыпайтесь в одно и то же время каждый день."
             )
 
-        # Рекомендации по качеству
         quality = self._analyze_quality()
         if quality and quality['average'] < 3.5:
             recommendations.append(
@@ -337,7 +317,6 @@ class SleepAnalyzer:
                 "темная комната, комфортная температура, отсутствие шума."
             )
 
-        # Рекомендации по восстановлению
         recovery = self._analyze_recovery()
         if recovery and recovery['recovery_score'] < 60:
             recommendations.append(
@@ -345,7 +324,6 @@ class SleepAnalyzer:
                 "Возможно, требуется больше времени на восстановление."
             )
 
-        # Общие рекомендации
         if duration_analysis['sufficient_nights_pct'] < 70:
             recommendations.append(
                 "📊 Только {:.0f}% ночей вы спите достаточно. "
@@ -375,18 +353,15 @@ def format_sleep_analysis_message(analysis: Dict) -> str:
 
     msg_parts = []
 
-    # Заголовок
     msg_parts.append("😴 <b>ГЛУБОКИЙ АНАЛИЗ СНА</b>")
     msg_parts.append(f"Период: {analysis['period_days']} дней\n")
 
-    # Общий балл
     score = analysis['overall_score']
     msg_parts.append(
         f"{score['emoji']} <b>Общая оценка: {score['score']}/100</b>\n"
         f"Категория: {score['category']}\n"
     )
 
-    # Анализ длительности
     duration = analysis['duration_analysis']
     msg_parts.append(
         f"⏱ <b>ДЛИТЕЛЬНОСТЬ СНА</b>\n"
@@ -400,7 +375,6 @@ def format_sleep_analysis_message(analysis: Dict) -> str:
     elif duration['sleep_debt_hours'] < -5:
         msg_parts.append(f"⚠️ Избыток сна: {abs(duration['sleep_debt_hours'])} ч\n")
 
-    # Анализ качества
     quality = analysis.get('quality_analysis')
     if quality:
         msg_parts.append(
@@ -412,7 +386,6 @@ def format_sleep_analysis_message(analysis: Dict) -> str:
             f"Тренд: {quality['trend']}\n"
         )
 
-    # Стабильность
     consistency = analysis['consistency_analysis']
     msg_parts.append(
         f"📊 <b>СТАБИЛЬНОСТЬ РЕЖИМА</b>\n"
@@ -420,7 +393,6 @@ def format_sleep_analysis_message(analysis: Dict) -> str:
         f"Отклонение: ±{consistency['std_dev']} ч\n"
     )
 
-    # Восстановление
     recovery = analysis.get('recovery_analysis')
     if recovery:
         msg_parts.append(
@@ -429,7 +401,6 @@ def format_sleep_analysis_message(analysis: Dict) -> str:
             f"({recovery['good_recovery_nights']}/{recovery['total_nights']} ночей)\n"
         )
 
-    # Тренды
     trends = analysis['trends']
     if trends.get('trend'):
         msg_parts.append(
@@ -440,15 +411,12 @@ def format_sleep_analysis_message(analysis: Dict) -> str:
             msg_parts.append(f" ({trends['change_hours']:+.1f} ч)")
         msg_parts.append("\n")
 
-    # Рекомендации
     recommendations = analysis['recommendations']
     if recommendations:
         msg_parts.append("\n<b>💡 РЕКОМЕНДАЦИИ:</b>")
         if len(recommendations) == 1:
-            # Если одна рекомендация - без нумерации
             msg_parts.append(f"\n{recommendations[0]}")
         else:
-            # Если несколько рекомендаций - с нумерацией
             for i, rec in enumerate(recommendations, 1):
                 msg_parts.append(f"\n{i}. {rec}")
 

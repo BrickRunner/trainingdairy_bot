@@ -18,11 +18,9 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-# Определяем пути к шрифтам
 def get_font_paths():
     """Получить пути к шрифтам DejaVu в зависимости от ОС"""
 
-    # Сначала проверяем локальную папку fonts в проекте
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     local_fonts = os.path.join(project_root, 'fonts')
@@ -37,7 +35,6 @@ def get_font_paths():
                 'bold': dejavu_bold if os.path.exists(dejavu_bold) else dejavu_regular
             }
 
-    # Если нет локальных, ищем системные
     if sys.platform.startswith('win'):
         possible_paths = [
             r'C:\Windows\Fonts\DejaVuSans.ttf',
@@ -62,7 +59,6 @@ def get_font_paths():
 
     return None
 
-# Регистрируем шрифты
 font_paths = get_font_paths()
 FONT_NAME = 'DejaVuSans'
 FONT_NAME_BOLD = 'DejaVuSans-Bold'
@@ -108,10 +104,8 @@ async def create_training_plan_pdf(plan_data: dict, sport_type: str, plan_durati
         bottomMargin=2*cm
     )
 
-    # Создаем стили
     styles = getSampleStyleSheet()
 
-    # Основные стили с русским шрифтом
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
@@ -148,10 +142,8 @@ async def create_training_plan_pdf(plan_data: dict, sport_type: str, plan_durati
         leading=14
     )
 
-    # Контент документа
     story = []
 
-    # Заголовок
     sport_names = {
         'run': 'Бег',
         'swim': 'Плавание',
@@ -171,7 +163,6 @@ async def create_training_plan_pdf(plan_data: dict, sport_type: str, plan_durati
     story.append(Paragraph(f"Дата создания: {datetime.now().strftime('%d.%m.%Y')}", normal_style))
     story.append(Spacer(1, 0.5*cm))
 
-    # Общая информация
     if plan_data.get('weekly_volume') or plan_data.get('key_workouts'):
         story.append(Paragraph("Общая информация", heading_style))
 
@@ -186,17 +177,14 @@ async def create_training_plan_pdf(plan_data: dict, sport_type: str, plan_durati
 
         story.append(Spacer(1, 0.5*cm))
 
-    # План тренировок
     if plan_data.get('plan'):
         story.append(Paragraph("План тренировок", heading_style))
         story.append(Spacer(1, 0.3*cm))
 
         for i, workout in enumerate(plan_data['plan'], 1):
-            # День недели
             story.append(Paragraph(f"<b>{i}. {workout.get('day', 'День ' + str(i))}</b>", bold_style))
             story.append(Spacer(1, 0.1*cm))
 
-            # Создаем таблицу для тренировки
             workout_data = [
                 ['Тип тренировки:', workout.get('workout_type', 'N/A')],
                 ['Объем:', workout.get('volume', 'N/A')],
@@ -228,21 +216,18 @@ async def create_training_plan_pdf(plan_data: dict, sport_type: str, plan_durati
             story.append(workout_table)
             story.append(Spacer(1, 0.5*cm))
 
-    # Объяснение плана
     if plan_data.get('explanation'):
         story.append(Paragraph("Важные рекомендации", heading_style))
         explanation_text = plan_data['explanation'].replace('\n', '<br/>')
         story.append(Paragraph(explanation_text, normal_style))
         story.append(Spacer(1, 0.3*cm))
 
-    # Советы по восстановлению
     if plan_data.get('recovery_tips'):
         story.append(Paragraph("Восстановление", heading_style))
         recovery_text = plan_data['recovery_tips'].replace('\n', '<br/>')
         story.append(Paragraph(recovery_text, normal_style))
         story.append(Spacer(1, 0.3*cm))
 
-    # Disclaimer
     story.append(Spacer(1, 1*cm))
     disclaimer_style = ParagraphStyle(
         'Disclaimer',
@@ -258,7 +243,6 @@ async def create_training_plan_pdf(plan_data: dict, sport_type: str, plan_durati
         disclaimer_style
     ))
 
-    # Генерируем PDF
     doc.build(story)
     buffer.seek(0)
 

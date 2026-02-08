@@ -33,39 +33,32 @@ async def chat_with_psychologist(
         return None
 
     try:
-        # Форматируем историю диалога
         history_str = _format_conversation_history(conversation_history or [])
 
-        # Форматируем контекст спортсмена
         context_str = _format_athlete_context(athlete_context or {})
 
-        # Формируем промпт
         prompt = PROMPT_PSYCHOLOGIST.format(
             conversation_history=history_str,
             athlete_context=context_str,
             user_message=user_message
         )
 
-        # Формируем messages для API
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT_PSYCHOLOGIST}
         ]
 
-        # Добавляем историю диалога
         if conversation_history:
-            for conv in conversation_history[-5:]:  # Последние 5 сообщений
+            for conv in conversation_history[-5:]:  
                 messages.append({"role": "user", "content": conv.get("user", "")})
                 messages.append({"role": "assistant", "content": conv.get("ai", "")})
 
-        # Добавляем текущее сообщение
         messages.append({"role": "user", "content": prompt})
 
-        # Запрос к AI
         response = await _call_with_retry(
             ai_client,
-            model="google/gemini-2.5-flash",  # Бесплатная модель
+            model="google/gemini-2.5-flash",  
             messages=messages,
-            temperature=0.8,  # Более творческий ответ для психолога
+            temperature=0.8,  
             max_tokens=1000
         )
 
@@ -85,7 +78,7 @@ def _format_conversation_history(history: List[Dict[str, str]]) -> str:
         return "Это первое сообщение в диалоге"
 
     formatted = []
-    for i, conv in enumerate(history[-5:], 1):  # Последние 5
+    for i, conv in enumerate(history[-5:], 1):  
         formatted.append(f"Сообщение {i}:")
         formatted.append(f"Спортсмен: {conv.get('user', '')}")
         formatted.append(f"Психолог: {conv.get('ai', '')}")

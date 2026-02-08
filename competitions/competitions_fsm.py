@@ -10,11 +10,11 @@ class UpcomingCompetitionsStates(StatesGroup):
     waiting_for_city = State()
     waiting_for_period = State()
     waiting_for_sport = State()
-    waiting_for_service = State()  # Выбор сервиса для регистрации
+    waiting_for_service = State()  
     showing_results = State()
-    waiting_for_distance = State()  # Старое: выбор одной дистанции
-    selecting_multiple_distances = State()  # Новое: выбор нескольких дистанций с чекбоксами
-    waiting_for_custom_distance = State()  # Ручной ввод дистанции (для HeroLeague)
+    waiting_for_distance = State()  
+    selecting_multiple_distances = State()  
+    waiting_for_custom_distance = State()  
     waiting_for_target_time = State()
 
 
@@ -31,6 +31,6 @@ class CoachUpcomingCompetitionsStates(StatesGroup):
     waiting_for_sport = State()
     waiting_for_service = State()
     showing_results = State()
-    selecting_multiple_distances = State()  # Выбор нескольких дистанций с чекбоксами
-    waiting_for_custom_distance = State()  # Ручной ввод дистанции (для HeroLeague)
-    waiting_for_target_time = State()  # Ввод целевого времени
+    selecting_multiple_distances = State()  
+    waiting_for_custom_distance = State()  
+    waiting_for_target_time = State()  

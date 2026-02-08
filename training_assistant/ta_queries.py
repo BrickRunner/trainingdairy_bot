@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
 
 
-# ==================== TRAINING PLANS ====================
 
 async def save_training_plan(
     user_id: int,

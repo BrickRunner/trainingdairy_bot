@@ -5,22 +5,19 @@
 import os
 import tempfile
 
-# Устанавливаем переменную окружения для matplotlib перед импортом
 os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
 
 import matplotlib
-matplotlib.use('Agg')  # Используем Agg backend для серверов
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from collections import defaultdict
 import io
 import logging
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Словарь для перевода месяцев на русский
 MONTH_NAMES_RU = {
     '01': 'Январь', '02': 'Февраль', '03': 'Март', '04': 'Апрель',
     '05': 'Май', '06': 'Июнь', '07': 'Июль', '08': 'Август',
@@ -50,7 +47,6 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
             logger.warning(f"Нет тренировок за период {period}")
             return None
 
-        # Определяем начальную и конечную даты периода
         today = datetime.now().date()
         
         if period == 'week':
@@ -60,48 +56,41 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
         elif period == 'month':
             start_date = today.replace(day=1)
         else:
-            # По умолчанию - неделя
             start_date = today - timedelta(days=today.weekday())
         
         end_date = today
 
-        # Определяем формат группировки данных и заголовки в зависимости от периода
-        if days <= 7:  # Неделя - группируем по дням
+        if days <= 7:  
             group_format = '%Y-%m-%d'
             x_label = 'День'
             title_suffix = 'за неделю'
             date_formatter = lambda d: datetime.strptime(d, '%Y-%m-%d').strftime('%d.%m')
-        elif days <= 14:  # 2 недели - группируем по дням
+        elif days <= 14:  
             group_format = '%Y-%m-%d'
             x_label = 'День'
             title_suffix = 'за 2 недели'
             date_formatter = lambda d: datetime.strptime(d, '%Y-%m-%d').strftime('%d.%m')
-        elif days <= 31:  # Месяц - группируем по дням
+        elif days <= 31:  
             group_format = '%Y-%m-%d'
             x_label = 'День'
             title_suffix = 'за месяц'
             date_formatter = lambda d: datetime.strptime(d, '%Y-%m-%d').strftime('%d.%m')
-        else:  # Более длительный период - группируем по месяцам
+        else:  
             group_format = '%Y-%m'
             x_label = 'Месяц'
             title_suffix = 'за период'
-            # Используем русские названия месяцев
             date_formatter = lambda d: f"{MONTH_NAMES_RU[d.split('-')[1]]} {d.split('-')[0]}"
 
-        # Создаём полный список дат/периодов для отображения
         all_periods = []
         if group_format == '%Y-%m-%d':
-            # Для дней - создаём список всех дат от start_date до end_date
             current_date = start_date
             while current_date <= end_date:
                 all_periods.append(current_date.strftime('%Y-%m-%d'))
                 current_date += timedelta(days=1)
         else:
-            # Для месяцев - создаём список всех месяцев в периоде
             current_date = start_date
             while current_date <= end_date:
                 all_periods.append(current_date.strftime('%Y-%m'))
-                # Переход к следующему месяцу
                 if current_date.month == 12:
                     current_date = current_date.replace(year=current_date.year + 1, month=1)
                 else:
@@ -109,22 +98,17 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
         
         logger.info(f"Полный диапазон периодов: {all_periods}")
 
-        # Группируем данные из тренировок
         grouped_data = defaultdict(lambda: {'fatigue': [], 'distance': 0.0, 'types': defaultdict(int)})
         
         for w in workouts:
-            # Определяем ключ группировки
             if group_format == '%Y-%m':
-                # Для года берем год-месяц
-                group_key = w['date'][:7]  # YYYY-MM
+                group_key = w['date'][:7]  
             else:
-                # Для недели и месяца берем полную дату
                 group_key = w['date']
             
             if w.get('fatigue_level') is not None:
                 grouped_data[group_key]['fatigue'].append(float(w['fatigue_level']))
 
-            # Безопасное получение дистанции
             distance_value = w.get('distance') or w.get('calculated_volume') or 0.0
             distance = float(distance_value) if distance_value is not None else 0.0
             grouped_data[group_key]['distance'] += distance
@@ -132,21 +116,15 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
             
             logger.debug(f"Обработка тренировки: {w['type']}, период: {group_key}, дистанция: {distance}")
 
-        # Используем все периоды (включая пустые)
         periods = all_periods
         logger.info(f"Периоды для отображения: {periods}")
 
-        # Форматируем подписи для оси X
         period_labels = [date_formatter(p) for p in periods]
 
-        # Создаём единую фигуру с тремя подграфиками
-        # Размещаем графики вертикально (3 строки, 1 столбец)
         fig = plt.figure(figsize=(12, 16))
 
-        # График 1: Усилия (линейный график) + среднее значение
         ax1 = plt.subplot(3, 1, 1)
         
-        # Заполняем все периоды, включая пустые (0)
         period_fatigues = [
             sum(grouped_data[period]['fatigue']) / len(grouped_data[period]['fatigue'])
             if grouped_data[period]['fatigue'] else 0
@@ -166,13 +144,10 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
         ax1.tick_params(axis='x', rotation=45)
         logger.info("График усилий создан")
 
-        # График 2: Километраж (столбчатая диаграмма) + среднее значение
         ax2 = plt.subplot(3, 1, 2)
 
-        # Получаем дистанции в км из БД
         period_distances_km = [grouped_data[period]['distance'] for period in periods]
 
-        # Конвертируем в единицы пользователя если нужно
         if distance_unit == 'мили':
             from utils.unit_converter import km_to_miles
             period_distances = [km_to_miles(d) if d > 0 else 0 for d in period_distances_km]
@@ -195,7 +170,6 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
         ax2.tick_params(axis='x', rotation=45)
         logger.info(f"График километража создан ({unit_text})")
 
-        # График 3: Круговая диаграмма типов тренировок
         ax3 = plt.subplot(3, 1, 3)
         
         type_counts = defaultdict(int)
@@ -220,10 +194,8 @@ def generate_graphs(workouts: list, period: str, days: int, distance_unit: str =
                          fontsize=13, fontweight='bold')
             logger.warning("Нет данных для круговой диаграммы")
 
-        # Настраиваем отступы между графиками
         plt.tight_layout(pad=3.0)
         
-        # Сохраняем в BytesIO
         combined_img = io.BytesIO()
         fig.savefig(combined_img, format='png', dpi=150, bbox_inches='tight')
         combined_img.seek(0)

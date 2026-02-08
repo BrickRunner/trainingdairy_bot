@@ -34,7 +34,6 @@ async def save_health_metrics(
                    f"pulse={morning_pulse}, weight={weight}, sleep={sleep_duration}, quality={sleep_quality}")
 
         async with aiosqlite.connect(DB_PATH) as db:
-            # Сначала проверяем, есть ли запись
             async with db.execute(
                 "SELECT id FROM health_metrics WHERE user_id = ? AND date = ?",
                 (user_id, metric_date)
@@ -43,10 +42,12 @@ async def save_health_metrics(
                 logger.info(f"Existing record: {existing}")
 
             if existing:
-                # Запись существует - обновляем только переданные поля
+                # Запись уже существует - обновляем только переданные поля
                 update_parts = []
                 params = []
 
+                # Динамически формируем SET часть SQL запроса
+                # Обновляем только те поля, которые не None
                 if morning_pulse is not None:
                     update_parts.append("morning_pulse = ?")
                     params.append(morning_pulse)
@@ -73,6 +74,7 @@ async def save_health_metrics(
                     params.append(notes)
 
                 if update_parts:
+                    # Добавляем метку времени обновления
                     update_parts.append("updated_at = CURRENT_TIMESTAMP")
                     params.extend([user_id, metric_date])
 

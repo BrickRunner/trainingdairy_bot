@@ -51,7 +51,6 @@ from utils.goals_checker import check_weight_goal
 router = Router()
 
 
-# ============== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ФОРМАТИРОВАНИЯ ==============
 
 async def format_birth_date(birth_date_str: str, user_id: int) -> str:
     """
@@ -76,7 +75,6 @@ async def format_birth_date(birth_date_str: str, user_id: int) -> str:
         return birth_date_str
 
 
-# ============== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ОТПРАВКИ МЕНЮ ==============
 
 async def send_profile_menu(message: Message, user_id: int):
     """Отправить меню профиля"""
@@ -130,26 +128,22 @@ async def send_goals_menu(message: Message, user_id: int):
         weekly_count = settings.get('weekly_trainings_goal')
         weight_goal = settings.get('weight_goal')
 
-        # Получаем статистику текущей недели для отображения прогресса
         stats = await get_training_statistics(user_id, 'week')
         current_volume = stats.get('total_distance', 0)
         current_count = stats.get('total_trainings', 0)
 
-        # Недельный объем с прогрессом
         if weekly_volume:
             progress_percent = (current_volume / weekly_volume * 100) if weekly_volume > 0 else 0
             info_text += f"📊 Недельный объем: {current_volume:.1f}/{weekly_volume} {distance_unit} ({progress_percent:.0f}%)\n"
         else:
             info_text += f"📊 Недельный объем: {current_volume:.1f} {distance_unit} (цель не задана)\n"
 
-        # Тренировок в неделю с прогрессом
         if weekly_count:
             progress_percent = (current_count / weekly_count * 100) if weekly_count > 0 else 0
             info_text += f"🔢 Тренировок в неделю: {current_count}/{weekly_count} ({progress_percent:.0f}%)\n"
         else:
             info_text += f"🔢 Тренировок в неделю: {current_count} (цель не задана)\n"
 
-        # Целевой вес
         weight_goal_display = f"{weight_goal:.1f}" if weight_goal else 'не задан'
         info_text += f"⚖️ Целевой вес: {weight_goal_display} {weight_unit}\n\n"
 
@@ -157,7 +151,6 @@ async def send_goals_menu(message: Message, user_id: int):
         if type_goals:
             info_text += "🏃 Цели по типам:\n"
             for t_type, goal in type_goals.items():
-                # Для силовых - минуты, для остальных - км
                 unit = "мин/неделю" if t_type == 'силовая' else f"{distance_unit}/неделю"
                 info_text += f"  • {t_type}: {goal} {unit}\n"
     else:
@@ -217,7 +210,6 @@ async def send_notifications_menu(message: Message, user_id: int):
     )
 
 
-# ============== ГЛАВНОЕ МЕНЮ НАСТРОЕК ==============
 
 @router.message(F.text == "⚙️ Настройки")
 @router.message(Command("settings"))
@@ -286,7 +278,6 @@ async def callback_settings_menu(callback: CallbackQuery, state: FSMContext):
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
 
-        # Форматируем пол
         gender = settings.get('gender')
         if gender == 'male':
             gender_text = '👨 Мужской'
@@ -312,7 +303,6 @@ async def callback_settings_menu(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ============== РАЗДЕЛ: ПРОФИЛЬ ==============
 
 @router.callback_query(F.data == "settings:profile")
 async def callback_profile_settings(callback: CallbackQuery):
@@ -327,7 +317,6 @@ async def callback_profile_settings(callback: CallbackQuery):
         birth_date_formatted = await format_birth_date(settings.get('birth_date'), user_id)
         info_text += f"🎂 Дата рождения: {birth_date_formatted}\n"
 
-        # Форматируем пол
         gender = settings.get('gender')
         if gender == 'male':
             gender_text = '👨 Мужской'
@@ -343,7 +332,6 @@ async def callback_profile_settings(callback: CallbackQuery):
         info_text += f"⚖️ Вес: {weight_display} {weight_unit}\n"
         info_text += f"📏 Рост: {settings.get('height') or 'не указан'} см\n"
 
-        # Основные типы тренировок
         types = await get_main_training_types(user_id)
         types_display = ', '.join(types) if types else 'не выбраны'
         info_text += f"🏃 Типы тренировок: {types_display}\n"
@@ -358,7 +346,6 @@ async def callback_profile_settings(callback: CallbackQuery):
     await callback.answer()
 
 
-# 1. ИМЯ
 @router.callback_query(F.data == "settings:profile:name")
 async def callback_set_name(callback: CallbackQuery, state: FSMContext):
     """Начало установки имени"""
@@ -376,18 +363,15 @@ async def process_name(message: Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
         await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
-        # Возврат в меню профиля
         await send_profile_menu(message, message.from_user.id)
         return
     
     name = message.text.strip()
     
-    # Проверка минимальной длины
     if len(name) < 2:
         await message.answer("❌ Имя слишком короткое. Минимум 2 символа.")
         return
     
-    # Проверка максимальной длины
     if len(name) > 50:
         await message.answer("❌ Имя слишком длинное. Максимум 50 символов.")
         return
@@ -400,18 +384,15 @@ async def process_name(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()
     )
     await state.clear()
-    # Возврат в меню профиля
     await send_profile_menu(message, user_id)
 
 
-# 2. ДАТА РОЖДЕНИЯ
 @router.callback_query(F.data == "settings:profile:birth_date")
 async def callback_set_birth_date(callback: CallbackQuery, state: FSMContext):
     """Начало установки даты рождения"""
     from bot.calendar_keyboard import CalendarKeyboard
     from datetime import datetime
 
-    # Показываем календарь для выбора даты рождения (ограничен текущей датой)
     calendar = CalendarKeyboard.create_calendar(1, datetime.now(), "cal_birth", max_date=datetime.now())
     await callback.message.answer(
         "🎂 Выберите дату рождения из календаря:\n\n"
@@ -428,11 +409,9 @@ async def process_birth_date(message: Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
         await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
-        # Возврат в меню профиля
         await send_profile_menu(message, message.from_user.id)
         return
     
-    # Проверяем формат даты
     date_pattern = r'(\d{2})\.(\d{2})\.(\d{4})'
     match = re.match(date_pattern, message.text.strip())
     
@@ -447,12 +426,10 @@ async def process_birth_date(message: Message, state: FSMContext):
     try:
         birth_date = datetime(int(year), int(month), int(day))
         
-        # Проверяем что дата не в будущем
         if birth_date > datetime.now():
             await message.answer("❌ Дата рождения не может быть в будущем!")
             return
         
-        # Проверяем адекватность возраста (от 5 до 120 лет)
         age = (datetime.now() - birth_date).days // 365
         if age < 5 or age > 120:
             await message.answer("❌ Пожалуйста, введите корректную дату рождения.")
@@ -469,14 +446,12 @@ async def process_birth_date(message: Message, state: FSMContext):
         )
         await state.clear()
         
-        # Возврат в меню профиля
         await send_profile_menu(message, user_id)
         
     except ValueError:
         await message.answer("❌ Некорректная дата. Проверьте правильность ввода.")
 
 
-# 3. ПОЛ
 @router.callback_query(F.data == "settings:profile:gender")
 async def callback_set_gender(callback: CallbackQuery):
     """Выбор пола"""
@@ -500,7 +475,6 @@ async def callback_save_gender(callback: CallbackQuery):
         user_id = callback.from_user.id
         await update_user_setting(user_id, 'gender', gender)
 
-        # Возврат в меню профиля с обновленной информацией
         settings = await get_user_settings(user_id)
 
         info_text = "👤 **Настройки профиля**\n\n"
@@ -538,7 +512,6 @@ async def callback_save_gender(callback: CallbackQuery):
         await callback.answer("Ошибка!")
 
 
-# 4. ВЕС
 @router.callback_query(F.data == "settings:profile:weight")
 async def callback_set_weight(callback: CallbackQuery, state: FSMContext):
     """Начало установки веса"""
@@ -558,7 +531,6 @@ async def process_weight(message: Message, state: FSMContext):
     """Обработка ввода веса"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
         await send_profile_menu(message, message.from_user.id)
         return
     
@@ -575,7 +547,6 @@ async def process_weight(message: Message, state: FSMContext):
         settings = await get_user_settings(user_id)
         weight_unit = settings.get('weight_unit', 'кг')
 
-        # Проверяем достижение целевого веса
         try:
             await check_weight_goal(user_id, weight, message.bot)
         except Exception as e:
@@ -589,14 +560,12 @@ async def process_weight(message: Message, state: FSMContext):
         )
         await state.clear()
 
-        # Возврат в меню профиля
         await send_profile_menu(message, user_id)
         
     except ValueError:
         await message.answer("❌ Некорректное значение. Введите число (например: 70.5)")
 
 
-# 5. РОСТ
 @router.callback_query(F.data == "settings:profile:height")
 async def callback_set_height(callback: CallbackQuery, state: FSMContext):
     """Начало установки роста"""
@@ -613,7 +582,6 @@ async def process_height(message: Message, state: FSMContext):
     """Обработка ввода роста"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
         await send_profile_menu(message, message.from_user.id)
         return
     
@@ -632,21 +600,18 @@ async def process_height(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
-        # Возврат в подменю
         await send_profile_menu(message, message.from_user.id)
         
     except ValueError:
         await message.answer("❌ Некорректное значение. Введите число (например: 175)")
 
 
-# 6. ОСНОВНЫЕ ТИПЫ ТРЕНИРОВОК
 @router.callback_query(F.data == "settings:profile:main_types")
 async def callback_set_main_types(callback: CallbackQuery, state: FSMContext):
     """Выбор основных типов тренировок"""
     user_id = callback.from_user.id
     selected_types = await get_main_training_types(user_id)
     
-    # Сохраняем в состояние
     await state.update_data(selected_types=selected_types)
     
     await callback.message.edit_text(
@@ -694,7 +659,6 @@ async def callback_save_training_types(callback: CallbackQuery, state: FSMContex
     await set_main_training_types(user_id, selected_types)
     await state.clear()
 
-    # Возврат в меню профиля с обновленной информацией
     settings = await get_user_settings(user_id)
 
     info_text = "👤 **Настройки профиля**\n\n"
@@ -732,7 +696,6 @@ async def callback_save_training_types(callback: CallbackQuery, state: FSMContex
     await callback.answer("Сохранено!")
 
 
-# ============== РАЗДЕЛ: ПУЛЬСОВЫЕ ЗОНЫ (7) ==============
 
 async def send_pulse_zones_menu(message: Message, user_id: int):
     """Отправить меню пульсовых зон"""
@@ -787,40 +750,6 @@ async def callback_pulse_zones_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-# TODO: Вернуть после подключения AI
-# @router.callback_query(F.data == "settings:pulse:auto")
-# async def callback_pulse_auto(callback: CallbackQuery, state: FSMContext):
-#     """Автоматический расчет пульсовых зон"""
-#     user_id = callback.from_user.id
-#     settings = await get_user_settings(user_id)
-#
-#     if settings and settings.get('birth_date'):
-#         birth_date = datetime.strptime(settings['birth_date'], '%Y-%m-%d')
-#         age = (datetime.now() - birth_date).days // 365
-#
-#         await set_pulse_zones_auto(user_id, age)
-#
-#         settings = await get_user_settings(user_id)
-#
-#         await callback.message.edit_text(
-#             f"✅ Пульсовые зоны рассчитаны автоматически!\n\n"
-#             f"Ваш возраст: {age} лет\n"
-#             f"Максимальный пульс: {settings['max_pulse']} уд/мин\n\n"
-#             f"🟢 Зона 1: {settings['zone1_min']}-{settings['zone1_max']}\n"
-#             f"🔵 Зона 2: {settings['zone2_min']}-{settings['zone2_max']}\n"
-#             f"🟡 Зона 3: {settings['zone3_min']}-{settings['zone3_max']}\n"
-#             f"🟠 Зона 4: {settings['zone4_min']}-{settings['zone4_max']}\n"
-#             f"🔴 Зона 5: {settings['zone5_min']}-{settings['zone5_max']}\n"
-#         )
-#         await callback.answer("Зоны рассчитаны!")
-#
-#         # Возврат в меню пульсовых зон
-#         await callback_pulse_zones_menu(callback)
-#     else:
-#         await callback.answer(
-#             "❌ Сначала укажите дату рождения в настройках профиля!",
-#             show_alert=True
-#         )
 
 
 @router.callback_query(F.data == "settings:pulse:manual")
@@ -840,7 +769,6 @@ async def process_max_pulse(message: Message, state: FSMContext):
     """Обработка ввода максимального пульса"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю пульсовых зон
         await send_pulse_zones_menu(message, message.from_user.id)
         return
     
@@ -867,21 +795,14 @@ async def process_max_pulse(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
-        # Возврат в подменю пульсовых зон
         await send_pulse_zones_menu(message, user_id)
         
     except ValueError:
         await message.answer("❌ Введите целое число.")
 
 
-# Убрана кнопка "Показать текущие зоны" - информация и так отображается в меню
-# @router.callback_query(F.data == "settings:pulse:show")
-# async def callback_show_pulse_zones(callback: CallbackQuery):
-#     """Показать текущие пульсовые зоны"""
-#     await callback_pulse_zones_menu(callback)
 
 
-# ============== РАЗДЕЛ: ЦЕЛИ (8-11) ==============
 
 @router.callback_query(F.data == "settings:goals")
 async def callback_goals_menu(callback: CallbackQuery):
@@ -899,35 +820,29 @@ async def callback_goals_menu(callback: CallbackQuery):
         weekly_count = settings.get('weekly_trainings_goal')
         weight_goal = settings.get('weight_goal')
 
-        # Получаем статистику текущей недели для отображения прогресса
         stats = await get_training_statistics(user_id, 'week')
         current_volume = stats.get('total_distance', 0)
         current_count = stats.get('total_trainings', 0)
 
-        # Недельный объем с прогрессом
         if weekly_volume:
             progress_percent = (current_volume / weekly_volume * 100) if weekly_volume > 0 else 0
             info_text += f"📊 Недельный объем: {current_volume:.1f}/{weekly_volume} {distance_unit} ({progress_percent:.0f}%)\n"
         else:
             info_text += f"📊 Недельный объем: {current_volume:.1f} {distance_unit} (цель не задана)\n"
 
-        # Тренировок в неделю с прогрессом
         if weekly_count:
             progress_percent = (current_count / weekly_count * 100) if weekly_count > 0 else 0
             info_text += f"🔢 Тренировок в неделю: {current_count}/{weekly_count} ({progress_percent:.0f}%)\n"
         else:
             info_text += f"🔢 Тренировок в неделю: {current_count} (цель не задана)\n"
 
-        # Целевой вес
         weight_goal_display = f"{weight_goal:.1f}" if weight_goal else 'не задан'
         info_text += f"⚖️ Целевой вес: {weight_goal_display} {weight_unit}\n\n"
 
-        # Цели по типам
         type_goals = await get_training_type_goals(user_id)
         if type_goals:
             info_text += "🏃 Цели по типам:\n"
             for t_type, goal in type_goals.items():
-                # Для силовых - минуты, для остальных - км
                 unit = "мин/неделю" if t_type == 'силовая' else f"{distance_unit}/неделю"
                 info_text += f"  • {t_type}: {goal} {unit}\n"
     else:
@@ -945,7 +860,6 @@ async def callback_goals_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-# 8. ЦЕЛЕВОЙ ОБЪЕМ
 @router.callback_query(F.data == "settings:goals:volume")
 async def callback_set_weekly_volume(callback: CallbackQuery, state: FSMContext):
     """Установка целевого недельного объема"""
@@ -958,7 +872,6 @@ async def callback_set_weekly_volume(callback: CallbackQuery, state: FSMContext)
         message_text += f"Текущая цель: {current_goal} {distance_unit}\n\n"
     message_text += "Например: 30"
 
-    # Если цель уже установлена - показываем кнопку удаления
     keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
 
     await callback.message.answer(
@@ -974,11 +887,9 @@ async def process_weekly_volume(message: Message, state: FSMContext):
     """Обработка ввода недельного объема"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
         return
 
-    # Обработка удаления цели
     if message.text == "🗑 Удалить цель":
         user_id = message.from_user.id
         await update_user_setting(user_id, 'weekly_volume_goal', None)
@@ -1007,14 +918,12 @@ async def process_weekly_volume(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
-        # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
 
     except ValueError:
         await message.answer("❌ Введите число (например: 30)")
 
 
-# 9. КОЛИЧЕСТВО ТРЕНИРОВОК В НЕДЕЛЮ
 @router.callback_query(F.data == "settings:goals:count")
 async def callback_set_weekly_count(callback: CallbackQuery, state: FSMContext):
     """Установка целевого количества тренировок"""
@@ -1026,7 +935,6 @@ async def callback_set_weekly_count(callback: CallbackQuery, state: FSMContext):
         message_text += f"Текущая цель: {current_goal} тренировок\n\n"
     message_text += "Например: 5"
 
-    # Если цель уже установлена - показываем кнопку удаления
     keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
 
     await callback.message.answer(
@@ -1042,11 +950,9 @@ async def process_weekly_count(message: Message, state: FSMContext):
     """Обработка ввода количества тренировок"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
         return
 
-    # Обработка удаления цели
     if message.text == "🗑 Удалить цель":
         user_id = message.from_user.id
         await update_user_setting(user_id, 'weekly_trainings_goal', None)
@@ -1073,14 +979,12 @@ async def process_weekly_count(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
-        # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
 
     except ValueError:
         await message.answer("❌ Введите целое число.")
 
 
-# 10. ЦЕЛИ ПО ТИПАМ ТРЕНИРОВОК
 @router.callback_query(F.data == "settings:goals:by_type")
 async def callback_set_type_goals(callback: CallbackQuery):
     """Выбор типа тренировки для установки цели"""
@@ -1088,10 +992,8 @@ async def callback_set_type_goals(callback: CallbackQuery):
     settings = await get_user_settings(user_id)
     distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-    # Получаем основные типы тренировок пользователя
     main_types = await get_main_training_types(user_id)
 
-    # Получаем установленные цели
     type_goals = await get_training_type_goals(user_id)
 
     await callback.message.edit_text(
@@ -1112,23 +1014,19 @@ async def callback_type_goal_input(callback: CallbackQuery, state: FSMContext):
     settings = await get_user_settings(user_id)
     distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
 
-    # Получаем текущие цели
     type_goals = await get_training_type_goals(user_id)
     current_goal = type_goals.get(training_type)
 
-    # Сохраняем message_id для дальнейшего редактирования
     await state.update_data(
         current_type_goal=training_type,
         type_goals_message_id=callback.message.message_id
     )
 
-    # Для силовых тренировок запрашиваем минуты, для остальных - км
     if training_type == 'силовая':
         message_text = f"🎯 Введите цель для типа '{training_type}' в минутах/неделю:\n\n"
         if current_goal:
             message_text += f"Текущая цель: {current_goal} мин/неделю\n\n"
         message_text += "Например: 120 (2 часа в неделю)"
-        # Если цель уже установлена - показываем кнопку удаления
         keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
         await callback.message.answer(
             message_text,
@@ -1139,7 +1037,6 @@ async def callback_type_goal_input(callback: CallbackQuery, state: FSMContext):
         if current_goal:
             message_text += f"Текущая цель: {current_goal} {distance_unit}/неделю\n\n"
         message_text += f"Например: 20"
-        # Если цель уже установлена - показываем кнопку удаления
         keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
         await callback.message.answer(
             message_text,
@@ -1158,17 +1055,14 @@ async def process_type_goal(message: Message, state: FSMContext):
     type_goals_message_id = data.get('type_goals_message_id')
     user_id = message.from_user.id
 
-    # Обработка отмены
     if message.text == "❌ Отмена":
         await state.clear()
 
-        # Получаем настройки и цели для отображения
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км') if settings else 'км'
         main_types = await get_main_training_types(user_id)
         type_goals = await get_training_type_goals(user_id)
 
-        # Отправляем новое сообщение с меню (не редактируем старое)
         await message.answer(
             "🏃 **Цели по типам тренировок**\n\n"
             "Выберите тип тренировки для установки цели:",
@@ -1177,7 +1071,6 @@ async def process_type_goal(message: Message, state: FSMContext):
         )
         return
 
-    # Обработка удаления цели
     if message.text == "🗑 Удалить цель":
         await set_training_type_goal(user_id, training_type, None)
         await message.answer(
@@ -1187,13 +1080,11 @@ async def process_type_goal(message: Message, state: FSMContext):
 
         await state.clear()
 
-        # Получаем обновлённые цели для отображения
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км')
         main_types = await get_main_training_types(user_id)
         type_goals = await get_training_type_goals(user_id)
 
-        # Отправляем новое сообщение с меню (не редактируем старое)
         await message.answer(
             "🏃 **Цели по типам тренировок**\n\n"
             "Выберите тип тренировки для установки цели:",
@@ -1216,13 +1107,11 @@ async def process_type_goal(message: Message, state: FSMContext):
         settings = await get_user_settings(user_id)
         distance_unit = settings.get('distance_unit', 'км')
 
-        # Определяем единицу измерения для отображения
         if training_type == 'силовая':
             unit_text = "мин/неделю"
         else:
             unit_text = f"{distance_unit}/неделю"
 
-        # Для силовых тренировок goal - это минуты, для остальных - км
         await set_training_type_goal(user_id, training_type, goal)
         await message.answer(
             f"✅ Цель для '{training_type}' сохранена: {goal} {unit_text}",
@@ -1231,11 +1120,9 @@ async def process_type_goal(message: Message, state: FSMContext):
 
         await state.clear()
 
-        # Получаем обновлённые цели для отображения
         main_types = await get_main_training_types(user_id)
         type_goals = await get_training_type_goals(user_id)
 
-        # Отправляем новое сообщение с меню (не редактируем старое)
         await message.answer(
             "🏃 **Цели по типам тренировок**\n\n"
             "Выберите тип тренировки для установки цели:",
@@ -1247,7 +1134,6 @@ async def process_type_goal(message: Message, state: FSMContext):
         await message.answer("❌ Введите число.")
 
 
-# 11. ЦЕЛЕВОЙ ВЕС
 @router.callback_query(F.data == "settings:goals:weight")
 async def callback_set_weight_goal(callback: CallbackQuery, state: FSMContext):
     """Установка целевого веса"""
@@ -1260,7 +1146,6 @@ async def callback_set_weight_goal(callback: CallbackQuery, state: FSMContext):
         message_text += f"Текущая цель: {current_goal:.1f} {weight_unit}\n\n"
     message_text += f"Например: 75"
 
-    # Если цель уже установлена - показываем кнопку удаления
     keyboard = get_cancel_delete_keyboard() if current_goal else get_simple_cancel_keyboard()
 
     await callback.message.answer(
@@ -1276,11 +1161,9 @@ async def process_weight_goal(message: Message, state: FSMContext):
     """Обработка ввода целевого веса"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
         return
 
-    # Обработка удаления цели
     if message.text == "🗑 Удалить цель":
         user_id = message.from_user.id
         await update_user_setting(user_id, 'weight_goal', None)
@@ -1299,10 +1182,9 @@ async def process_weight_goal(message: Message, state: FSMContext):
         settings = await get_user_settings(user_id)
         weight_unit = settings.get('weight_unit', 'кг')
 
-        # Валидация в зависимости от единиц измерения
         if weight_unit == 'кг':
             min_weight, max_weight = 30, 200
-        else:  # фунты
+        else:  
             min_weight, max_weight = 66, 440
 
         if weight_goal < min_weight or weight_goal > max_weight:
@@ -1317,14 +1199,12 @@ async def process_weight_goal(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
-        # Возврат в подменю
         await send_goals_menu(message, message.from_user.id)
 
     except ValueError:
         await message.answer("❌ Введите число.")
 
 
-# ============== РАЗДЕЛ: ЕДИНИЦЫ ИЗМЕРЕНИЯ (12) ==============
 
 @router.callback_query(F.data == "settings:units")
 async def callback_units_menu(callback: CallbackQuery):
@@ -1368,7 +1248,6 @@ async def callback_save_distance_unit(callback: CallbackQuery):
     user_id = callback.from_user.id
     await update_user_setting(user_id, 'distance_unit', unit)
 
-    # Возврат в меню единиц с обновленной информацией
     settings = await get_user_settings(user_id)
 
     info_text = "📏 **Единицы измерения**\n\n"
@@ -1405,11 +1284,9 @@ async def callback_save_weight_unit(callback: CallbackQuery):
 
     user_id = callback.from_user.id
 
-    # Получаем старую единицу измерения
     settings = await get_user_settings(user_id)
     old_unit = settings.get('weight_unit', 'кг') if settings else 'кг'
 
-    # Если единица не изменилась, просто возвращаемся в меню
     if old_unit == new_unit:
         info_text = "📏 **Единицы измерения**\n\n"
 
@@ -1428,13 +1305,10 @@ async def callback_save_weight_unit(callback: CallbackQuery):
         await callback.answer("Единица измерения не изменена")
         return
 
-    # Пересчитываем все значения веса
     await recalculate_all_weights(user_id, old_unit, new_unit)
 
-    # Обновляем единицу измерения в настройках
     await update_user_setting(user_id, 'weight_unit', new_unit)
 
-    # Возврат в меню единиц с обновленной информацией
     settings = await get_user_settings(user_id)
 
     info_text = "📏 **Единицы измерения**\n\n"
@@ -1472,7 +1346,6 @@ async def callback_save_date_format(callback: CallbackQuery):
     user_id = callback.from_user.id
     await update_user_setting(user_id, 'date_format', date_format)
 
-    # Возврат в меню единиц с обновленной информацией
     settings = await get_user_settings(user_id)
 
     info_text = "📏 **Единицы измерения**\n\n"
@@ -1492,7 +1365,6 @@ async def callback_save_date_format(callback: CallbackQuery):
     await callback.answer("Сохранено!")
 
 
-# ============== РАЗДЕЛ: УВЕДОМЛЕНИЯ (13-14) ==============
 
 @router.callback_query(F.data == "settings:notifications")
 async def callback_notifications_menu(callback: CallbackQuery):
@@ -1507,7 +1379,6 @@ async def callback_notifications_menu(callback: CallbackQuery):
         report_day = settings.get('weekly_report_day', 'Понедельник')
         report_time = settings.get('weekly_report_time', '09:00')
 
-        # Информация о напоминаниях о тренировках
         training_reminders_enabled = settings.get('training_reminders_enabled', 0)
         training_reminder_days = json.loads(settings.get('training_reminder_days', '[]')) if settings.get('training_reminder_days') else []
         training_reminder_time = settings.get('training_reminder_time', '18:00')
@@ -1515,10 +1386,8 @@ async def callback_notifications_menu(callback: CallbackQuery):
         info_text += f"⏰ Время ежедневного ввода: {daily_time or 'не задано'}\n"
         info_text += f"📊 Недельный отчет: {report_day}, {report_time}\n"
 
-        # Добавляем информацию о напоминаниях о тренировках
         if training_reminders_enabled:
             if training_reminder_days:
-                # Сокращаем названия дней для компактности
                 days_short = []
                 day_map = {
                     'Понедельник': 'Пн', 'Вторник': 'Вт', 'Среда': 'Ср',
@@ -1543,7 +1412,6 @@ async def callback_notifications_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-# 13. ВРЕМЯ ЕЖЕДНЕВНОГО СООБЩЕНИЯ
 @router.callback_query(F.data == "settings:notif:daily_time")
 async def callback_set_daily_time(callback: CallbackQuery, state: FSMContext):
     """Установка времени ежедневного сообщения"""
@@ -1566,13 +1434,11 @@ async def process_daily_time(message: Message, state: FSMContext):
     """Обработка ввода времени ежедневного сообщения"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
         await send_notifications_menu(message, message.from_user.id)
         return
 
     from utils.time_normalizer import validate_and_normalize_time
 
-    # Валидируем и нормализуем время
     success, normalized_time, error_msg = validate_and_normalize_time(message.text)
 
     if not success:
@@ -1587,11 +1453,9 @@ async def process_daily_time(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()
     )
     await state.clear()
-    # Возврат в подменю
     await send_notifications_menu(message, message.from_user.id)
 
 
-# 14. ВРЕМЯ НЕДЕЛЬНОГО ОТЧЕТА
 @router.callback_query(F.data == "settings:notif:weekly_report")
 async def callback_set_weekly_report(callback: CallbackQuery, state: FSMContext):
     """Выбор дня недели для отчета"""
@@ -1628,13 +1492,11 @@ async def process_report_time(message: Message, state: FSMContext):
     """Обработка ввода времени недельного отчета"""
     if message.text == "❌ Отмена":
         await state.clear()
-        # Возврат в подменю
         await send_notifications_menu(message, message.from_user.id)
         return
 
     from utils.time_normalizer import validate_and_normalize_time
 
-    # Валидируем и нормализуем время
     success, normalized_time, error_msg = validate_and_normalize_time(message.text)
 
     if not success:
@@ -1656,18 +1518,14 @@ async def process_report_time(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()
     )
     await state.clear()
-    # Возврат в подменю
     await send_notifications_menu(message, message.from_user.id)
 
 
-# ==================== ОБРАБОТЧИКИ КАЛЕНДАРЯ ДЛЯ ДАТЫ РОЖДЕНИЯ ====================
 from settings.calendar_handlers_birth import register_calendar_birth_handlers
 
-# Регистрируем обработчики календаря даты рождения
 register_calendar_birth_handlers(router)
 
 
-# ============== РАЗДЕЛ: ЧАСОВОЙ ПОЯС ==============
 
 @router.callback_query(F.data == "settings:units:timezone")
 async def callback_set_timezone(callback: CallbackQuery):
@@ -1685,10 +1543,8 @@ async def callback_save_timezone(callback: CallbackQuery):
     timezone = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
-    # Сохраняем в БД
     await update_user_setting(user_id, 'timezone', timezone)
 
-    # Возвращаемся в меню единиц измерения
     settings = await get_user_settings(user_id)
 
     info_text = "📏 **Единицы измерения**\n\n"
@@ -1709,7 +1565,6 @@ async def callback_save_timezone(callback: CallbackQuery):
     await callback.answer("Сохранено!")
 
 
-# ============== РАЗДЕЛ: НАПОМИНАНИЯ О ТРЕНИРОВКАХ (15) ==============
 
 @router.callback_query(F.data == "settings:notif:training_reminders")
 async def callback_training_reminders_menu(callback: CallbackQuery):
@@ -1717,7 +1572,6 @@ async def callback_training_reminders_menu(callback: CallbackQuery):
     user_id = callback.from_user.id
     settings = await get_user_settings(user_id)
 
-    # Получаем текущие настройки
     is_enabled = settings.get('training_reminders_enabled', 0) if settings else 0
     reminder_days = json.loads(settings.get('training_reminder_days', '[]')) if settings else []
     reminder_time = settings.get('training_reminder_time', '18:00') if settings else '18:00'
@@ -1753,16 +1607,13 @@ async def callback_toggle_training_reminders(callback: CallbackQuery):
 
     if action == "on":
         await update_user_setting(user_id, 'training_reminders_enabled', 1)
-        # Устанавливаем дефолтные значения если их нет
         settings = await get_user_settings(user_id)
         if not settings.get('training_reminder_days') or settings.get('training_reminder_days') == '[]':
-            # По умолчанию все дни недели
             default_days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
             await update_user_setting(user_id, 'training_reminder_days', json.dumps(default_days))
     else:
         await update_user_setting(user_id, 'training_reminders_enabled', 0)
 
-    # Обновляем меню
     await callback_training_reminders_menu(callback)
 
 
@@ -1772,10 +1623,8 @@ async def callback_select_reminder_days(callback: CallbackQuery, state: FSMConte
     user_id = callback.from_user.id
     settings = await get_user_settings(user_id)
 
-    # Получаем текущие выбранные дни
     current_days = json.loads(settings.get('training_reminder_days', '[]')) if settings else []
 
-    # Сохраняем текущие дни в состояние
     await state.update_data(selected_days=current_days)
     await state.set_state(SettingsStates.selecting_reminder_days)
 
@@ -1792,20 +1641,16 @@ async def callback_toggle_reminder_day(callback: CallbackQuery, state: FSMContex
     """Переключение дня для напоминаний"""
     day = callback.data.split(":")[1]
 
-    # Получаем текущий список из состояния
     data = await state.get_data()
     selected_days = data.get('selected_days', [])
 
-    # Переключаем день
     if day in selected_days:
         selected_days.remove(day)
     else:
         selected_days.append(day)
 
-    # Сохраняем обновленный список
     await state.update_data(selected_days=selected_days)
 
-    # Обновляем клавиатуру
     await callback.message.edit_reply_markup(
         reply_markup=get_training_reminder_days_keyboard(selected_days)
     )
@@ -1827,7 +1672,6 @@ async def callback_save_reminder_days(callback: CallbackQuery, state: FSMContext
 
     await state.clear()
 
-    # Обновляем меню напоминаний
     settings = await get_user_settings(user_id)
     is_enabled = settings.get('training_reminders_enabled', 0) if settings else 0
     reminder_days = json.loads(settings.get('training_reminder_days', '[]')) if settings else []
@@ -1883,7 +1727,6 @@ async def process_reminder_time(message: Message, state: FSMContext):
 
     from utils.time_normalizer import validate_and_normalize_time
 
-    # Валидируем и нормализуем время
     success, normalized_time, error_msg = validate_and_normalize_time(message.text)
 
     if not success:
@@ -1901,7 +1744,6 @@ async def process_reminder_time(message: Message, state: FSMContext):
     await send_notifications_menu(message, user_id)
 
 
-# ============== 17. РЕЖИМ ТРЕНЕРА ==============
 
 @router.callback_query(F.data == "settings:coach_mode")
 async def toggle_coach_mode(callback: CallbackQuery):
@@ -1913,18 +1755,15 @@ async def toggle_coach_mode(callback: CallbackQuery):
     current_mode = await is_user_coach(user_id)
 
     if current_mode:
-        # Выключаем режим тренера
         await set_coach_mode(user_id, False)
         await callback.answer("Режим тренера выключен", show_alert=True)
     else:
-        # Включаем режим тренера
         link_code = await set_coach_mode(user_id, True)
         await callback.answer(
             f"Режим тренера включён!\nВаш код: {link_code}",
             show_alert=True
         )
 
-    # Обновляем меню настроек
     settings = await get_user_settings(user_id)
     is_coach_now = await is_user_coach(user_id)
 
@@ -1971,5 +1810,4 @@ async def toggle_coach_mode(callback: CallbackQuery):
             parse_mode="Markdown"
         )
     except TelegramBadRequest:
-        # Сообщение не изменилось - это нормально
         pass

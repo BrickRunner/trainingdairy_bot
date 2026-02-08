@@ -19,7 +19,7 @@ async def fetch_all_competitions(
     sport: Optional[str] = None,
     limit: int = 50,
     period_months: Optional[int] = None,
-    service: Optional[str] = None  # "RussiaRunning", "Timerman", "HeroLeague", "reg.place", "RunC", "all"
+    service: Optional[str] = None  
 ) -> List[Dict]:
     """
     Получить список соревнований из всех или выбранного сервиса
@@ -36,21 +36,19 @@ async def fetch_all_competitions(
     """
     all_competitions = []
 
-    # Определяем какие сервисы использовать
     use_russiarunning = service is None or service == "all" or service == "RussiaRunning"
     use_timerman = service is None or service == "all" or service == "Timerman"
     use_heroleague = service is None or service == "all" or service == "HeroLeague"
     use_regplace = service is None or service == "all" or service == "reg.place"
     use_runc = service is None or service == "all" or service == "RunC"
 
-    # Получаем соревнования из RussiaRunning
     if use_russiarunning:
         try:
             logger.info("Fetching competitions from RussiaRunning...")
             russiarunning_comps = await fetch_russiarunning(
                 city=city,
                 sport=sport,
-                limit=limit if service == "RussiaRunning" else 1000,  # Если выбран конкретный сервис - ограничиваем, иначе берем все
+                limit=limit if service == "RussiaRunning" else 1000,  
                 period_months=period_months
             )
             logger.info(f"Received {len(russiarunning_comps)} competitions from RussiaRunning")
@@ -58,7 +56,6 @@ async def fetch_all_competitions(
         except Exception as e:
             logger.error(f"Error fetching from RussiaRunning: {e}")
 
-    # Получаем соревнования из Timerman
     if use_timerman:
         try:
             logger.info("Fetching competitions from Timerman...")
@@ -73,7 +70,6 @@ async def fetch_all_competitions(
         except Exception as e:
             logger.error(f"Error fetching from Timerman: {e}")
 
-    # Получаем соревнования из HeroLeague
     if use_heroleague:
         try:
             logger.info("Fetching competitions from HeroLeague...")
@@ -88,7 +84,6 @@ async def fetch_all_competitions(
         except Exception as e:
             logger.error(f"Error fetching from HeroLeague: {e}")
 
-    # Получаем соревнования из reg.place
     if use_regplace:
         try:
             logger.info("Fetching competitions from reg.place...")
@@ -103,7 +98,6 @@ async def fetch_all_competitions(
         except Exception as e:
             logger.error(f"Error fetching from reg.place: {e}")
 
-    # Получаем соревнования из RunC
     if use_runc:
         try:
             logger.info("Fetching competitions from RunC...")
@@ -118,10 +112,8 @@ async def fetch_all_competitions(
         except Exception as e:
             logger.error(f"Error fetching from RunC: {e}")
 
-    # Сортируем по дате (самые близкие сначала)
     all_competitions.sort(key=lambda x: x.get('begin_date', '9999-12-31'))
 
-    # Ограничиваем количество если нужно
     if len(all_competitions) > limit:
         all_competitions = all_competitions[:limit]
 
@@ -130,7 +122,6 @@ async def fetch_all_competitions(
     return all_competitions
 
 
-# Константы для сервисов
 SERVICE_CODES = {
     "RussiaRunning": "RussiaRunning",
     "Timerman": "Timerman",
@@ -140,5 +131,4 @@ SERVICE_CODES = {
     "Все сервисы": "all",
 }
 
-# Обратный словарь
 SERVICE_NAMES = {v: k for k, v in SERVICE_CODES.items()}

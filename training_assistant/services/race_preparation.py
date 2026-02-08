@@ -44,10 +44,8 @@ async def get_race_preparation_advice(
         return None
 
     try:
-        # Получаем настройки пользователя
         user_prefs = await get_user_preferences(user_id)
 
-        # Форматируем промпт с настройками пользователя
         prompt = PROMPT_RACE_PREPARATION.format(
             distance_unit=user_prefs['distance_unit'],
             date_format=user_prefs['date_format'],
@@ -61,10 +59,9 @@ async def get_race_preparation_advice(
             weekly_volume=f"{weekly_volume} км" if weekly_volume else "не указан"
         )
 
-        # Запрос к AI
         response = await _call_with_retry(
             ai_client,
-            model="google/gemini-2.5-flash",  # Бесплатная модель
+            model="google/gemini-2.5-flash",  
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_COACH},
                 {"role": "user", "content": prompt}
@@ -76,7 +73,6 @@ async def get_race_preparation_advice(
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"Race preparation advice generated for user {user_id}, {days_before} days before")
 
-        # AI теперь возвращает форматированный текст, а не JSON
         return {"raw_response": ai_response}
 
     except Exception as e:
@@ -90,7 +86,7 @@ def _format_trainings(trainings: list) -> str:
         return "Нет данных"
 
     formatted = []
-    for t in trainings[:10]:  # Последние 10
+    for t in trainings[:10]:  
         formatted.append(
             f"- {t.get('date')}: {t.get('type')}, {t.get('distance', 'N/A')} км"
         )

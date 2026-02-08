@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-# Список крупных городов России для выбора
 CITIES = [
     "Москва", "Санкт-Петербург", "Новосибирск", "Екатеринбург", "Казань",
     "Нижний Новгород", "Челябинск", "Самара", "Омск", "Ростов-на-Дону",
@@ -43,10 +42,8 @@ async def start_search_competitions(callback: CallbackQuery, state: FSMContext):
         "Выберите город:"
     )
 
-    # Создаём клавиатуру с популярными городами
     builder = InlineKeyboardBuilder()
 
-    # Топ-10 популярных городов
     popular_cities = CITIES[:10]
 
     for i in range(0, len(popular_cities), 2):
@@ -86,7 +83,6 @@ async def show_all_cities(callback: CallbackQuery, state: FSMContext):
         "Выберите город из списка:"
     )
 
-    # Создаём клавиатуру со всеми городами
     builder = InlineKeyboardBuilder()
 
     for i in range(0, len(CITIES), 2):
@@ -120,7 +116,6 @@ async def select_city(callback: CallbackQuery, state: FSMContext):
 
     city = callback.data.split(":", 2)[2]
 
-    # Сохраняем выбранный город
     await state.update_data(search_city=city)
 
     text = (
@@ -128,18 +123,15 @@ async def select_city(callback: CallbackQuery, state: FSMContext):
         f"Теперь выберите месяц для поиска соревнований:"
     )
 
-    # Создаём клавиатуру с месяцами
     builder = InlineKeyboardBuilder()
 
     current_month = datetime.now().month
 
-    # Показываем текущий и следующие 11 месяцев
     for i in range(12):
         month_index = (current_month - 1 + i) % 12
         month_number = month_index + 1
         month_name = MONTHS[month_index]
 
-        # Определяем год
         year = datetime.now().year
         if current_month + i > 12:
             year += 1
@@ -168,23 +160,19 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
 
     parts = callback.data.split(":", 3)
     city = parts[2]
-    period = parts[3]  # YYYY-MM или 'all'
+    period = parts[3]  
 
     await callback.answer("🔍 Ищу соревнования...", show_alert=False)
 
-    # Ищем соревнования в базе данных
     from competitions.search_queries import search_competitions_by_city_and_month
 
     competitions = await search_competitions_by_city_and_month(city, period)
 
     if not competitions:
-        # Если не нашли в БД, пробуем загрузить из всех источников (Russia Running API + runc.run)
         from competitions.competitions_parser import load_competitions_from_api
         from competitions.competitions_queries import add_competition
 
-        # Загружаем из API
         try:
-            # Парсим период для передачи в API
             if period != 'all':
                 year, month = period.split('-')
                 api_comps = await load_competitions_from_api(
@@ -195,7 +183,6 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
             else:
                 api_comps = await load_competitions_from_api(city=city)
 
-            # Добавляем в БД
             added = 0
             for comp_data in api_comps:
                 try:
@@ -206,14 +193,12 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
 
             logger.info(f"Added {added} new competitions out of {len(api_comps)} loaded")
 
-            # Ищем снова (даже если ничего не добавлено, соревнования могли быть добавлены ранее)
             competitions = await search_competitions_by_city_and_month(city, period)
 
         except Exception as e:
             logger.error(f"Error loading competitions from parsers: {e}", exc_info=True)
 
     if not competitions:
-        # Определяем период для отображения
         if period == 'all':
             period_text = "все месяцы"
         else:
@@ -249,7 +234,6 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
         return
 
-    # Форматируем результаты
     if period == 'all':
         period_text = "все месяцы"
     else:
@@ -263,7 +247,6 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
         f"📅 Период: <b>{period_text}</b>\n\n"
     )
 
-    # Показываем первые 5 соревнований
     from competitions.competitions_keyboards import format_time_until_competition
     from competitions.competitions_utils import format_competition_distance as format_dist_with_units
     from utils.date_formatter import get_user_date_format, DateFormatter
@@ -280,7 +263,6 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
 
         time_until = format_time_until_competition(comp['date'])
 
-        # Форматируем дистанции
         try:
             import json
             distances = comp.get('distances', [])
@@ -301,7 +283,6 @@ async def search_by_city_and_month(callback: CallbackQuery, state: FSMContext):
             f"   🏃 {distances_str}\n\n"
         )
 
-    # Создаём клавиатуру с соревнованиями
     builder = InlineKeyboardBuilder()
 
     for i, comp in enumerate(competitions[:5], 1):

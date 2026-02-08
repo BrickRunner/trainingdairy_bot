@@ -173,20 +173,17 @@ def get_student_trainings_keyboard(student_id: int, trainings: list, period: str
         'интервальная': '⚡'
     }
 
-    for training in trainings[:15]:  # Максимум 15 тренировок
+    for training in trainings[:15]:  
         emoji = type_emoji.get(training['type'], '📝')
 
-        # Форматируем дату согласно настройкам тренера (короткий формат: без года)
         formatted_date = DateFormatter.format_date(training['date'], date_format)
-        # Для короткого отображения берем только день и месяц
         if date_format == 'ДД.ММ.ГГГГ':
-            date_str = formatted_date[:5]  # ДД.ММ
+            date_str = formatted_date[:5]  
         elif date_format == 'ММ/ДД/ГГГГ':
-            date_str = formatted_date[:5]  # ММ/ДД
-        else:  # ГГГГ-ММ-ДД
-            date_str = formatted_date[5:]  # ММ-ДД
+            date_str = formatted_date[:5]  
+        else:  
+            date_str = formatted_date[5:]  
 
-        # Отметка если добавлено тренером
         added_mark = " 👨‍🏫" if training.get('added_by_coach_id') else ""
 
         builder.row(
@@ -196,7 +193,6 @@ def get_student_trainings_keyboard(student_id: int, trainings: list, period: str
             )
         )
 
-    # Кнопка назад - к выбору периода
     builder.row(
         InlineKeyboardButton(
             text="« К выбору периода",
@@ -211,9 +207,7 @@ def get_training_detail_keyboard(training_id: int, student_id: int, period: str 
     """Клавиатура для детальной информации о тренировке"""
     builder = InlineKeyboardBuilder()
 
-    # Показываем кнопку добавления комментария только если тренер еще не комментировал
     if not coach_has_comment:
-        # Формируем callback_data с учетом периода
         comment_callback = f"coach:add_comment:{training_id}:{student_id}"
         if period:
             comment_callback += f":{period}"
@@ -225,7 +219,6 @@ def get_training_detail_keyboard(training_id: int, student_id: int, period: str 
             )
         )
 
-    # Кнопка возврата в меню ученика
     builder.row(
         InlineKeyboardButton(
             text="« Назад в меню",

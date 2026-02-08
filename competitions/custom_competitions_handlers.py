@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-# ========== ДОБАВЛЕНИЕ СОРЕВНОВАНИЯ ВРУЧНУЮ ==========
 
 @router.callback_query(F.data == "comp:create_custom")
 async def start_create_custom_competition(callback: CallbackQuery, state: FSMContext):
@@ -70,20 +69,17 @@ async def start_create_custom_competition(callback: CallbackQuery, state: FSMCon
 async def process_comp_name(message: Message, state: FSMContext):
     """Обработать название соревнования"""
 
-    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
     data = await state.get_data()
     if 'propose_student_id' in data:
         return
 
     comp_name = message.text.strip()
 
-    # Проверка на отмену
     if comp_name == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -99,7 +95,6 @@ async def process_comp_name(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем название
     await state.update_data(comp_name=comp_name)
 
     from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
@@ -128,12 +123,10 @@ async def process_comp_city(message: Message, state: FSMContext):
 
     comp_city = message.text.strip()
 
-    # Проверка на отмену
     if comp_city == "❌ Отменить":
         await state.clear()
         await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -149,10 +142,8 @@ async def process_comp_city(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем город
     await state.update_data(comp_city=comp_city)
 
-    # Показываем календарь для выбора даты
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
@@ -160,7 +151,6 @@ async def process_comp_city(message: Message, state: FSMContext):
         show_cancel=False
     )
 
-    # Получаем формат даты пользователя для подсказки
     from utils.date_formatter import get_user_date_format, DateFormatter
     user_id = message.from_user.id
     user_date_format = await get_user_date_format(user_id)
@@ -179,7 +169,6 @@ async def process_comp_city(message: Message, state: FSMContext):
     await state.set_state(CompetitionStates.waiting_for_comp_date)
 
 
-# Обработчики календаря для выбора даты соревнования
 @router.callback_query(F.data.startswith("cal_comp_1_select_"), CompetitionStates.waiting_for_comp_date)
 async def handle_comp_calendar_day_select(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора дня в календаре"""
@@ -193,18 +182,15 @@ async def handle_comp_calendar_day_select(callback: CallbackQuery, state: FSMCon
 
     comp_date = selected_date.date()
 
-    # Проверяем что дата в будущем
     if comp_date < date.today():
         await callback.answer("❌ Дата соревнования должна быть в будущем!", show_alert=True)
         return
 
-    # Сохраняем дату
     await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
 
     user_id = callback.from_user.id
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
-    # Создаём клавиатуру с типами
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="🏃 Бег"))
     reply_builder.row(KeyboardButton(text="🏊 Плавание"))
@@ -229,7 +215,6 @@ async def handle_comp_calendar_navigation(callback: CallbackQuery, state: FSMCon
 
     parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_comp_", "cal_"))
 
-    # Получаем текущую дату из callback или используем текущую
     current_date = parsed.get("date")
     if not current_date:
         current_date = datetime.now()
@@ -237,35 +222,30 @@ async def handle_comp_calendar_navigation(callback: CallbackQuery, state: FSMCon
     action = parsed.get("action", "")
     cal_format = parsed.get("format", 1)
 
-    # Обрабатываем навигацию
     if action == "less":
-        # Предыдущий период
-        if cal_format == 1:  # Дни - переключаем месяц назад
+        if cal_format == 1:  
             current_date = current_date.replace(day=1)
             if current_date.month == 1:
                 current_date = current_date.replace(year=current_date.year - 1, month=12)
             else:
                 current_date = current_date.replace(month=current_date.month - 1)
-        elif cal_format == 2:  # Месяцы - переключаем год назад
+        elif cal_format == 2:  
             current_date = current_date.replace(year=current_date.year - 1)
     elif action == "more":
-        # Следующий период
-        if cal_format == 1:  # Дни - переключаем месяц вперед
+        if cal_format == 1:  
             current_date = current_date.replace(day=1)
             if current_date.month == 12:
                 current_date = current_date.replace(year=current_date.year + 1, month=1)
             else:
                 current_date = current_date.replace(month=current_date.month + 1)
-        elif cal_format == 2:  # Месяцы - переключаем год вперед
+        elif cal_format == 2:  
             current_date = current_date.replace(year=current_date.year + 1)
     elif action == "change":
-        # Переключаем формат календаря
         if cal_format == 1:
-            cal_format = 2  # С дней на месяцы
+            cal_format = 2  
         elif cal_format == 2:
-            cal_format = 3  # С месяцев на годы
+            cal_format = 3  
 
-    # Создаем обновленный календарь
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=cal_format,
         current_date=current_date,
@@ -286,19 +266,16 @@ async def process_comp_date(message: Message, state: FSMContext):
     """Обработать дату соревнования (текстовый ввод как альтернатива календарю)"""
     from aiogram.types import ReplyKeyboardRemove
 
-    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
     data = await state.get_data()
     if 'propose_student_id' in data:
         return
 
     date_text = message.text.strip()
 
-    # Проверка на отмену
     if date_text == "❌ Отменить":
         await state.clear()
         await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -310,7 +287,6 @@ async def process_comp_date(message: Message, state: FSMContext):
 
     user_id = message.from_user.id
 
-    # Парсим дату с учетом формата пользователя
     comp_date = await parse_user_date_input(date_text, user_id)
 
     if comp_date is None:
@@ -322,7 +298,6 @@ async def process_comp_date(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем что дата в будущем
     if comp_date < date.today():
         await message.answer(
             "❌ Дата соревнования должна быть в будущем.\n"
@@ -330,12 +305,10 @@ async def process_comp_date(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем дату
     await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
 
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
-    # Создаём клавиатуру с типами
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="🏃 Бег"))
     reply_builder.row(KeyboardButton(text="🏊 Плавание"))
@@ -356,20 +329,17 @@ async def process_comp_date(message: Message, state: FSMContext):
 async def process_comp_type(message: Message, state: FSMContext):
     """Обработать тип соревнования"""
 
-    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
     data = await state.get_data()
     if 'propose_student_id' in data:
         return
 
     comp_type_text = message.text.strip()
 
-    # Проверка на отмену
     if comp_type_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -391,7 +361,6 @@ async def process_comp_type(message: Message, state: FSMContext):
         await message.answer("❌ Неверный вид спорта. Выберите из предложенных вариантов.")
         return
 
-    # Сохраняем тип спорта (comp_sport_type используется при создании соревнования)
     await state.update_data(comp_type=comp_type, comp_sport_type=comp_type)
 
     user_id = message.from_user.id
@@ -400,7 +369,6 @@ async def process_comp_type(message: Message, state: FSMContext):
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
-    # Используем предложный падеж для "в километрах" / "в милях"
     unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
 
     text = (
@@ -432,20 +400,17 @@ async def process_comp_type(message: Message, state: FSMContext):
 async def process_comp_distance(message: Message, state: FSMContext):
     """Обработать дистанцию соревнования"""
 
-    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
     data = await state.get_data()
     if 'propose_student_id' in data:
         return
 
     distance_text = message.text.strip()
 
-    # Проверка на отмену
     if distance_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -458,7 +423,6 @@ async def process_comp_distance(message: Message, state: FSMContext):
     distance_text = distance_text.replace(',', '.')
     user_id = message.from_user.id
 
-    # Парсим дистанцию с учетом единиц пользователя
     distance_km = await parse_user_distance_input(distance_text, user_id)
 
     if distance_km is None:
@@ -477,13 +441,10 @@ async def process_comp_distance(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем дистанцию в км
     await state.update_data(comp_distance=distance_km)
 
-    # Форматируем название дистанции
     distance_name = await format_competition_distance(distance_km, user_id)
 
-    # Создаем клавиатуру с кнопками "Пропустить" и "Отменить"
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="⏭️ Пропустить"))
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
@@ -504,7 +465,6 @@ async def process_comp_distance(message: Message, state: FSMContext):
 
 async def create_competition_from_state(user_id: int, state: FSMContext, target_time: str = None, message_obj=None):
     """Создать соревнование из сохраненных данных FSM"""
-    # Получаем сохранённые данные
     data = await state.get_data()
     comp_name = data.get('comp_name')
     comp_city = data.get('comp_city')
@@ -512,7 +472,6 @@ async def create_competition_from_state(user_id: int, state: FSMContext, target_
     comp_type = data.get('comp_type')
     comp_distance = data.get('comp_distance')
 
-    # Создаём соревнование в БД
     try:
         competition_data = {
             'name': comp_name,
@@ -524,13 +483,12 @@ async def create_competition_from_state(user_id: int, state: FSMContext, target_
             'distances': json.dumps([comp_distance]),
             'status': 'upcoming',
             'created_by': user_id,
-            'is_official': 0,  # Пользовательское соревнование
+            'is_official': 0,  
             'registration_status': 'open'
         }
 
         comp_id = await add_competition(competition_data)
 
-        # Регистрируем пользователя на соревнование
         await register_for_competition(
             user_id=user_id,
             competition_id=comp_id,
@@ -540,11 +498,9 @@ async def create_competition_from_state(user_id: int, state: FSMContext, target_
 
         logger.info(f"User {user_id} created custom competition {comp_id}: {comp_name}")
 
-        # Создаём напоминания
         from competitions.reminder_scheduler import create_reminders_for_competition
         await create_reminders_for_competition(user_id, comp_id, comp_date)
 
-        # Форматируем сообщение об успехе с учетом настроек пользователя
         formatted_date = await format_competition_date(comp_date, user_id)
         formatted_distance = await format_competition_distance(comp_distance, user_id)
 
@@ -579,10 +535,9 @@ async def create_competition_from_state(user_id: int, state: FSMContext, target_
         if message_obj:
             if isinstance(message_obj, Message):
                 await message_obj.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
-            else:  # CallbackQuery
+            else:  
                 await message_obj.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
-        # Очищаем состояние
         await state.clear()
 
     except Exception as e:
@@ -611,20 +566,17 @@ async def cancel_competition_creation(callback: CallbackQuery, state: FSMContext
 async def process_comp_target_and_create(message: Message, state: FSMContext):
     """Обработать целевое время и создать соревнование"""
 
-    # Проверяем что это не flow от тренера (должен обрабатываться в coach_competitions_handlers)
     data = await state.get_data()
     if 'propose_student_id' in data:
         return
 
     target_text = message.text.strip()
 
-    # Проверка на отмену
     if target_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Создание соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -634,16 +586,13 @@ async def process_comp_target_and_create(message: Message, state: FSMContext):
         )
         return
 
-    # Проверка на пропуск
     if target_text == "⏭️ Пропустить":
         await create_competition_from_state(message.from_user.id, state, None, message)
         return
 
     target_time = None
 
-    # Парсим время
     try:
-        # Проверяем формат ЧЧ:ММ:СС
         time_parts = target_text.split(':')
         if len(time_parts) == 3:
             hours, minutes, seconds = map(int, time_parts)
@@ -652,7 +601,6 @@ async def process_comp_target_and_create(message: Message, state: FSMContext):
             else:
                 raise ValueError
         elif len(time_parts) == 2:
-            # Формат ММ:СС
             minutes, seconds = map(int, time_parts)
             if 0 <= minutes < 60 and 0 <= seconds < 60:
                 target_time = f"00:{minutes:02d}:{seconds:02d}"
@@ -668,11 +616,9 @@ async def process_comp_target_and_create(message: Message, state: FSMContext):
         )
         return
 
-    # Создаем соревнование
     await create_competition_from_state(message.from_user.id, state, target_time, message)
 
 
-# ========== СТАТИСТИКА СОРЕВНОВАНИЙ ==========
 
 @router.callback_query(F.data == "comp:statistics")
 async def show_competition_statistics(callback: CallbackQuery):
@@ -742,7 +688,6 @@ async def show_competition_statistics(callback: CallbackQuery):
     await callback.answer()
 
 
-# ========== ДОБАВЛЕНИЕ ПРОШЕДШЕГО СОРЕВНОВАНИЯ ==========
 
 @router.callback_query(F.data == "comp:add_past_manual")
 async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMContext):
@@ -759,7 +704,6 @@ async def start_add_past_competition_manual(callback: CallbackQuery, state: FSMC
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
-    # Сначала удаляем старое сообщение, затем отправляем новое через бота
     await callback.message.delete()
     await callback.bot.send_message(
         chat_id=callback.message.chat.id,
@@ -779,21 +723,16 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
 
     user_id = callback.from_user.id
 
-    # Извлекаем период из callback_data если он есть
     parts = callback.data.split(":")
     period = parts[2] if len(parts) > 2 else "all"
 
-    # Сохраняем период в состоянии для возврата
     await state.update_data(return_period=period)
 
-    # Получаем завершенные соревнования пользователя
     all_comps = await get_user_competitions(user_id, status_filter='finished')
 
-    # Фильтруем только те, где нет результата
     comps_without_results = [comp for comp in all_comps if not comp.get('finish_time')]
 
     if comps_without_results:
-        # Показываем список соревнований без результатов
         text = (
             "🏁 <b>ДОБАВЛЕНИЕ РЕЗУЛЬТАТА</b>\n\n"
             "У вас есть соревнования без результатов:\n\n"
@@ -801,11 +740,10 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
 
         builder = InlineKeyboardBuilder()
 
-        for i, comp in enumerate(comps_without_results[:10], 1):  # Макс 10 соревнований
+        for i, comp in enumerate(comps_without_results[:10], 1):  
             formatted_date = await format_competition_date(comp['date'], user_id)
             dist_str = await format_competition_distance(comp['distance'], user_id)
 
-            # Короткое название для кнопки
             short_name = comp['name'][:30] + "..." if len(comp['name']) > 30 else comp['name']
             button_text = f"{short_name} • {dist_str}"
 
@@ -818,7 +756,6 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
                 )
             )
 
-        # Кнопка для создания нового соревнования
         builder.row(
             InlineKeyboardButton(text="➕ Добавить новое соревнование", callback_data="comp:add_past_manual")
         )
@@ -830,7 +767,6 @@ async def start_add_past_competition(callback: CallbackQuery, state: FSMContext)
         await safe_edit_message(callback.message, text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
     else:
-        # Если нет соревнований без результатов, сразу переходим к ручному вводу
         await start_add_past_competition_manual(callback, state)
 
 
@@ -840,13 +776,11 @@ async def process_past_comp_name(message: Message, state: FSMContext):
 
     comp_name = message.text.strip()
 
-    # Проверка на отмену
     if comp_name == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -862,7 +796,6 @@ async def process_past_comp_name(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем название
     await state.update_data(comp_name=comp_name, is_past_competition=True)
 
     from aiogram.types import KeyboardButton
@@ -891,12 +824,10 @@ async def process_past_comp_city(message: Message, state: FSMContext):
 
     comp_city = message.text.strip()
 
-    # Проверка на отмену
     if comp_city == "❌ Отменить":
         await state.clear()
         await message.answer("❌ Добавление результата отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -912,10 +843,8 @@ async def process_past_comp_city(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем город
     await state.update_data(comp_city=comp_city)
 
-    # Показываем календарь для выбора даты (ограничен текущей датой - прошедшее соревнование)
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=1,
         current_date=datetime.now(),
@@ -927,7 +856,6 @@ async def process_past_comp_city(message: Message, state: FSMContext):
     user_id = message.from_user.id
     date_format_desc = await get_date_format_description(user_id)
 
-    # Получаем формат даты пользователя для примера
     from utils.date_formatter import get_user_date_format, DateFormatter
     user_date_format = await get_user_date_format(user_id)
     example_date = DateFormatter.format_date(datetime.now().date(), user_date_format)
@@ -944,7 +872,6 @@ async def process_past_comp_city(message: Message, state: FSMContext):
     await state.set_state(CompetitionStates.waiting_for_past_comp_date)
 
 
-# Обработчики календаря для выбора даты прошедшего соревнования
 @router.callback_query(F.data.startswith("cal_past_comp_1_select_"), CompetitionStates.waiting_for_past_comp_date)
 async def handle_past_comp_calendar_day_select(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора дня в календаре для прошедшего соревнования"""
@@ -958,25 +885,20 @@ async def handle_past_comp_calendar_day_select(callback: CallbackQuery, state: F
 
     comp_date = selected_date.date()
 
-    # Для прошедших соревнований не проверяем, что дата в будущем
-    # Но проверяем, что дата не слишком далеко в прошлом (например, не более 10 лет)
     years_ago = (date.today() - comp_date).days // 365
     if years_ago > 10:
         await callback.answer("❌ Дата не может быть более 10 лет назад!", show_alert=True)
         return
 
-    # Проверяем, что дата не в будущем
     if comp_date > date.today():
         await callback.answer("❌ Для прошедших соревнований дата должна быть в прошлом!", show_alert=True)
         return
 
-    # Сохраняем дату
     await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
 
     user_id = callback.from_user.id
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
-    # Создаём клавиатуру с типами
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="🏃 Бег"))
     reply_builder.row(KeyboardButton(text="🏊 Плавание"))
@@ -1001,7 +923,6 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
 
     parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_past_comp_", "cal_"))
 
-    # Получаем текущую дату из callback или используем текущую
     current_date = parsed.get("date")
     if not current_date:
         current_date = datetime.now()
@@ -1009,12 +930,10 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
     action = parsed.get("action", "")
     cal_format = parsed.get("format", 1)
 
-    # Проверяем на пустой callback (disabled кнопка)
     if action == "empty" or callback.data.endswith("_empty"):
         await callback.answer()
         return
 
-    # Обрабатываем навигацию (аналогично обычному календарю)
     if action == "less":
         if cal_format == 1:
             current_date = current_date.replace(day=1)
@@ -1034,17 +953,15 @@ async def handle_past_comp_calendar_navigation(callback: CallbackQuery, state: F
         elif cal_format == 2:
             current_date = current_date.replace(year=current_date.year + 1)
     elif action == "change":
-        # Переключаем формат календаря
         if cal_format == 1:
-            cal_format = 2  # С дней на месяцы
+            cal_format = 2  
         elif cal_format == 2:
-            cal_format = 3  # С месяцев на годы
+            cal_format = 3  
     elif action == "select_month":
         cal_format = 2
     elif action == "select_year":
         cal_format = 3
 
-    # Создаём обновлённый календарь (ограничен текущей датой)
     calendar = CalendarKeyboard.create_calendar(
         calendar_format=cal_format,
         current_date=current_date,
@@ -1064,12 +981,10 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
 
     date_text = message.text.strip()
 
-    # Проверка на отмену
     if date_text == "❌ Отменить":
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -1081,7 +996,6 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
 
     user_id = message.from_user.id
 
-    # Парсим дату с учетом формата пользователя
     comp_date = await parse_user_date_input(date_text, user_id)
 
     if comp_date is None:
@@ -1093,7 +1007,6 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем что дата не в будущем
     if comp_date > date.today():
         await message.answer(
             "❌ Для прошедших соревнований дата должна быть в прошлом или сегодня.\n"
@@ -1101,7 +1014,6 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
         )
         return
 
-    # Проверяем, что дата не более 10 лет назад
     years_ago = (date.today() - comp_date).days // 365
     if years_ago > 10:
         await message.answer(
@@ -1110,12 +1022,10 @@ async def process_past_comp_date_text(message: Message, state: FSMContext):
         )
         return
 
-    # Сохраняем дату
     await state.update_data(comp_date=comp_date.strftime('%Y-%m-%d'))
 
     formatted_date = await format_competition_date(comp_date.strftime('%Y-%m-%d'), user_id)
 
-    # Создаём клавиатуру с типами
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="🏃 Бег"))
     reply_builder.row(KeyboardButton(text="🏊 Плавание"))
@@ -1138,13 +1048,11 @@ async def process_past_comp_type(message: Message, state: FSMContext):
 
     comp_type_text = message.text.strip()
 
-    # Проверка на отмену
     if comp_type_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -1166,7 +1074,6 @@ async def process_past_comp_type(message: Message, state: FSMContext):
         await message.answer("❌ Неверный вид спорта. Выберите из предложенных вариантов.")
         return
 
-    # Сохраняем тип спорта (comp_sport_type используется при создании соревнования)
     await state.update_data(comp_type=comp_type, comp_sport_type=comp_type)
 
     user_id = message.from_user.id
@@ -1175,7 +1082,6 @@ async def process_past_comp_type(message: Message, state: FSMContext):
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
 
-    # Используем предложный падеж для "в километрах" / "в милях"
     unit_prepositional = 'километрах' if distance_unit == 'км' else 'милях'
 
     text = (
@@ -1195,13 +1101,11 @@ async def process_past_comp_distance(message: Message, state: FSMContext):
 
     distance_text = message.text.strip()
 
-    # Проверка на отмену
     if distance_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -1222,7 +1126,6 @@ async def process_past_comp_distance(message: Message, state: FSMContext):
 
     await state.update_data(comp_distance=distance_km)
 
-    # Для прошедших соревнований запрашиваем результат
     text = (
         f"✅ Дистанция: <b>{await format_competition_distance(distance_km, user_id)}</b>\n\n"
         f"📝 <b>Шаг 6 из 9: Финишное время</b>\n\n"
@@ -1256,13 +1159,11 @@ async def process_past_comp_result_time(message: Message, state: FSMContext):
 
     time_text = message.text.strip()
 
-    # Проверка на отмену
     if time_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -1272,12 +1173,10 @@ async def process_past_comp_result_time(message: Message, state: FSMContext):
         )
         return
 
-    # Проверка на пропуск
     if time_text == "⏭️ Пропустить":
         await finalize_past_competition(message, state, has_result=False)
         return
 
-    # Валидация формата времени
     if not validate_time_format(time_text):
         await message.answer(
             "❌ Некорректный формат времени. Используйте формат ЧЧ:ММ:СС.сс или ММ:СС.сс или Ч:М:С\n"
@@ -1285,11 +1184,9 @@ async def process_past_comp_result_time(message: Message, state: FSMContext):
         )
         return
 
-    # Нормализуем время перед сохранением
     normalized_time = normalize_time(time_text)
     await state.update_data(finish_time=normalized_time)
 
-    # Запрашиваем место в общем зачёте
     reply_builder = ReplyKeyboardBuilder()
     reply_builder.row(KeyboardButton(text="⏭️ Пропустить"))
     reply_builder.row(KeyboardButton(text="❌ Отменить"))
@@ -1318,13 +1215,11 @@ async def process_past_comp_place_overall(message: Message, state: FSMContext):
 
     place_text = message.text.strip()
 
-    # Проверка на отмену
     if place_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -1334,7 +1229,6 @@ async def process_past_comp_place_overall(message: Message, state: FSMContext):
         )
         return
 
-    # Проверка на пропуск
     if place_text == "⏭️ Пропустить":
         await state.update_data(place_overall=None)
         await ask_past_comp_place_age(message, state)
@@ -1384,13 +1278,11 @@ async def process_past_comp_place_age(message: Message, state: FSMContext):
 
     place_text = message.text.strip()
 
-    # Проверка на отмену
     if place_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -1400,7 +1292,6 @@ async def process_past_comp_place_age(message: Message, state: FSMContext):
         )
         return
 
-    # Проверка на пропуск
     if place_text == "⏭️ Пропустить":
         await state.update_data(place_age=None)
         await ask_past_comp_heart_rate(message, state)
@@ -1412,7 +1303,6 @@ async def process_past_comp_place_age(message: Message, state: FSMContext):
             await message.answer("❌ Место должно быть положительным числом")
             return
 
-        # Проверяем, что место в категории не больше места в общем зачёте
         data = await state.get_data()
         place_overall = data.get('place_overall')
 
@@ -1463,13 +1353,11 @@ async def process_past_comp_heart_rate(message: Message, state: FSMContext):
 
     hr_text = message.text.strip()
 
-    # Проверка на отмену
     if hr_text == "❌ Отменить":
         from aiogram.types import ReplyKeyboardRemove
         await state.clear()
         await message.answer("❌ Добавление соревнования отменено", reply_markup=ReplyKeyboardRemove())
 
-        # Показываем главное меню соревнований
         from competitions.competitions_keyboards import get_competitions_main_menu
         await message.answer(
             "🏆 <b>СОРЕВНОВАНИЯ</b>\n\n"
@@ -1479,7 +1367,6 @@ async def process_past_comp_heart_rate(message: Message, state: FSMContext):
         )
         return
 
-    # Проверка на пропуск
     if hr_text == "⏭️ Пропустить":
         await state.update_data(heart_rate=None)
         await finalize_past_competition(message, state, has_result=True)
@@ -1497,7 +1384,6 @@ async def process_past_comp_heart_rate(message: Message, state: FSMContext):
         )
         return
 
-    # Создаём заглушку для callback
     from types import SimpleNamespace
     fake_callback = SimpleNamespace(
         message=message,
@@ -1510,18 +1396,16 @@ async def process_past_comp_heart_rate(message: Message, state: FSMContext):
 async def finalize_past_competition(callback, state: FSMContext, has_result: bool):
     """Завершить добавление прошедшего соревнования"""
 
-    # Определяем тип объекта (Message или CallbackQuery) для правильной отправки сообщений
     from aiogram.types import Message, CallbackQuery
     if isinstance(callback, Message):
         message_obj = callback
         user_id = callback.from_user.id
-    else:  # CallbackQuery
+    else:  
         message_obj = callback.message
         user_id = callback.from_user.id
 
     data = await state.get_data()
 
-    # Создаём соревнование в БД
     comp_data = {
         'name': data['comp_name'],
         'date': data['comp_date'],
@@ -1530,8 +1414,8 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
         'type': data['comp_type'],
         'sport_type': data.get('comp_sport_type', 'бег'),
         'distances': json.dumps([data['comp_distance']]),
-        'status': 'finished',  # Важно: статус "finished" для прошедших соревнований
-        'is_official': 0,  # Пользовательское соревнование
+        'status': 'finished',  
+        'is_official': 0,  
         'organizer': 'Добавлено пользователем',
         'description': 'Прошедшее соревнование, добавленное вручную'
     }
@@ -1539,10 +1423,8 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
     try:
         comp_id = await add_competition(comp_data)
 
-        # Регистрируем пользователя на это соревнование
         await register_for_competition(user_id, comp_id, data['comp_distance'])
 
-        # Если есть результат, добавляем его
         qualification = None
         if has_result and 'finish_time' in data:
             await add_competition_result(
@@ -1555,7 +1437,6 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 heart_rate=data.get('heart_rate')
             )
 
-            # Обновляем уровень пользователя после добавления результата
             try:
                 from database.level_queries import calculate_and_update_user_level
                 level_update = await calculate_and_update_user_level(user_id)
@@ -1575,7 +1456,6 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
             except Exception as e:
                 logger.error(f"Error updating level after custom competition result: {e}")
 
-            # Рассчитываем разряд для отображения
             qualification = None
             try:
                 from utils.qualifications import get_qualification_async, time_to_seconds
@@ -1586,7 +1466,6 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 comp_info = await get_competition(comp_id)
                 sport_type = comp_info.get('sport_type', 'бег') if comp_info else 'бег'
 
-                # Получаем пол пользователя
                 DB_PATH = os.getenv('DB_PATH', 'database.sqlite')
                 async with aiosqlite.connect(DB_PATH) as db:
                     async with db.execute(
@@ -1596,9 +1475,7 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                         row = await cursor.fetchone()
                         gender = row[0] if row and row[0] else 'male'
 
-                # Определяем разряд в зависимости от вида спорта
                 if sport_type in ['велоспорт', 'cycling'] and data.get('place_overall'):
-                    # Для велоспорта разряд по месту
                     qualification = await get_qualification_async(
                         sport_type='cycling',
                         place=data['place_overall'],
@@ -1606,9 +1483,8 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                         discipline='шоссе'
                     )
                 elif sport_type in ['плавание', 'swimming']:
-                    # Для плавания нужен pool_length
                     time_seconds = time_to_seconds(data['finish_time'])
-                    pool_length = data.get('pool_length', 50)  # По умолчанию 50м
+                    pool_length = data.get('pool_length', 50)  
                     qualification = await get_qualification_async(
                         sport_type='swimming',
                         distance_km=data['comp_distance'],
@@ -1617,7 +1493,6 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                         pool_length=pool_length
                     )
                 else:
-                    # Для бега и других видов
                     time_seconds = time_to_seconds(data['finish_time'])
                     qualification = await get_qualification_async(
                         sport_type=sport_type,
@@ -1651,7 +1526,6 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
                 text += f"🏆 Место общее: {data['place_overall']}\n"
             if data.get('place_age'):
                 text += f"🏅 Место в категории: {data['place_age']}\n"
-            # Выводим разряд только если он есть и это не "Нет разряда" или "Б/р"
             if qualification and qualification not in [None, '', 'Нет разряда', 'Б/р']:
                 from competitions.competitions_keyboards import format_qualification
                 text += f"🎖️ Разряд: {format_qualification(qualification)}\n"
@@ -1660,30 +1534,25 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
 
         text += "\n✅ Соревнование добавлено в ваши результаты!"
 
-        # Показываем сообщение об успехе
         from aiogram.types import ReplyKeyboardRemove
         await message_obj.answer(text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
 
-        # Определяем период на основе даты соревнования
         from datetime import datetime, timedelta
         comp_date = datetime.strptime(data['comp_date'], '%Y-%m-%d')
         now = datetime.now()
 
-        # Определяем период
         if comp_date >= datetime(now.year, now.month, 1):
-            period = "month"  # Текущий месяц
+            period = "month"  
         elif comp_date >= datetime(now.year - 1 if now.month <= 6 else now.year, now.month - 5 if now.month > 6 else now.month + 7, 1):
-            period = "6months"  # Последние полгода
+            period = "6months"  
         elif comp_date >= datetime(now.year - 1, now.month, 1):
-            period = "year"  # Последний год
+            period = "year"  
         else:
-            period = "year"  # По умолчанию показываем год
+            period = "year"  
 
-        # Автоматически переходим к результатам с нужным периодом
         from competitions.competitions_handlers import show_my_results_with_period
         temp_msg = await message_obj.answer("⏳ Загрузка результатов...")
 
-        # Создаем объект callback для show_my_results_with_period
         class CallbackProxy:
             def __init__(self, message, user):
                 self.message = message
@@ -1691,7 +1560,6 @@ async def finalize_past_competition(callback, state: FSMContext, has_result: boo
             async def answer(self):
                 pass
 
-        # Используем user_id который мы определили в начале функции
         from aiogram.types import User
         user = User(id=user_id, is_bot=False, first_name="User")
         proxy_callback = CallbackProxy(temp_msg, user)

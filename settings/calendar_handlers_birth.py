@@ -20,7 +20,6 @@ async def handle_calendar_birth_date_selection(callback: CallbackQuery, state: F
 
     logger.info(f"Обработчик cal_birth_1_select_: {callback.data}")
 
-    # Парсим выбранную дату
     parsed = CalendarKeyboard.parse_callback_data(callback.data.replace("cal_birth_", "cal_"))
     selected_date = parsed.get("date")
 
@@ -28,7 +27,6 @@ async def handle_calendar_birth_date_selection(callback: CallbackQuery, state: F
         await callback.answer("❌ Ошибка при выборе даты", show_alert=True)
         return
 
-    # Проверяем, что дата не из будущего
     from datetime import timedelta
     utc_now = datetime.utcnow()
     moscow_now = utc_now + timedelta(hours=3)
@@ -38,7 +36,6 @@ async def handle_calendar_birth_date_selection(callback: CallbackQuery, state: F
         await callback.answer("❌ Дата рождения не может быть в будущем!", show_alert=True)
         return
 
-    # Проверяем адекватность возраста (от 5 до 120 лет)
     birth_date = selected_date.date()
     age = (today - birth_date).days // 365
 
@@ -50,11 +47,9 @@ async def handle_calendar_birth_date_selection(callback: CallbackQuery, state: F
     birth_date_str = birth_date.strftime('%Y-%m-%d')
     await update_user_setting(user_id, 'birth_date', birth_date_str)
 
-    # Получаем формат даты пользователя
     date_format = await get_user_date_format(user_id)
     date_str = DateFormatter.format_date(birth_date, date_format)
 
-    # Удаляем сообщение с календарём
     try:
         await callback.message.delete()
     except Exception:
@@ -65,10 +60,8 @@ async def handle_calendar_birth_date_selection(callback: CallbackQuery, state: F
         f"🎉 Ваш возраст: {age} лет"
     )
 
-    # Очищаем состояние
     await state.clear()
 
-    # Возврат в меню профиля
     await send_profile_menu(callback.message, user_id)
 
     await callback.answer()
@@ -80,25 +73,20 @@ async def handle_calendar_birth_date_navigation(callback: CallbackQuery, state: 
 
     logger.info(f"Обработчик cal_birth_ навигация: {callback.data}")
 
-    # Исключаем обработку выбора даты (она обрабатывается в handle_calendar_birth_date_selection)
     if callback.data.startswith("cal_birth_1_select_"):
         return
 
-    # Обрабатываем пустые ячейки
     if callback.data == "cal_birth_empty":
         await callback.answer()
         return
 
-    # Это навигация по календарю
     callback_data_normalized = callback.data.replace("cal_birth_", "cal_")
     logger.info(f"Нормализованный callback: {callback_data_normalized}")
 
-    # Для даты рождения ограничиваем календарь текущей датой
     new_keyboard = CalendarKeyboard.handle_navigation(callback_data_normalized, prefix="cal", max_date=datetime.now())
     logger.info(f"Получена новая клавиатура: {new_keyboard is not None}")
 
     if new_keyboard:
-        # Меняем префикс обратно на cal_birth для даты рождения
         final_keyboard = CalendarKeyboard.replace_prefix_in_keyboard(new_keyboard, "cal", "cal_birth")
         logger.info(f"Финальная клавиатура после замены префикса: {final_keyboard is not None}")
 
@@ -108,7 +96,6 @@ async def handle_calendar_birth_date_navigation(callback: CallbackQuery, state: 
             logger.info(f"Клавиатура успешно обновлена! Result type: {type(result)}")
         except Exception as e:
             error_text = str(e).lower()
-            # Игнорируем ошибку "message is not modified" - это нормально, если пользователь нажал на ту же кнопку
             if "message is not modified" in error_text:
                 logger.warning(f"⚠️ Telegram отклонил обновление - клавиатура не изменилась: {str(e)}")
             else:

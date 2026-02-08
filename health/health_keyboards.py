@@ -39,9 +39,7 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None, weight_unit: 
     """
     builder = InlineKeyboardBuilder()
 
-    # Если есть метрики сегодня, показываем текущие значения
     if today_metrics:
-        # Пульс
         if today_metrics.get('morning_pulse'):
             builder.row(
                 InlineKeyboardButton(
@@ -54,9 +52,7 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None, weight_unit: 
                 InlineKeyboardButton(text="💗 Добавить пульс", callback_data="health:input_pulse")
             )
 
-        # Вес
         if today_metrics.get('weight'):
-            # Вес в БД всегда в кг, конвертируем если нужно
             from utils.unit_converter import kg_to_lbs
             weight_display = kg_to_lbs(today_metrics['weight']) if weight_unit == 'фунты' else today_metrics['weight']
             weight_text = format_weight(weight_display, weight_unit)
@@ -71,11 +67,8 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None, weight_unit: 
                 InlineKeyboardButton(text="⚖️ Добавить вес", callback_data="health:input_weight")
             )
 
-        # Сон
         if today_metrics.get('sleep_duration'):
             duration = today_metrics['sleep_duration']
-            # Преобразуем в минуты, округляем, потом обратно в часы и минуты
-            # Это избегает проблем с точностью float
             total_minutes = round(duration * 60)
             hours = total_minutes // 60
             minutes = total_minutes % 60
@@ -92,7 +85,6 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None, weight_unit: 
                 InlineKeyboardButton(text="😴 Добавить сон", callback_data="health:input_sleep")
             )
     else:
-        # Нет данных - показываем стандартные кнопки для ввода
         builder.row(
             InlineKeyboardButton(text="✏️ Ввести всё", callback_data="health:input_all")
         )
@@ -106,7 +98,6 @@ def get_quick_input_keyboard(today_metrics: Optional[Dict] = None, weight_unit: 
             InlineKeyboardButton(text="😴 Только сон", callback_data="health:input_sleep")
         )
 
-    # Кнопка для ввода данных за другую дату
     builder.row(
         InlineKeyboardButton(text="📅 Ввести за другую дату", callback_data="health:choose_date")
     )

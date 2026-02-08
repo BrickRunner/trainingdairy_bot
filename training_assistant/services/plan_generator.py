@@ -54,10 +54,8 @@ async def generate_training_plan(
         return None
 
     try:
-        # Получаем настройки пользователя
         user_prefs = await get_user_preferences(user_id)
 
-        # Переводим параметры на русский для промпта
         sport_names = {
             'run': 'бег',
             'swim': 'плавание',
@@ -72,7 +70,6 @@ async def generate_training_plan(
         }
         plan_duration_name = plan_duration_names.get(plan_duration, plan_duration)
 
-        # Уровень подготовки - если None, AI определит сам
         if fitness_level is None:
             fitness_level_name = "определи сам на основе данных ниже"
         else:
@@ -83,13 +80,11 @@ async def generate_training_plan(
             }
             fitness_level_name = fitness_level_names.get(fitness_level, fitness_level)
 
-        # Форматируем данные для промпта
         recent_trainings_str = format_trainings_for_prompt(recent_trainings or [])
         personal_records_str = format_personal_records(personal_records or {})
         competitions_str = _format_competitions(competitions or [])
         health_str = _format_health_data(health_data or [])
 
-        # Формируем промпт с настройками пользователя
         prompt = PROMPT_TRAINING_PLAN.format(
             distance_unit=user_prefs['distance_unit'],
             weight_unit=user_prefs['weight_unit'],
@@ -106,46 +101,37 @@ async def generate_training_plan(
             health_data=health_str
         )
 
-        # Запрос к AI
         response = await _call_with_retry(
             ai_client,
-            model="google/gemini-2.5-flash",  # Бесплатная модель
+            model="google/gemini-2.5-flash",  
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_COACH},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=4000  # Увеличено с 2000 до 4000 для полной генерации плана
+            max_tokens=4000  
         )
 
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"Training plan generated for user {user_id}")
 
-        # Парсим JSON ответ
         json_str = None
 
-        # Извлекаем JSON из ответа (может быть обернут в ```json``` или просто ```{...}```)
         if "```json" in ai_response.lower():
-            # Ищем ```json (case-insensitive)
             json_marker_pos = ai_response.lower().find("```json")
-            # Ищем начало JSON - может быть после переноса строки или сразу после "json"
-            marker_end = json_marker_pos + 7  # Длина "```json"
+            marker_end = json_marker_pos + 7  
 
-            # Пропускаем пробелы и переносы строк после ```json
             json_start = marker_end
             while json_start < len(ai_response) and ai_response[json_start] in [' ', '\n', '\r', '\t']:
                 json_start += 1
 
-            # Ищем закрывающий ```
             json_end = ai_response.find("```", json_start)
             if json_end != -1 and json_start < json_end:
                 json_str = ai_response[json_start:json_end].strip()
         elif "```" in ai_response:
-            # Просто обернуто в ``` без "json"
             first_tick = ai_response.find("```")
             json_start = first_tick + 3
 
-            # Пропускаем пробелы после ```
             while json_start < len(ai_response) and ai_response[json_start] in [' ', '\n', '\r', '\t']:
                 json_start += 1
 
@@ -153,20 +139,16 @@ async def generate_training_plan(
             if json_end != -1 and json_start < json_end:
                 json_str = ai_response[json_start:json_end].strip()
         elif ai_response.strip().startswith("{") and ai_response.strip().endswith("}"):
-            # Чистый JSON без оборачивания
             json_str = ai_response.strip()
         else:
-            # Ищем JSON объект в тексте по фигурным скобкам
             first_brace = ai_response.find("{")
             last_brace = ai_response.rfind("}")
             if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
                 json_str = ai_response[first_brace:last_brace+1]
 
-        # Пытаемся распарсить JSON
         if json_str:
             try:
                 plan_data = json.loads(json_str)
-                # Проверяем, что это валидный план
                 if isinstance(plan_data, dict):
                     logger.info(f"Successfully parsed training plan with {len(plan_data.get('plan', []))} workouts")
                     return plan_data
@@ -178,12 +160,11 @@ async def generate_training_plan(
         else:
             logger.error("Could not extract JSON string from AI response")
 
-        # Если парсинг не удался, возвращаем как текст
         logger.error(f"Could not extract valid JSON from AI response (showing first 500 chars): {ai_response[:500]}")
         return {
             "plan": [],
             "explanation": "Не удалось сгенерировать план. Попробуйте еще раз.",
-            "raw_response": ai_response[:1000]  # Увеличим для отладки
+            "raw_response": ai_response[:1000]  
         }
 
     except Exception as e:
@@ -197,7 +178,7 @@ def _format_competitions(competitions: List[Dict]) -> str:
         return "Нет данных о соревнованиях"
 
     formatted = []
-    for comp in competitions[:10]:  # Последние 10
+    for comp in competitions[:10]:  
         result = comp.get('result_time', 'N/A')
         formatted.append(
             f"- {comp.get('competition_name', 'N/A')}: "
@@ -212,7 +193,6 @@ def _format_health_data(health_data: List[Dict]) -> str:
     if not health_data:
         return "Нет данных о здоровье"
 
-    # Вычисляем средние значения
     resting_pulses = [h.get('resting_pulse') for h in health_data if h.get('resting_pulse')]
     weights = [h.get('weight') for h in health_data if h.get('weight')]
     sleep_hours = [h.get('sleep_hours') for h in health_data if h.get('sleep_hours')]

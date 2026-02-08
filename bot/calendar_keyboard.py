@@ -16,13 +16,11 @@ from typing import Optional
 class CalendarKeyboard:
     """Класс для создания календарной клавиатуры"""
 
-    # Названия месяцев (краткие)
     MONTH_NAMES = [
         "Янв", "Фев", "Мар", "Апр", "Май", "Июнь",
         "Июль", "Авг", "Сен", "Окт", "Ноя", "Дек"
     ]
 
-    # Названия дней недели
     WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
     @staticmethod
@@ -64,15 +62,12 @@ class CalendarKeyboard:
         """Создает календарь с днями месяца"""
         keyboard = []
 
-        # Первая строка: навигация и заголовок
         year = date.year
         month = date.month
         month_name = CalendarKeyboard.MONTH_NAMES[month - 1]
 
-        # Проверяем, можно ли листать вперёд
         can_go_forward = True
         if max_date:
-            # Проверяем, не является ли текущий месяц последним доступным
             if date.year > max_date.year or (date.year == max_date.year and date.month >= max_date.month):
                 can_go_forward = False
 
@@ -92,33 +87,27 @@ class CalendarKeyboard:
         ]
         keyboard.append(first_row)
 
-        # Вторая строка: дни недели
         weekday_row = [
             InlineKeyboardButton(text=day, callback_data=f"{prefix}_empty")
             for day in CalendarKeyboard.WEEKDAY_NAMES
         ]
         keyboard.append(weekday_row)
 
-        # Получаем первый день месяца и количество дней
         first_day = datetime(year, month, 1)
-        weekday = first_day.weekday()  # 0=понедельник
+        weekday = first_day.weekday()  
         days_in_month = monthrange(year, month)[1]
 
-        # Строки с днями
         current_row = []
 
-        # Пустые кнопки до первого дня месяца
         for _ in range(weekday):
             current_row.append(
                 InlineKeyboardButton(text=" ", callback_data=f"{prefix}_empty")
             )
 
-        # Дни месяца
         today = datetime.now().date()
         for day in range(1, days_in_month + 1):
             day_date = datetime(year, month, day)
 
-            # Если это сегодня, показываем иконку ☀
             if day_date.date() == today:
                 text = "☀"
             else:
@@ -131,12 +120,10 @@ class CalendarKeyboard:
                 )
             )
 
-            # Если заполнена неделя, добавляем строку
             if len(current_row) == 7:
                 keyboard.append(current_row)
                 current_row = []
 
-        # Заполняем оставшиеся пустые кнопки
         while len(current_row) < 7 and len(current_row) > 0:
             current_row.append(
                 InlineKeyboardButton(text=" ", callback_data=f"{prefix}_empty")
@@ -145,7 +132,6 @@ class CalendarKeyboard:
         if current_row:
             keyboard.append(current_row)
 
-        # Добавляем кнопку отмены если нужно
         if show_cancel:
             keyboard.append([
                 InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
@@ -159,12 +145,10 @@ class CalendarKeyboard:
         keyboard = []
         year = date.year
 
-        # Проверяем, можно ли листать вперёд
         can_go_forward = True
         if max_date and year >= max_date.year:
             can_go_forward = False
 
-        # Первая строка: навигация и заголовок
         first_row = [
             InlineKeyboardButton(
                 text="<",
@@ -181,7 +165,6 @@ class CalendarKeyboard:
         ]
         keyboard.append(first_row)
 
-        # Строки с месяцами (по 4 месяца в строке)
         for i in range(0, 12, 4):
             month_row = []
             for j in range(4):
@@ -194,7 +177,6 @@ class CalendarKeyboard:
                 )
             keyboard.append(month_row)
 
-        # Добавляем кнопку отмены если нужно
         if show_cancel:
             keyboard.append([
                 InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
@@ -208,23 +190,19 @@ class CalendarKeyboard:
         keyboard = []
         year = date.year
 
-        # Определяем начало десятилетия (округляем вниз до ближайшего десятка)
         decade_start = (year // 10) * 10
         if decade_start < 1:
             decade_start = 1
 
-        # Показываем 12 лет: от начала десятилетия
         decade_end = decade_start + 11
         if decade_end > 3999:
             decade_end = 3999
             decade_start = max(1, decade_end - 11)
 
-        # Проверяем, можно ли листать вперёд
         can_go_forward = True
         if max_date and decade_start >= (max_date.year // 10) * 10:
             can_go_forward = False
 
-        # Первая строка: навигация и заголовок
         first_row = [
             InlineKeyboardButton(
                 text="<",
@@ -241,7 +219,6 @@ class CalendarKeyboard:
         ]
         keyboard.append(first_row)
 
-        # Строки с годами (по 4 года в строке)
         current_row = []
         for y in range(decade_start, decade_end + 1):
             current_row.append(
@@ -258,7 +235,6 @@ class CalendarKeyboard:
         if current_row:
             keyboard.append(current_row)
 
-        # Добавляем кнопку отмены если нужно
         if show_cancel:
             keyboard.append([
                 InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
@@ -272,23 +248,19 @@ class CalendarKeyboard:
         keyboard = []
         year = date.year
 
-        # Определяем начало века (округляем вниз до ближайшей сотни)
         century_start = (year // 100) * 100
         if century_start < 1:
             century_start = 1
 
-        # Показываем 120 лет (12 десятилетий по 10 лет)
         century_end = century_start + 119
         if century_end > 3999:
             century_end = 3999
             century_start = max(1, century_end - 119)
 
-        # Проверяем, можно ли листать вперёд
         can_go_forward = True
         if max_date and century_start >= (max_date.year // 100) * 100:
             can_go_forward = False
 
-        # Первая строка: навигация и заголовок
         first_row = [
             InlineKeyboardButton(
                 text="<",
@@ -305,7 +277,6 @@ class CalendarKeyboard:
         ]
         keyboard.append(first_row)
 
-        # Строки с десятилетиями (по 4 в строке)
         current_row = []
         decade = century_start
         while decade <= century_end:
@@ -329,7 +300,6 @@ class CalendarKeyboard:
         if current_row:
             keyboard.append(current_row)
 
-        # Добавляем кнопку отмены если нужно
         if show_cancel:
             keyboard.append([
                 InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_callback)
@@ -355,7 +325,6 @@ class CalendarKeyboard:
         if len(parts) < 2:
             return {}
 
-        # Если передан префикс, используем его для определения смещения
         if prefix and callback_data.startswith(f"{prefix}_"):
             prefix_parts_count = len(prefix.split("_"))
             format_idx = prefix_parts_count
@@ -371,7 +340,6 @@ class CalendarKeyboard:
                 "date": None
             }
 
-            # Парсим дату если есть
             if day_idx < len(parts):
                 try:
                     year = int(parts[year_idx])
@@ -381,7 +349,6 @@ class CalendarKeyboard:
                 except (ValueError, IndexError):
                     pass
         else:
-            # Стандартный парсинг для одноословных префиксов
             result = {
                 "prefix": parts[0],
                 "format": int(parts[1]) if parts[1].isdigit() else None,
@@ -389,7 +356,6 @@ class CalendarKeyboard:
                 "date": None
             }
 
-            # Парсим дату если есть
             if len(parts) >= 6:
                 try:
                     year = int(parts[3])
@@ -453,7 +419,6 @@ class CalendarKeyboard:
         import logging
         logger = logging.getLogger(__name__)
 
-        # Проверка на пустые ячейки и некорректные данные
         if not callback_data or callback_data == f"{prefix}_empty" or callback_data.endswith("_empty"):
             logger.debug(f"Игнорируем пустой callback: {callback_data}")
             return None
@@ -479,15 +444,12 @@ class CalendarKeyboard:
 
         logger.info(f"Обработка навигации: action={action}, format={current_format}, date={date}")
 
-        # Смена формата (увеличение масштаба)
         if action == "change":
             new_format = current_format + 1 if current_format < 4 else 1
             return CalendarKeyboard.create_calendar(new_format, date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 
-        # Навигация влево
         elif action == "less":
             if current_format == 1:
-                # Предыдущий месяц
                 if date.month == 1:
                     new_date = datetime(date.year - 1, 12, 1)
                 else:
@@ -495,7 +457,6 @@ class CalendarKeyboard:
             elif current_format == 2:
                 new_date = datetime(date.year - 1, 1, 1)
             elif current_format == 3:
-                # Переход на предыдущие 12 лет
                 year = (date.year // 10) * 10 - 10
                 new_date = datetime(max(1, year), 1, 1)
             elif current_format == 4:
@@ -506,45 +467,37 @@ class CalendarKeyboard:
 
             return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 
-        # Навигация вправо
         elif action == "more":
             if current_format == 1:
-                # Следующий месяц
                 if date.month == 12:
                     new_date = datetime(date.year + 1, 1, 1)
                 else:
                     new_date = datetime(date.year, date.month + 1, 1)
 
-                # Проверяем ограничение max_date
                 if max_date and (new_date.year > max_date.year or
                                  (new_date.year == max_date.year and new_date.month > max_date.month)):
                     logger.info(f"Навигация вправо заблокирована max_date: {new_date} > {max_date}")
-                    return None  # Не позволяем листать дальше
+                    return None  
 
             elif current_format == 2:
                 new_date = datetime(min(3999, date.year + 1), 1, 1)
 
-                # Проверяем ограничение max_date
                 if max_date and new_date.year > max_date.year:
                     logger.info(f"Навигация вправо заблокирована max_date: {new_date.year} > {max_date.year}")
                     return None
 
             elif current_format == 3:
-                # Переход на следующие 12 лет
                 year = (date.year // 10) * 10 + 12
                 new_date = datetime(min(3999, year), 1, 1)
 
-                # Проверяем ограничение max_date
                 if max_date and year > max_date.year:
                     logger.info(f"Навигация вправо заблокирована max_date: {year} > {max_date.year}")
                     return None
 
             elif current_format == 4:
-                # Переход на следующие 120 лет
                 year = (date.year // 100) * 100 + 120
                 new_date = datetime(min(3999, year), 1, 1)
 
-                # Проверяем ограничение max_date
                 if max_date and year > max_date.year:
                     logger.info(f"Навигация вправо заблокирована max_date: {year} > {max_date.year}")
                     return None
@@ -556,9 +509,7 @@ class CalendarKeyboard:
             logger.info(f"Навигация вправо: {date} -> {new_date}")
             return CalendarKeyboard.create_calendar(current_format, new_date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 
-        # Выбор элемента (не финальная дата)
         elif action == "select" and current_format > 1:
-            # Уменьшаем формат (детализируем)
             logger.info(f"Выбор элемента: уменьшаем формат с {current_format} на {current_format - 1}")
             return CalendarKeyboard.create_calendar(current_format - 1, date, prefix, max_date=max_date, show_cancel=show_cancel, cancel_callback=cancel_callback)
 

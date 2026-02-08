@@ -40,16 +40,12 @@ async def generate_race_tactics(
         return None
 
     try:
-        # Получаем настройки пользователя
         user_prefs = await get_user_preferences(user_id)
 
-        # Рассчитываем целевой темп
         target_pace = _calculate_target_pace(target_time, distance)
 
-        # Определяем количество сегментов
         laps = _calculate_laps(distance)
 
-        # Переводим тип трассы
         race_type_names = {
             'flat': 'ровная',
             'hilly': 'холмистая',
@@ -58,7 +54,6 @@ async def generate_race_tactics(
         }
         race_type_name = race_type_names.get(race_type, race_type)
 
-        # Форматируем промпт с настройками пользователя
         prompt = PROMPT_RACE_TACTICS.format(
             distance_unit=user_prefs['distance_unit'],
             date_format=user_prefs['date_format'],
@@ -72,10 +67,9 @@ async def generate_race_tactics(
             pulse_zones=_format_pulse_zones(pulse_zones or {})
         )
 
-        # Запрос к AI
         response = await _call_with_retry(
             ai_client,
-            model="google/gemini-2.5-flash",  # Бесплатная модель
+            model="google/gemini-2.5-flash",  
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_COACH},
                 {"role": "user", "content": prompt}
@@ -87,7 +81,6 @@ async def generate_race_tactics(
         ai_response = response.choices[0].message.content.strip()
         logger.info(f"Race tactics generated for user {user_id}, {distance} km")
 
-        # AI теперь возвращает форматированный текст, а не JSON
         return {"raw_response": ai_response}
 
     except Exception as e:
@@ -98,7 +91,6 @@ async def generate_race_tactics(
 def _calculate_target_pace(target_time: str, distance: float) -> str:
     """Рассчитывает целевой темп мин/км"""
     try:
-        # Парсим время HH:MM:SS или MM:SS
         time_parts = target_time.split(':')
         if len(time_parts) == 3:
             hours, minutes, seconds = map(int, time_parts)
@@ -109,10 +101,8 @@ def _calculate_target_pace(target_time: str, distance: float) -> str:
         else:
             return "N/A"
 
-        # Темп в секундах на км
         pace_seconds = total_seconds / distance
 
-        # Конвертируем в MM:SS
         pace_minutes = int(pace_seconds // 60)
         pace_secs = int(pace_seconds % 60)
 

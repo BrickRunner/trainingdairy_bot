@@ -4,7 +4,7 @@
 
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
-from database.queries import format_date_by_setting  # Добавил импорт
+from database.queries import format_date_by_setting  
 
 
 def get_main_menu_keyboard(is_coach: bool = False) -> ReplyKeyboardMarkup:
@@ -24,7 +24,6 @@ def get_main_menu_keyboard(is_coach: bool = False) -> ReplyKeyboardMarkup:
         KeyboardButton(text="🏆 Рейтинги и достижения")
     )
 
-    # Кнопка "Кабинет тренера" показывается только если is_coach=True
     if is_coach:
         builder.row(
             KeyboardButton(text="👨‍🏫 Кабинет тренера"),
@@ -36,7 +35,6 @@ def get_main_menu_keyboard(is_coach: bool = False) -> ReplyKeyboardMarkup:
             KeyboardButton(text="⚙️ Настройки")
         )
 
-    # Настройки всегда видны, но в разных позициях
     if is_coach:
         builder.row(
             KeyboardButton(text="⚙️ Настройки"),
@@ -66,7 +64,6 @@ def get_training_types_keyboard(allowed_types: list = None) -> InlineKeyboardMar
         allowed_types: Список разрешенных типов тренировок.
                       Если None, показываются все типы.
     """
-    # Все доступные типы с эмодзи
     all_types = {
         'интервальная': '⚡ Интервальная',
         'силовая': '💪 Силовая',
@@ -75,13 +72,11 @@ def get_training_types_keyboard(allowed_types: list = None) -> InlineKeyboardMar
         'велотренировка': '🚴 Велотренировка'
     }
 
-    # Если allowed_types не указан, используем все типы
     if allowed_types is None:
         allowed_types = list(all_types.keys())
 
     builder = InlineKeyboardBuilder()
 
-    # Добавляем только разрешенные типы
     for type_key in all_types.keys():
         if type_key in allowed_types:
             builder.row(
@@ -119,8 +114,7 @@ def get_fatigue_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for i in range(1, 11):
         builder.button(text=str(i), callback_data=f"fatigue:{i}")
-    builder.adjust(5)  # 5 кнопок в ряду
-    # Добавляем кнопку отмены в отдельном ряду
+    builder.adjust(5)  
     builder.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel"))
     return builder.as_markup()
 
@@ -166,7 +160,6 @@ def get_date_keyboard(for_coach: bool = False) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
 
     if for_coach:
-        # Для тренера: Сегодня, Завтра, Ввести дату, Отменить
         builder.row(
             KeyboardButton(text="📅 Сегодня"),
             KeyboardButton(text="📅 Завтра")
@@ -176,7 +169,6 @@ def get_date_keyboard(for_coach: bool = False) -> ReplyKeyboardMarkup:
             KeyboardButton(text="❌ Отменить")
         )
     else:
-        # Для обычного пользователя: Сегодня, Вчера, Ввести дату, Отменить
         builder.row(
             KeyboardButton(text="📅 Сегодня"),
             KeyboardButton(text="📅 Вчера")
@@ -189,23 +181,23 @@ def get_date_keyboard(for_coach: bool = False) -> ReplyKeyboardMarkup:
     return builder.as_markup(resize_keyboard=True)
 
 
-def get_trainings_list_keyboard(trainings: list, period: str, date_format: str) -> InlineKeyboardMarkup:  # Добавил date_format параметр
+def get_trainings_list_keyboard(trainings: list, period: str, date_format: str) -> InlineKeyboardMarkup:
     """
     Клавиатура со списком тренировок (кнопки для каждой)
-    
+
     Args:
         trainings: Список тренировок из БД
         period: Текущий период просмотра
         date_format: Формат даты из настроек пользователя
-        
+
     Returns:
         InlineKeyboardMarkup с кнопками для каждой тренировки
     """
     builder = InlineKeyboardBuilder()
-    
-    # Добавляем кнопку для каждой тренировки (максимум 15)
+
+    # Ограничиваем до 15 тренировок чтобы не превысить лимит Telegram
     for idx, training in enumerate(trainings[:15], 1):
-        # Эмодзи для типов
+        # Эмодзи для визуального различия типов тренировок
         type_emoji = {
             'кросс': '🏃',
             'плавание': '🏊',
@@ -213,39 +205,34 @@ def get_trainings_list_keyboard(trainings: list, period: str, date_format: str) 
             'силовая': '💪',
             'интервальная': '⚡'
         }
-        
+
         t_type = training['type']
         emoji = type_emoji.get(t_type, '📝')
-        
-        # Форматируем дату согласно настройкам (короткий формат: без года)
+
+        # Форматируем дату согласно настройкам пользователя
         formatted_date = format_date_by_setting(training['date'], date_format)
-        # Для короткого отображения берем только день.месяц или эквивалент
+        # Берем только день и месяц для компактности (первые 5 символов)
         if date_format == 'ДД.ММ.ГГГГ':
-            short_date = formatted_date[:5]  # ДД.ММ
+            short_date = formatted_date[:5]  # "01.04"
         elif date_format == 'ММ/ДД/ГГГГ':
-            short_date = formatted_date[:5]  # ММ/ДД
+            short_date = formatted_date[:5]  # "04/01"
         else:  # ГГГГ-ММ-ДД
-            short_date = formatted_date[5:]  # ММ-ДД (пропускаем год и дефис)
-        
-        # Текст кнопки: "№1 🏃 15.01"
+            short_date = formatted_date[5:]  # "04-01"
+
         button_text = f"№{idx} {emoji} {short_date}"
-        
-        # В callback_data передаем ID тренировки и период
+
         builder.button(
             text=button_text,
             callback_data=f"training_detail:{training['id']}:{period}"
         )
     
-    # Размещаем по 3 кнопки в ряду
     builder.adjust(3)
 
-    # Добавляем кнопку AI-анализа (если есть тренировки)
     if trainings:
         builder.row(
             InlineKeyboardButton(text="🤖 AI-анализ", callback_data=f"ai_analyze_trainings:{period}")
         )
 
-    # Добавляем кнопки навигации в отдельных рядах
     builder.row(
         InlineKeyboardButton(text="🔄 Выбрать другой период", callback_data="back_to_periods")
     )
@@ -312,7 +299,6 @@ def get_export_period_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-# ===== КЛАВИАТУРЫ ДЛЯ ПЛАВАНИЯ =====
 
 def get_swimming_location_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора места для плавания"""

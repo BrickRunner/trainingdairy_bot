@@ -30,7 +30,6 @@ def normalize_sport_code(event_name: str, distances: str) -> str:
     """
     combined_text = f"{event_name} {distances}".lower()
 
-    # Проверяем ключевые слова для определения типа спорта
     if any(keyword in combined_text for keyword in ["лыж", "ski"]):
         return "ski"
     elif any(keyword in combined_text for keyword in ["велос", "bike", "вело"]):
@@ -45,7 +44,6 @@ def normalize_sport_code(event_name: str, distances: str) -> str:
     ]):
         return "run"
     else:
-        # По умолчанию возвращаем "run" для беговых соревнований
         return "run"
 
 
@@ -61,14 +59,11 @@ def matches_sport_type(event_name: str, distances: str, sport: Optional[str]) ->
     Returns:
         bool: True если событие соответствует спорту, False иначе
     """
-    # Нормализуем код спорта
     normalized_code = normalize_sport_code(event_name, distances)
 
-    # Если фильтр "все" - показываем ВСЕ события
     if not sport or sport == "all":
         return True
 
-    # Проверяем соответствие выбранному спорту
     return normalized_code == sport
 
 
@@ -114,48 +109,38 @@ async def fetch_competitions(
                 html = await response.text()
                 soup = BeautifulSoup(html, 'lxml')
 
-                # Парсим список соревнований из меню
-                # Ищем элементы с классом header-menu-sub-menu-race-item
                 event_items = soup.find_all('div', class_='header-menu-sub-menu-race-item')
                 logger.info(f"Found {len(event_items)} event items on RunC")
 
                 competitions = []
-                processed_urls = set()  # Чтобы избежать дубликатов
+                processed_urls = set()  
 
                 for item in event_items:
-                    # Ищем ссылку на событие
                     link = item.find('a', class_='header-menu-sub-menu-race-item__race-name')
 
-                    # Пропускаем если это ссылка на результаты или нет ссылки
                     if not link or 'results.runc.run' in link.get('href', ''):
                         continue
 
                     event_url = link.get('href', '')
 
-                    # Пропускаем дубликаты
                     if event_url in processed_urls:
                         continue
 
                     processed_urls.add(event_url)
 
-                    # Парсим информацию о соревновании
                     comp = parse_competition_from_menu_item(item)
 
                     if not comp:
                         continue
 
-                    # Фильтр по городу
                     if city and city.lower() not in comp.get("city", "").lower():
                         continue
 
-                    # Фильтр по спорту
                     event_name = comp.get("title", "")
                     distances_text = comp.get("distances_text", "")
                     if not matches_sport_type(event_name, distances_text, sport):
                         continue
 
-                    # ВАЖНО: Получаем детальную информацию с дистанциями
-                    # Это необходимо для корректного отображения в боте
                     try:
                         logger.info(f"Fetching details for: {comp.get('title')}")
                         detailed_comp = await get_competition_details(
@@ -164,13 +149,10 @@ async def fetch_competitions(
                             end_date=comp.get('end_date')
                         )
                         if detailed_comp:
-                            # Используем детальную информацию вместо базовой
                             comp = detailed_comp
                     except Exception as e:
                         logger.warning(f"Could not fetch details for {comp.get('title')}: {e}")
-                        # Продолжаем с базовой информацией
 
-                    # Фильтр по периоду
                     if period_months:
                         begin_date_str = comp.get("begin_date")
                         if begin_date_str:
@@ -183,9 +165,7 @@ async def fetch_competitions(
                                 year = now.year
                                 month = now.month
 
-                                # Вычисляем диапазон дат как в других парсерах
                                 if period_months == 1:
-                                    # 1 месяц - с 1-го до последнего дня текущего месяца
                                     from datetime import timedelta
                                     start_date = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
                                     if month == 12:
@@ -195,21 +175,17 @@ async def fetch_competitions(
                                         end_date = next_month_first - timedelta(seconds=1)
 
                                 elif period_months == 12:
-                                    # 1 год - с 01.01 до 31.12 текущего года
                                     start_date = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
                                     end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
                                 else:
-                                    # 6 месяцев - от текущей даты + 180 дней
                                     from datetime import timedelta
                                     start_date = now
                                     end_date = now + timedelta(days=180)
 
-                                # Событие должно быть в диапазоне start_date <= begin_date <= end_date
                                 if begin_date < start_date or begin_date > end_date:
                                     continue
 
-                                # Дополнительная проверка: событие должно быть в будущем (>= сегодня)
                                 now_utc = datetime.now(timezone.utc)
                                 if begin_date.tzinfo is None:
                                     begin_date = begin_date.replace(tzinfo=timezone.utc)
@@ -247,11 +223,9 @@ def parse_competition_from_menu_item(item) -> Optional[Dict]:
         Optional[Dict]: Информация о соревновании или None
     """
     try:
-        # Извлекаем дату
         date_elem = item.find('div', class_='header-menu-sub-menu-race-item__date')
         date_str = date_elem.get_text(strip=True) if date_elem else ""
 
-        # Извлекаем название и ссылку
         link = item.find('a', class_='header-menu-sub-menu-race-item__race-name')
         if not link:
             return None
@@ -259,18 +233,15 @@ def parse_competition_from_menu_item(item) -> Optional[Dict]:
         title = link.get_text(strip=True)
         url = link.get('href', '')
 
-        # Если URL относительный, делаем его абсолютным
         if url.startswith('/'):
             url = f"{BASE_URL}{url}"
 
-        # Парсим дату в ISO формат (получаем кортеж begin_date, end_date)
         if date_str:
             begin_date, end_date = parse_russian_date_short(date_str)
         else:
             now_iso = datetime.now(timezone.utc).isoformat()
             begin_date, end_date = now_iso, now_iso
 
-        # Проверка: событие должно быть в будущем
         if date_str:
             try:
                 date_obj = datetime.fromisoformat(begin_date.replace('Z', '+00:00'))
@@ -284,13 +255,10 @@ def parse_competition_from_menu_item(item) -> Optional[Dict]:
             except ValueError:
                 pass
 
-        # Генерируем ID из URL
         event_id = url.replace('https://', '').replace('http://', '').replace('/', '_').replace('.', '_')
 
-        # Город по умолчанию (большинство событий в Москве)
         city = "Москва"
 
-        # Определяем тип спорта
         normalized_sport_code = normalize_sport_code(title, title)
 
         comp = {
@@ -303,12 +271,12 @@ def parse_competition_from_menu_item(item) -> Optional[Dict]:
             "organizer": "Беговое Сообщество",
             "service": "Беговое Сообщество",
             "begin_date": begin_date,
-            "end_date": end_date,  # Теперь используем правильную end_date
+            "end_date": end_date,  
             "formatted_date": date_str if date_str else "Дата уточняется",
             "description": title,
-            "distances_text": "Уточняется на сайте",  # Будет обновлено при вызове get_competition_details
+            "distances_text": "Уточняется на сайте",  
             "url": url,
-            "distances": [],  # Будет заполнено при вызове get_competition_details
+            "distances": [],  
         }
 
         logger.info(f"Parsed event: {title} ({date_str}) - {url}")
@@ -330,31 +298,26 @@ def parse_russian_date_short(date_str: str) -> tuple:
         tuple: (begin_date, end_date) в ISO формате
     """
     try:
-        # Словарь соответствия русских месяцев
         months_map = {
             "января": 1, "февраля": 2, "марта": 3, "апреля": 4,
             "мая": 5, "июня": 6, "июля": 7, "августа": 8,
             "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12
         }
 
-        # Ищем паттерн "DD-DD месяца" (диапазон) или "DD месяца" (один день)
         pattern_range = r'(\d{1,2})-(\d{1,2})\s+(\w+)'
         pattern_single = r'(\d{1,2})\s+(\w+)'
 
         match_range = re.search(pattern_range, date_str)
         if match_range:
-            # Диапазон дат
             start_day = int(match_range.group(1))
             end_day = int(match_range.group(2))
             month_name = match_range.group(3).lower()
 
             month = months_map.get(month_name)
             if month:
-                # Определяем год - если месяц уже прошел в этом году, берем следующий год
                 now = datetime.now(timezone.utc)
                 year = now.year
 
-                # Если месяц меньше текущего, событие в следующем году
                 if month < now.month:
                     year += 1
                 elif month == now.month and start_day < now.day:
@@ -365,7 +328,6 @@ def parse_russian_date_short(date_str: str) -> tuple:
 
                 return (begin_date.isoformat(), end_date.isoformat())
 
-        # Пробуем один день
         match_single = re.search(pattern_single, date_str)
         if match_single:
             day = int(match_single.group(1))
@@ -373,11 +335,9 @@ def parse_russian_date_short(date_str: str) -> tuple:
 
             month = months_map.get(month_name)
             if month:
-                # Определяем год - если месяц уже прошел в этом году, берем следующий год
                 now = datetime.now(timezone.utc)
                 year = now.year
 
-                # Если месяц меньше текущего, событие в следующем году
                 if month < now.month:
                     year += 1
                 elif month == now.month and day < now.day:
@@ -386,7 +346,6 @@ def parse_russian_date_short(date_str: str) -> tuple:
                 date_obj = datetime(year, month, day, 0, 0, 0, tzinfo=timezone.utc)
                 return (date_obj.isoformat(), date_obj.isoformat())
 
-        # Если не получилось распарсить, возвращаем текущую дату
         now_iso = datetime.now(timezone.utc).isoformat()
         return (now_iso, now_iso)
 
@@ -408,7 +367,6 @@ def parse_competition_from_link(link, event_id: str) -> Optional[Dict]:
         Optional[Dict]: Информация о соревновании или None
     """
     try:
-        # Получаем весь текст из ссылки
         text_content = link.get_text(separator="\n", strip=True)
         lines = [line.strip() for line in text_content.split("\n") if line.strip()]
 
@@ -416,46 +374,34 @@ def parse_competition_from_link(link, event_id: str) -> Optional[Dict]:
             logger.debug(f"Not enough data in link for event {event_id}")
             return None
 
-        # Предполагаемая структура:
-        # [0] - Город или тип
-        # [1] - Дистанции (от X до Y)
-        # [2] - Название соревнования
-        # [3] - Город (повторно)
-        # [4] - Дата
 
         title = ""
-        city = "Москва"  # По умолчанию
+        city = "Москва"  
         distances_text = ""
         date_str = ""
 
-        # Ищем название (обычно самая длинная строка или содержит кавычки)
         for line in lines:
             if '"' in line or "«" in line or "»" in line:
                 title = line
                 break
-            # Если строка содержит слова, характерные для названий
             if any(word in line.lower() for word in ["соревнован", "кросс", "марафон", "забег", "эстафет"]):
                 title = line
                 break
 
-        # Если не нашли название, берем первую подходящую строку
         if not title and lines:
             title = lines[0]
 
-        # Ищем дистанции (содержит "км" или "м")
         for line in lines:
             if any(unit in line.lower() for unit in [" км", " м", "метр", "от ", "до "]):
                 if not any(skip in line.lower() for skip in ["соревнован", "кросс", "марафон"]):
                     distances_text = line
                     break
 
-        # Ищем город (обычно "Москва", "Санкт-Петербург" и т.д.)
         for line in lines:
             if any(city_name in line for city_name in ["Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"]):
                 city = line
                 break
 
-        # Ищем дату (содержит цифры и месяцы)
         months_ru = ["января", "февраля", "марта", "апреля", "мая", "июня",
                      "июля", "августа", "сентября", "октября", "ноября", "декабря"]
         for line in lines:
@@ -463,11 +409,9 @@ def parse_competition_from_link(link, event_id: str) -> Optional[Dict]:
                 date_str = line
                 break
 
-        # Парсим дату в ISO формат
         begin_date = parse_russian_date(date_str) if date_str else datetime.now(timezone.utc).isoformat()
         formatted_date = date_str if date_str else "Дата уточняется"
 
-        # Определяем тип спорта
         normalized_sport_code = normalize_sport_code(title, distances_text)
 
         comp = {
@@ -485,7 +429,7 @@ def parse_competition_from_link(link, event_id: str) -> Optional[Dict]:
             "description": distances_text,
             "distances_text": distances_text,
             "url": f"{BASE_URL}/event/{event_id}/overview/",
-            "distances": [],  # Пустой список дистанций (не структурированы на главной)
+            "distances": [],  
         }
 
         return comp
@@ -506,14 +450,12 @@ def parse_russian_date(date_str: str) -> str:
         str: Дата в ISO формате
     """
     try:
-        # Словарь соответствия русских месяцев
         months_map = {
             "января": 1, "февраля": 2, "марта": 3, "апреля": 4,
             "мая": 5, "июня": 6, "июля": 7, "августа": 8,
             "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12
         }
 
-        # Ищем паттерн "DD месяца YYYY" или "DD-DD месяца YYYY"
         pattern = r'(\d{1,2})(?:-\d{1,2})?\s+(\w+)\s+(\d{4})'
         match = re.search(pattern, date_str)
 
@@ -527,7 +469,6 @@ def parse_russian_date(date_str: str) -> str:
                 date_obj = datetime(year, month, day, 0, 0, 0, tzinfo=timezone.utc)
                 return date_obj.isoformat()
 
-        # Если не получилось распарсить, возвращаем текущую дату
         return datetime.now(timezone.utc).isoformat()
 
     except Exception as e:
@@ -575,42 +516,34 @@ async def get_competition_details(
                 html = await response.text()
                 soup = BeautifulSoup(html, 'lxml')
 
-                # Извлекаем название события
                 title_elem = soup.find('h1') or soup.find('h2', class_=re.compile('title|name|event'))
                 title = title_elem.get_text(strip=True) if title_elem else "Без названия"
 
-                # Извлекаем информацию о дистанциях
                 distances, distances_text = parse_distances_from_detail_page(soup)
 
-                # Извлекаем дату (используем переданные даты если есть)
                 if not begin_date or not end_date:
                     date_elem = soup.find(text=re.compile(r'\d{1,2}\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\s+\d{4}'))
                     date_str = date_elem.strip() if date_elem else ""
                     if date_str:
-                        # parse_russian_date возвращает одну дату
                         begin_date = parse_russian_date(date_str)
-                        end_date = begin_date  # Для детальных страниц обычно указана полная дата
+                        end_date = begin_date  
                     else:
                         now_iso = datetime.now(timezone.utc).isoformat()
                         begin_date = now_iso
                         end_date = now_iso
 
-                # Формируем formatted_date из переданных дат
                 date_str = ""
                 if begin_date and end_date:
                     try:
                         begin_dt = datetime.fromisoformat(begin_date.replace('Z', '+00:00'))
                         end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
 
-                        # Русские названия месяцев
                         months_ru = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
                                     "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
                         if begin_dt.date() == end_dt.date():
-                            # Один день
                             date_str = f"{begin_dt.day} {months_ru[begin_dt.month]} {begin_dt.year}"
                         else:
-                            # Диапазон дат
                             if begin_dt.month == end_dt.month:
                                 date_str = f"{begin_dt.day}-{end_dt.day} {months_ru[begin_dt.month]} {begin_dt.year}"
                             else:
@@ -618,16 +551,13 @@ async def get_competition_details(
                     except:
                         date_str = "Дата уточняется"
 
-                # Извлекаем город
-                city = "Москва"  # По умолчанию
+                city = "Москва"  
                 city_elem = soup.find(text=re.compile(r'(Москва|Санкт-Петербург|Казань|Екатеринбург|Новосибирск)'))
                 if city_elem:
                     city = city_elem.strip()
 
-                # Определяем тип спорта
                 sport_code = normalize_sport_code(title, distances_text)
 
-                # Генерируем ID из URL
                 competition_id = competition_url.replace('https://', '').replace('http://', '').replace('/', '_').replace('.', '_')
 
                 event_details = {
@@ -675,40 +605,29 @@ def parse_distances_from_detail_page(soup: BeautifulSoup) -> tuple:
     distances_by_day = []
 
     try:
-        # Стратегия 1: Ищем специфичную структуру для speedrace.runc.run
-        # Формат: <p><strong>21 февраля (суббота) </strong>— 60 м, 600 м, 1000 м, смешанная эстафета 4×200 м</p>
 
-        # Ищем параграфы с датами и дистанциями
         paragraphs = soup.find_all('p')
 
         for p in paragraphs:
             strong = p.find('strong')
             if strong:
                 strong_text = strong.get_text(strip=True)
-                # Проверяем, содержит ли текст дату и день недели
                 if any(day in strong_text.lower() for day in ['суббота', 'воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница']):
-                    # Получаем полный текст параграфа
                     full_text = p.get_text(strip=True)
 
-                    # Разделяем по тире (—) или дефису (-)
                     parts = re.split(r'[—\-]\s*', full_text, maxsplit=1)
 
                     if len(parts) == 2:
                         day_part = parts[0].strip()
                         distances_part = parts[1].strip()
 
-                        # Сохраняем информацию о дне и дистанциях
                         distances_by_day.append(f"{day_part} — {distances_part}")
 
-                        # Парсим отдельные дистанции для списка
-                        # Ищем паттерны: "60 м", "1 миля", "эстафета 4×200 м"
                         distance_items = re.split(r',\s*', distances_part)
 
                         for item in distance_items:
                             item = item.strip()
 
-                            # Парсим дистанцию с единицами измерения
-                            # ВАЖНО: Более длинные единицы (миля/mile) должны проверяться ПЕРВЫМИ
                             match = re.search(r'(\d+(?:[.,]\d+)?)\s*(миля|mile|км|м)(?!\w)', item, re.IGNORECASE)
                             if match:
                                 value_str = match.group(1).replace(',', '.')
@@ -717,7 +636,6 @@ def parse_distances_from_detail_page(soup: BeautifulSoup) -> tuple:
                                 try:
                                     value = float(value_str)
 
-                                    # Конвертируем в километры
                                     if unit in ['миля', 'mile']:
                                         distance_km = value * 1.60934
                                     elif unit in ['км']:
@@ -728,22 +646,18 @@ def parse_distances_from_detail_page(soup: BeautifulSoup) -> tuple:
                                         distance_km = value
 
                                     distances.append({
-                                        "name": item,  # Сохраняем полное название (включая "эстафета")
+                                        "name": item,  
                                         "distance": distance_km
                                     })
                                 except ValueError:
                                     continue
                             else:
-                                # Обрабатываем эстафеты с несколькими дистанциями (800-600-400-200 м)
                                 relay_match = re.search(r'эстафет', item, re.IGNORECASE)
                                 if relay_match:
-                                    # Извлекаем все числа из строки эстафеты
                                     numbers = re.findall(r'(\d+)', item)
                                     unit_match = re.search(r'(км|м)(?!\w)', item, re.IGNORECASE)
 
                                     if numbers and unit_match:
-                                        # Берем последнее число как базовую дистанцию для эстафеты
-                                        # (обычно это последний этап)
                                         value = float(numbers[-1])
                                         unit = unit_match.group(1).lower()
 
@@ -757,11 +671,9 @@ def parse_distances_from_detail_page(soup: BeautifulSoup) -> tuple:
                                             "distance": distance_km
                                         })
 
-        # Формируем текстовое описание
         if distances_by_day:
             distances_text = "\n".join(distances_by_day)
         else:
-            # Стратегия 2: Универсальный парсинг (fallback)
             distance_pattern = re.compile(r'(\d+(?:[.,]\d+)?)\s*(км|м|метр)', re.IGNORECASE)
             potential_elements = soup.find_all(['li', 'div', 'span', 'td', 'a'], string=distance_pattern)
 
@@ -798,10 +710,8 @@ def parse_distances_from_detail_page(soup: BeautifulSoup) -> tuple:
                     except ValueError:
                         continue
 
-            # Сортируем по расстоянию
             distances.sort(key=lambda x: x["distance"])
 
-            # Формируем текст из списка
             distances_text = ", ".join([d["name"] for d in distances]) if distances else "Уточняется"
 
         logger.info(f"Parsed {len(distances)} distances from detail page")

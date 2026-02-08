@@ -28,30 +28,25 @@ async def update_single_user_rating(user_id: int) -> None:
         user_id: ID пользователя
     """
     try:
-        # Глобальный рейтинг (все время)
         trainings_all = await get_user_trainings_by_period(user_id)
         competitions_all = await get_user_competitions_by_period(user_id)
         global_points = calculate_total_points(trainings_all, competitions_all)
 
-        # Рейтинг за неделю
         week_start, week_end = get_period_dates('week')
         trainings_week = await get_user_trainings_by_period(user_id, week_start, week_end)
         competitions_week = await get_user_competitions_by_period(user_id, week_start, week_end)
         week_points = calculate_total_points(trainings_week, competitions_week)
 
-        # Рейтинг за месяц
         month_start, month_end = get_period_dates('month')
         trainings_month = await get_user_trainings_by_period(user_id, month_start, month_end)
         competitions_month = await get_user_competitions_by_period(user_id, month_start, month_end)
         month_points = calculate_total_points(trainings_month, competitions_month)
 
-        # Рейтинг за сезон
         season_start, season_end = get_period_dates('season')
         trainings_season = await get_user_trainings_by_period(user_id, season_start, season_end)
         competitions_season = await get_user_competitions_by_period(user_id, season_start, season_end)
         season_points = calculate_total_points(trainings_season, competitions_season)
 
-        # Обновляем рейтинг в базе данных
         await update_user_rating(
             user_id=user_id,
             points=global_points,
@@ -82,7 +77,6 @@ async def update_all_ratings() -> None:
             logger.info("Нет пользователей для обновления рейтинга")
             return
 
-        # Обновляем рейтинги пользователей
         for user_id in users:
             await update_single_user_rating(user_id)
 
@@ -102,32 +96,24 @@ async def schedule_rating_updates() -> None:
 
     while True:
         try:
-            # Получаем текущее время
             now = datetime.now()
 
-            # Целевое время - 03:00
             target_time = time(3, 0)
 
-            # Вычисляем следующее время обновления
             from datetime import timedelta
             target_datetime = datetime.combine(now.date(), target_time)
 
-            # Если уже прошло 03:00 сегодня, планируем на завтра
             if now.time() >= target_time:
                 target_datetime = datetime.combine(now.date() + timedelta(days=1), target_time)
 
-            # Время ожидания до следующего обновления
             delay = (target_datetime - now).total_seconds()
 
             logger.info(f"Следующее обновление рейтингов в {target_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
 
-            # Ждём до целевого времени
             await asyncio.sleep(delay)
 
-            # Обновляем рейтинги
             await update_all_ratings()
 
         except Exception as e:
             logger.error(f"Ошибка в планировщике обновления рейтингов: {e}")
-            # Ждём час перед повторной попыткой
             await asyncio.sleep(3600)
